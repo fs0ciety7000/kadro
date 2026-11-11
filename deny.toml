@@ -31,6 +31,8 @@ allow = [
     "GPL-3.0-or-later",
 ]
 confidence-threshold = 0.93
+# The allow-list is intentionally wider than what the tree uses today.
+unused-allowed-license = "allow"
 # Any exception ([licenses.exceptions] or [[licenses.clarify]]) must be commented here with the crate and the reason.
 
 [advisories]
