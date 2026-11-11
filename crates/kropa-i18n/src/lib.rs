@@ -304,9 +304,15 @@ mod tests {
     #[test]
     fn text_arguments_are_substituted() {
         let en = Localizer::new(Lang::En).unwrap();
+        let fr = Localizer::new(Lang::Fr).unwrap();
+        let args = [("arg", "--x")];
         assert_eq!(
-            en.message_args("cli-about", &[("x", "y")]),
-            en.message("cli-about")
+            en.message_args("error-unknown-argument", &args),
+            "unexpected argument '--x'"
+        );
+        assert_eq!(
+            fr.message_args("error-unknown-argument", &args),
+            "argument inattendu '--x'"
         );
     }
 
