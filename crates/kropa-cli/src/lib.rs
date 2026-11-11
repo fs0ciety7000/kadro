@@ -1,20 +1,37 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Command-line client of Kropa (`kropa`), free of any GTK dependency.
+//!
+//! Layout: [`args`] is the typed command line (clap derive), [`command`] gives it its Fluent texts,
+//! [`errors`] localises clap's usage errors, [`output`] separates stdout and stderr and builds the
+//! JSON envelope, [`target`] resolves file names and [`exec`] runs the commands.
+
+pub mod args;
+pub mod command;
+pub mod errors;
+pub mod exec;
+pub mod output;
+pub mod target;
 
 use std::ffi::OsString;
+use std::io::IsTerminal;
 
-use clap::{Arg, ArgAction, Command};
-use kropa_core::ExitCode;
+use clap::error::ErrorKind;
+use clap::{ColorChoice, FromArgMatches};
+use kropa_core::{Clock, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
 
-/// Name of the global language option.
-const LANG_ARG: &str = "lang";
+pub use output::Io;
 
-/// Finds the value of `--lang` in raw arguments, before the real parsing: the help text must already be
-/// in the right language when clap renders it. Stops at `--`. Returns the last occurrence.
-#[must_use]
-pub fn prescan_lang(args: &[OsString]) -> Option<String> {
+use args::Cli;
+use errors::{CliError, localize_clap_error, plain_clap_message};
+use exec::{Context, ERROR_SCHEMA};
+use output::{Session, error_document};
+
+/// Finds the value of a long option in raw arguments, before the real parsing: the help text must
+/// already be in the right language when clap renders it. Stops at `--`. Returns the last occurrence.
+fn prescan(args: &[OsString], option: &str) -> Option<String> {
+    let equals = format!("{option}=");
     let mut found = None;
     let mut iter = args.iter().skip(1);
     while let Some(arg) = iter.next() {
@@ -22,70 +39,71 @@ pub fn prescan_lang(args: &[OsString]) -> Option<String> {
         if arg == "--" {
             break;
         }
-        if arg == "--lang" {
+        if arg == option {
             if let Some(value) = iter.next().and_then(|v| v.to_str()) {
                 found = Some(value.to_owned());
             }
-        } else if let Some(value) = arg.strip_prefix("--lang=") {
+        } else if let Some(value) = arg.strip_prefix(&equals) {
             found = Some(value.to_owned());
         }
     }
     found
 }
 
-fn parse_lang(value: &str) -> Result<String, String> {
-    Lang::parse(value)
-        .map(|l| l.code().to_owned())
-        .map_err(|e| e.to_string())
-}
-
-/// Builds the `kropa` command with every visible string taken from Fluent.
+/// Value of `--lang` in raw arguments (see [`prescan`]).
 #[must_use]
-pub fn build_command(loc: &Localizer) -> Command {
-    let template = format!(
-        "{{about}}\n\n{} {{usage}}\n\n{}\n{{options}}\n",
-        loc.message("cli-usage-heading"),
-        loc.message("cli-options-heading"),
-    );
-    Command::new("kropa")
-        .version(env!("CARGO_PKG_VERSION"))
-        .about(loc.message("cli-about"))
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .help_template(template)
-        .arg(
-            Arg::new(LANG_ARG)
-                .long("lang")
-                .value_name("LANG")
-                .global(true)
-                .value_parser(parse_lang)
-                .help(loc.message("cli-lang-flag")),
-        )
-        .arg(
-            Arg::new("help")
-                .short('h')
-                .long("help")
-                .action(ArgAction::Help)
-                .global(true)
-                .help(loc.message("cli-help-flag")),
-        )
-        .arg(
-            Arg::new("version")
-                .short('V')
-                .long("version")
-                .action(ArgAction::Version)
-                .help(loc.message("cli-version-flag")),
-        )
+pub fn prescan_lang(args: &[OsString]) -> Option<String> {
+    prescan(args, "--lang")
 }
 
-/// Runs the command line: `args` includes the program name, `lookup` reads the standard locale
-/// variables. Output goes to stdout/stderr; the result is the process exit code.
+/// Whether `--json` appears in raw arguments, so that even a usage error can be answered in JSON.
+fn prescan_json(args: &[OsString]) -> bool {
+    args.iter()
+        .skip(1)
+        .take_while(|a| *a != "--")
+        .any(|a| a == "--json")
+}
+
+fn prescan_color(args: &[OsString]) -> ColorChoice {
+    match prescan(args, "--color").as_deref() {
+        Some("always") => ColorChoice::Always,
+        Some("never") => ColorChoice::Never,
+        _ => ColorChoice::Auto,
+    }
+}
+
+/// Runs the command line on the real standard streams: `args` includes the program name, `lookup`
+/// reads the standard locale variables. The result is the process exit code.
 #[must_use]
 pub fn run(args: &[OsString], lookup: &dyn Fn(&str) -> Option<String>) -> ExitCode {
-    match run_inner(args, lookup) {
+    let stdout = std::io::stdout();
+    let stderr = std::io::stderr();
+    let mut out = stdout.lock();
+    let mut err = stderr.lock();
+    let mut io = Io {
+        out: &mut out,
+        err: &mut err,
+        stdin_is_tty: std::io::stdin().is_terminal(),
+    };
+    let host = gethostname::gethostname().to_string_lossy().into_owned();
+    let host = (!host.is_empty()).then_some(host);
+    run_with(args, lookup, &mut io, &SystemClock, host)
+}
+
+/// Like [`run`], with injected streams, clock and host name (tests).
+#[must_use]
+pub fn run_with(
+    args: &[OsString],
+    lookup: &dyn Fn(&str) -> Option<String>,
+    io: &mut Io<'_>,
+    clock: &dyn Clock,
+    host: Option<String>,
+) -> ExitCode {
+    match run_inner(args, lookup, io, clock, host) {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("kropa: {e}");
+            // The localizer itself is broken: the only message possible is an English one.
+            let _ = std::io::Write::write_fmt(io.err, format_args!("kropa: {e}\n"));
             ExitCode::Internal
         }
     }
@@ -94,55 +112,102 @@ pub fn run(args: &[OsString], lookup: &dyn Fn(&str) -> Option<String>) -> ExitCo
 fn run_inner(
     args: &[OsString],
     lookup: &dyn Fn(&str) -> Option<String>,
+    io: &mut Io<'_>,
+    clock: &dyn Clock,
+    host: Option<String>,
 ) -> Result<ExitCode, I18nError> {
-    let lang = kropa_i18n::negotiate(prescan_lang(args).as_deref(), lookup);
+    let lang: Lang = kropa_i18n::negotiate(prescan_lang(args).as_deref(), lookup);
     let loc = Localizer::new(lang)?;
-    match build_command(&loc).try_get_matches_from(args) {
-        Ok(_) => Ok(ExitCode::Ok),
-        Err(e) => {
-            // Help and version go to stdout with code 0; every parse error is a usage error (2).
-            let code = if e.use_stderr() {
-                ExitCode::Usage
-            } else {
-                ExitCode::Ok
-            };
-            // Nothing sensible can be done if the terminal is closed.
-            let _ = e.print();
-            Ok(code)
-        }
-    }
+    let command = command::build_command(&loc, prescan_color(args));
+    let parsed = command
+        .try_get_matches_from(args)
+        .and_then(|m| Cli::from_arg_matches(&m));
+    let cli = match parsed {
+        Ok(cli) => cli,
+        Err(e) => return Ok(report_usage_error(&e, &loc, prescan_json(args), io)),
+    };
+    let g = &cli.global;
+    let mut session = Session::new(io, g.json, g.quiet, g.verbose, g.no_input);
+    let ctx = Context {
+        loc: &loc,
+        clock,
+        host,
+    };
+    Ok(exec::execute(&cli, &ctx, &mut session))
 }
+
+/// Help and version go to stdout with code 0; every parse error is a usage error (2), localised
+/// when the kind is covered, with clap's own English text otherwise.
+fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut Io<'_>) -> ExitCode {
+    let mut session = Session::new(io, json, false, 0, false);
+    match err.kind() {
+        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+            // A closed terminal leaves nothing sensible to do.
+            let _ = err.print();
+            return ExitCode::Ok;
+        }
+        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+            // Bare `kropa dest`: the help, on stderr, as a usage error.
+            let _ = err.print();
+        }
+        _ => match localize_clap_error(err, loc) {
+            Some(text) => session.raw_err(&text),
+            None => {
+                let _ = err.print();
+            }
+        },
+    }
+    if json {
+        let error = CliError {
+            code: ExitCode::Usage,
+            message: plain_clap_message(err, loc),
+            step: None,
+            lots: Vec::new(),
+        };
+        session.document(&error_document(ERROR_SCHEMA, &error));
+    }
+    ExitCode::Usage
+}
+
 
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use kropa_i18n::{Lang, Localizer};
+    use kropa_core::{ExitCode, FixedClock};
 
-    use super::{build_command, prescan_lang};
+    use super::{Io, prescan_json, prescan_lang, run_with};
 
     fn args(list: &[&str]) -> Vec<OsString> {
         list.iter().map(OsString::from).collect()
     }
 
-    fn help(lang: Lang) -> String {
-        let mut cmd = build_command(&Localizer::new(lang).unwrap());
-        cmd.render_long_help().to_string()
+    struct Run {
+        code: ExitCode,
+        out: String,
+        err: String,
+    }
+
+    fn run(list: &[&str], tty: bool) -> Run {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let clock = FixedClock::new("2026-11-11T14:03:22+01:00[+01:00]".parse().unwrap());
+        let code = {
+            let mut io = Io {
+                out: &mut out,
+                err: &mut err,
+                stdin_is_tty: tty,
+            };
+            run_with(&args(list), &|_| None, &mut io, &clock, Some("laptop".into()))
+        };
+        Run {
+            code,
+            out: String::from_utf8(out).unwrap(),
+            err: String::from_utf8(err).unwrap(),
+        }
     }
 
     #[test]
-    fn help_differs_by_language() {
-        let fr = help(Lang::Fr);
-        let en = help(Lang::En);
-        assert_ne!(fr, en);
-        assert!(fr.contains("Capturer, annoter"), "{fr}");
-        assert!(fr.contains("Utilisation :"), "{fr}");
-        assert!(en.contains("Capture, annotate"), "{en}");
-        assert!(en.contains("Usage:"), "{en}");
-    }
-
-    #[test]
-    fn prescan() {
+    fn prescan_lang_and_json() {
         assert_eq!(
             prescan_lang(&args(&["kropa", "--lang", "fr"])).as_deref(),
             Some("fr")
@@ -157,16 +222,65 @@ mod tests {
         );
         assert_eq!(prescan_lang(&args(&["kropa", "--", "--lang", "fr"])), None);
         assert_eq!(prescan_lang(&args(&["kropa", "--lang"])), None);
+        assert!(prescan_json(&args(&["kropa", "x", "--json"])));
+        assert!(!prescan_json(&args(&["kropa", "--", "--json"])));
     }
 
     #[test]
-    fn lang_option_is_validated_and_case_insensitive() {
-        let cmd = build_command(&Localizer::new(Lang::En).unwrap());
-        let m = cmd
-            .clone()
-            .try_get_matches_from(["kropa", "--lang", "FR"])
-            .unwrap();
-        assert_eq!(m.get_one::<String>("lang").map(String::as_str), Some("fr"));
-        assert!(cmd.try_get_matches_from(["kropa", "--lang", "de"]).is_err());
+    fn version_json_is_one_object() {
+        let r = run(&["kropa", "version", "--json"], false);
+        assert_eq!(r.code, ExitCode::Ok);
+        assert!(r.err.is_empty());
+        let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+        assert_eq!(r.out.lines().count(), 1);
+        assert_eq!(v["schema"], "kropa.version/1");
+        assert_eq!(v["version"], env!("CARGO_PKG_VERSION"));
+        assert!(v["ipc_protocol"].is_null());
+    }
+
+    #[test]
+    fn usage_errors_are_localised_and_exit_2() {
+        let r = run(&["kropa", "--lang", "fr", "capture", "screen", "--delay", "99"], false);
+        assert_eq!(r.code, ExitCode::Usage);
+        assert!(r.out.is_empty());
+        assert!(r.err.contains("valeur invalide '99'"), "{}", r.err);
+        assert!(r.err.contains("Utilisation :"), "{}", r.err);
+        let r = run(&["kropa", "--lang", "en", "capture", "--bogus"], false);
+        assert_eq!(r.code, ExitCode::Usage);
+        assert!(r.err.contains("unexpected argument '--bogus'"), "{}", r.err);
+    }
+
+    #[test]
+    fn usage_error_in_json_mode() {
+        let r = run(&["kropa", "--json", "--lang", "en", "nope"], false);
+        assert_eq!(r.code, ExitCode::Usage);
+        let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+        assert_eq!(v["schema"], "kropa.error/1");
+        assert_eq!(v["exit_code"], 2);
+        assert_eq!(v["error"]["code"], "usage");
+    }
+
+    #[test]
+    fn unsupported_commands_say_so() {
+        let r = run(&["kropa", "--lang", "en", "queue", "list"], false);
+        assert_eq!(r.code, ExitCode::Unsupported);
+        assert!(r.out.is_empty());
+        assert!(r.err.contains("lot 4.5"), "{}", r.err);
+    }
+
+    #[test]
+    fn interaction_is_refused_without_a_terminal() {
+        let args = ["kropa", "--lang", "en", "queue", "clear"];
+        assert_eq!(run(&args, false).code, ExitCode::InteractionRequired);
+        // On a terminal the confirmation would be asked: the feature is not there yet.
+        assert_eq!(run(&args, true).code, ExitCode::Unsupported);
+        // `--no-input` wins over the terminal.
+        let mut with_flag = args.to_vec();
+        with_flag.push("--no-input");
+        assert_eq!(run(&with_flag, true).code, ExitCode::InteractionRequired);
+        // `--yes` confirms.
+        let mut yes = args.to_vec();
+        yes.push("--yes");
+        assert_eq!(run(&yes, false).code, ExitCode::Unsupported);
     }
 }

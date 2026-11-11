@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use kropa_core::{Clock, CoreError, Config, ExitCode, CONFIG_FILE, config_dir};
+use kropa_core::{CONFIG_FILE, Clock, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
 use serde_json::json;
 
@@ -476,18 +476,6 @@ fn check_interaction(cmd: &Command, interactive: bool, loc: &Localizer) -> Resul
         ));
     }
     Ok(())
-}
-
-impl From<CoreError> for CliError {
-    fn from(err: CoreError) -> Self {
-        // Only reached through `?` on paths without a localizer; the text stays technical English.
-        Self {
-            code: err.exit_code(),
-            message: err.to_string(),
-            step: None,
-            lots: Vec::new(),
-        }
-    }
 }
 
 #[cfg(test)]
