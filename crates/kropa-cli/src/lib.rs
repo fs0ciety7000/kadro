@@ -248,12 +248,33 @@ fn run_inner(
         input: services.input,
         confirm: services.confirm,
     };
-    // A locked keyring is only unlocked with a prompt when someone can answer it: a terminal, and a
-    // graphical session to show the dialog on. Otherwise the call fails at once (exit 7).
-    let display = lookup("WAYLAND_DISPLAY").is_some() || lookup("DISPLAY").is_some();
-    ctx.secrets
-        .set_interactive(session.interactive && (display || cfg!(target_os = "macos")));
+    ctx.secrets.set_interactive(store_may_prompt(
+        session.interactive,
+        lookup,
+        cfg!(target_os = "macos"),
+    ));
     Ok(exec::execute(&cli, &ctx, &mut session))
+}
+
+/// Whether the secret store may ask the user something (a prompt to unlock a locked keyring).
+///
+/// Only when someone can answer it: a terminal and no `--no-input` (`interactive`), and a graphical
+/// session to show the dialog on. Over SSH a forwarded `DISPLAY` is not a screen in front of the
+/// user, so it counts as no display. On macOS the system shows its own dialog. Otherwise a locked
+/// keyring fails at once (exit 7).
+fn store_may_prompt(
+    interactive: bool,
+    lookup: &dyn Fn(&str) -> Option<String>,
+    macos: bool,
+) -> bool {
+    if !interactive {
+        return false;
+    }
+    if macos {
+        return true;
+    }
+    let present = |name: &str| lookup(name).is_some_and(|v| !v.is_empty());
+    (present("WAYLAND_DISPLAY") || present("DISPLAY")) && !present("SSH_CONNECTION")
 }
 
 /// Help and version go to stdout with code 0; every parse error is a usage error (2), localised.
@@ -291,7 +312,16 @@ mod tests {
 
     use kropa_core::{ExitCode, FixedClock};
 
-    use super::{Io, prescan_json, prescan_lang, run_with};
+    use std::sync::Mutex;
+
+    use kropa_upload::secret::{
+        Authorization, EntryInfo, MemorySecretSource, NewSecret, Placement, SecretEntry,
+        SecretError, SecretSource, SecretStore, SecretValue, StoreStatus,
+    };
+
+    use super::{
+        Io, Services, SystemInput, prescan_json, prescan_lang, run_with, run_with_services,
+    };
 
     fn args(list: &[&str]) -> Vec<OsString> {
         list.iter().map(OsString::from).collect()
@@ -325,6 +355,114 @@ mod tests {
             out: String::from_utf8(out).unwrap(),
             err: String::from_utf8(err).unwrap(),
         }
+    }
+
+    /// A store that only records what `set_interactive` was told.
+    #[derive(Default)]
+    struct Spy {
+        inner: MemorySecretSource,
+        told: Mutex<Vec<bool>>,
+    }
+
+    impl SecretSource for Spy {
+        fn load(&self, p: &str, n: &str) -> Result<Option<SecretEntry>, SecretError> {
+            self.inner.load(p, n)
+        }
+        fn profile_exists(&self, p: &str) -> Result<bool, SecretError> {
+            self.inner.profile_exists(p)
+        }
+        fn put(&self, p: &str, n: &str, e: NewSecret) -> Result<(), SecretError> {
+            self.inner.put(p, n, e)
+        }
+    }
+
+    impl SecretStore for Spy {
+        fn set_interactive(&self, interactive: bool) {
+            self.told.lock().unwrap().push(interactive);
+        }
+        fn status(&self) -> StoreStatus {
+            self.inner.status()
+        }
+        fn inspect(&self, p: &str, n: &str) -> Result<Option<EntryInfo>, SecretError> {
+            self.inner.inspect(p, n)
+        }
+        fn set(
+            &self,
+            p: &str,
+            n: &str,
+            v: SecretValue,
+            f: Authorization,
+        ) -> Result<(), SecretError> {
+            self.inner.set(p, n, v, f)
+        }
+        fn remove(&self, p: &str, n: &str) -> Result<bool, SecretError> {
+            self.inner.remove(p, n)
+        }
+        fn authorize(
+            &self,
+            p: &str,
+            n: &str,
+            o: Option<&str>,
+            pl: Option<Placement>,
+        ) -> Result<(), SecretError> {
+            self.inner.authorize(p, n, o, pl)
+        }
+    }
+
+    /// What the store was told for `kropa secrets status` with this terminal and these variables.
+    fn told(extra: &[&str], tty: bool, vars: &[&str]) -> bool {
+        let spy = Spy::default();
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let clock = FixedClock::new("2026-11-11T14:03:22+01:00[+01:00]".parse().unwrap());
+        let mut list = vec!["kropa"];
+        list.extend_from_slice(extra);
+        list.extend(["secrets", "status"]);
+        let vars: Vec<String> = vars.iter().map(|v| (*v).to_owned()).collect();
+        {
+            let mut io = Io {
+                out: &mut out,
+                err: &mut err,
+                stdin_is_tty: tty,
+            };
+            let services = Services {
+                secrets: &spy,
+                input: &SystemInput,
+                confirm: &|_| false,
+            };
+            let _ = run_with_services(
+                &args(&list),
+                &|name| vars.iter().any(|v| v == name).then(|| "x".to_owned()),
+                &mut io,
+                &clock,
+                None,
+                None,
+                &|_| {},
+                &services,
+            );
+        }
+        let told = spy.told.lock().unwrap().clone();
+        assert_eq!(told.len(), 1, "told once: {told:?}");
+        told[0]
+    }
+
+    #[test]
+    fn the_store_is_told_to_prompt_only_with_a_terminal_a_display_and_no_no_input() {
+        let wayland = ["WAYLAND_DISPLAY"];
+        let x11 = ["DISPLAY"];
+        if cfg!(target_os = "macos") {
+            // The system shows its own dialog: only the terminal and `--no-input` count.
+            assert!(told(&[], true, &[]));
+        } else {
+            assert!(told(&[], true, &wayland));
+            assert!(told(&[], true, &x11));
+            assert!(!told(&[], true, &[]), "no display");
+            assert!(!told(&[], true, &["SSH_CONNECTION", "DISPLAY"]), "ssh");
+        }
+        assert!(!told(&[], false, &wayland), "no terminal");
+        assert!(!told(&[], false, &x11), "no terminal");
+        assert!(!told(&["--no-input"], true, &wayland), "--no-input");
+        assert!(!told(&["--no-input"], true, &x11), "--no-input");
+        assert!(!told(&["--no-input"], false, &[]));
     }
 
     #[test]
