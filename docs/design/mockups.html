@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kropa · maquettes D2.1</title>
+<!-- Seule ressource externe : Google Fonts (OFL 1.1). Inter imite Adwaita Sans (dérivée d'Inter) et sert de repli à SF Pro ;
+     JetBrains Mono imite Adwaita Mono / SF Mono ; Space Grotesk ne sert qu'à l'habillage de la page, jamais dans l'application. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#E7E9EE;color:#15171C;font:14px/1.45 Inter,system-ui,sans-serif}
+button{font:inherit;color:inherit}
+/* ---------- habillage de la page (hors produit) ---------- */
+.doc{position:sticky;top:0;z-index:50;background:#F6F7F9;border-bottom:1px solid #D9DCE2;padding:10px 20px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.doc h1{font:700 17px/1 "Space Grotesk",Inter,sans-serif;display:flex;gap:8px;align-items:center}
+.doc h1 small{font:500 12px Inter,sans-serif;color:#5A606B}
+.ctl{display:flex;align-items:center;gap:6px;font-size:12px;color:#5A606B}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid #7D8490;border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:#fff;color:#15171C;padding:0 11px;min-height:32px;cursor:pointer;border-left:1px solid #D9DCE2;font-size:13px}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed=true]{background:#FF8A1F;color:#111318;font-weight:600}
+.seg button:focus-visible{outline:2px solid #A84B00;outline-offset:-4px}
+main{padding:20px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.notes{max-width:1200px;width:100%;background:#fff;border:1px solid #D9DCE2;border-radius:10px;padding:14px 18px;font-size:13.5px}
+.notes h2{font:700 15px "Space Grotesk",Inter,sans-serif;margin:4px 0 6px}
+.notes ul{padding-left:18px}.notes li{margin:3px 0}
+.notes code{font:12.5px "JetBrains Mono",monospace;background:#F0F1F4;padding:0 4px;border-radius:4px}
+.hint{font-size:12px;color:#5A606B}
+body.sheetmode .doc{display:none}
+.sheet{display:grid;grid-template-columns:repeat(2,600px);gap:14px 16px;padding:16px;background:#E7E9EE}
+.sheet>h2{grid-column:1/-1;font:700 18px "Space Grotesk",Inter,sans-serif;display:flex;justify-content:space-between;align-items:baseline}
+.sheet>h2 small{font:500 12px Inter,sans-serif;color:#5A606B}
+.cell{display:flex;flex-direction:column;gap:6px}
+.cell figcaption{font:600 12px Inter,sans-serif;color:#2B2F38}
+.cell .stage{zoom:.5}
+
+/* ---------- scène ---------- */
+.stage{position:relative;width:1200px;height:760px;overflow:hidden;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.25);flex:none;-webkit-font-smoothing:antialiased;font-family:var(--font);font-size:var(--fs);line-height:1.35;text-align:left}
+.stage[data-p=adw]{--font:"Adwaita Sans",Inter,Cantarell,system-ui,sans-serif;--mono:"Adwaita Mono","JetBrains Mono",ui-monospace,monospace;--fs:14.67px;--win-r:12px}
+.stage[data-p=mac]{--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;--mono:"SF Mono",ui-monospace,"JetBrains Mono",monospace;--fs:13px;--win-r:10px}
+/* jetons natifs imités (la référence reste la feuille de style du système) */
+.stage[data-p=adw][data-t=light]{--win:#FAFAFB;--view:#FFFFFF;--hb:#FFFFFF;--card:#FFFFFF;--side:#EBEBED;--dlg:#FFFFFF;--fg:#2E2E32;--muted:#5A606B;--line:rgba(0,0,6,.13);--line2:rgba(0,0,6,.07);--btn:rgba(0,0,6,.08);--btn-h:rgba(0,0,6,.13);--btn-on:rgba(0,0,6,.21);--entry:rgba(0,0,6,.06);--acc-bg:#3584E4;--acc-fg:#FFFFFF;--acc:#0461BE;--err:#C30000;--ok:#1A7F45;--warn:#9C6E03;--shade:rgba(0,0,6,.07);--focus:rgba(53,132,228,.55);--desk:linear-gradient(155deg,#A9BEDB,#6684B2 55%,#3F5D8D)}
+.stage[data-p=adw][data-t=dark]{--win:#222226;--view:#1D1D20;--hb:#2E2E32;--card:#333337;--side:#1D1D20;--dlg:#36363A;--fg:#FFFFFF;--muted:#A2A8B3;--line:rgba(255,255,255,.14);--line2:rgba(255,255,255,.07);--btn:rgba(255,255,255,.10);--btn-h:rgba(255,255,255,.15);--btn-on:rgba(255,255,255,.26);--entry:rgba(255,255,255,.08);--acc-bg:#3584E4;--acc-fg:#FFFFFF;--acc:#81D0FF;--err:#FF938C;--ok:#4ADE80;--warn:#FFC252;--shade:rgba(0,0,0,.36);--focus:rgba(53,132,228,.65);--desk:linear-gradient(155deg,#28364F,#141B29)}
+.stage[data-p=mac][data-t=light]{--win:#ECECEC;--view:#FFFFFF;--hb:#E6E6E6;--card:#F6F6F6;--side:#E1E1E4;--dlg:#F2F2F2;--fg:#1D1D1F;--muted:#5A606B;--line:rgba(0,0,0,.13);--line2:rgba(0,0,0,.07);--btn:#FFFFFF;--btn-h:#F2F2F2;--btn-on:#FFFFFF;--seg:rgba(0,0,0,.07);--entry:#FFFFFF;--acc-bg:#A84B00;--acc-fg:#FFFFFF;--acc:#A84B00;--err:#C62828;--ok:#1A7F45;--warn:#9C6E03;--shade:rgba(0,0,0,.08);--focus:rgba(168,75,0,.7);--desk:linear-gradient(160deg,#CDBBA8,#8E7C98 55%,#4F5B7E)}
+.stage[data-p=mac][data-t=dark]{--win:#2C2C2E;--view:#1E1E1E;--hb:#323234;--card:#363638;--side:#262628;--dlg:#38383A;--fg:#E8E8EA;--muted:#A2A8B3;--line:rgba(255,255,255,.13);--line2:rgba(255,255,255,.07);--btn:#4A4A4E;--btn-h:#555559;--btn-on:#636366;--seg:rgba(255,255,255,.08);--entry:#1E1E1E;--acc-bg:#B85400;--acc-fg:#FFFFFF;--acc:#FF8A1F;--err:#FF6B6B;--ok:#4ADE80;--warn:#FFC252;--shade:rgba(0,0,0,.4);--focus:rgba(255,138,31,.75);--desk:linear-gradient(160deg,#3B3346,#1B2132)}
+/* jetons Kropa (surfaces qui nous appartiennent : overlay, outil actif, miniature, icônes) */
+.stage[data-t=light]{--k-bg:#F6F7F9;--k-surface:#FFFFFF;--k-raised:#F0F1F4;--k-line:#D9DCE2;--k-line-strong:#7D8490;--k-text:#15171C;--k-muted:#5A606B;--k-accent:#FF8A1F;--k-on-accent:#111318;--k-accent-text:#A84B00;--k-success:#1A7F45;--k-danger:#C62828;--k-hud-sh:0 8px 24px rgba(17,19,24,.28),0 0 0 1px rgba(17,19,24,.10)}
+.stage[data-t=dark]{--k-bg:#111318;--k-surface:#1A1D24;--k-raised:#262A33;--k-line:#3A3F4A;--k-line-strong:#7A818D;--k-text:#ECEEF2;--k-muted:#A2A8B3;--k-accent:#FF8A1F;--k-on-accent:#111318;--k-accent-text:#FF8A1F;--k-success:#4ADE80;--k-danger:#FF6B6B;--k-hud-sh:0 8px 24px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.08)}
+
+.desk{position:absolute;inset:0;background:var(--desk)}
+.cap{position:absolute;font:600 11.5px/1.35 Inter,sans-serif;color:#fff;background:rgba(17,19,24,.72);padding:3px 8px;border-radius:6px;letter-spacing:.01em;max-width:560px;z-index:5}
+.muted{color:var(--muted)}.small{font-size:.86em}
+.mono{font-family:var(--mono);font-size:.92em}
+.ic{width:16px;height:16px;flex:none}
+.stage code{font-family:var(--mono);font-size:.9em;background:var(--btn);padding:1px 5px;border-radius:4px}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block;animation:sp .9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none;border-right-color:currentColor;opacity:.6}}
+
+/* ---------- fenêtres ---------- */
+.win{position:absolute;display:flex;flex-direction:column;background:var(--win);color:var(--fg);border-radius:var(--win-r);overflow:hidden}
+.stage[data-p=adw] .win{box-shadow:0 0 0 1px rgba(0,0,6,.08),0 2px 6px rgba(0,0,6,.12),0 12px 32px rgba(0,0,6,.2)}
+.stage[data-p=adw][data-t=dark] .win{box-shadow:0 0 0 1px rgba(0,0,0,.7),0 12px 32px rgba(0,0,0,.45)}
+.stage[data-p=mac] .win{box-shadow:0 0 0 .5px rgba(0,0,0,.28),0 22px 50px rgba(0,0,0,.32)}
+.stage[data-p=mac][data-t=dark] .win{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 0 0 .5px #000,0 22px 50px rgba(0,0,0,.55)}
+.tb{flex:none;position:relative;display:flex;align-items:center;gap:6px;background:var(--hb)}
+.stage[data-p=adw] .tb{height:47px;padding:0 6px}
+.stage[data-p=mac] .tb{height:52px;padding:0 10px 0 0;border-bottom:1px solid var(--line)}
+.tb .s,.tb .e{display:flex;align-items:center;gap:6px;z-index:1}
+.tb .e{margin-left:auto}
+.ttl{display:flex;flex-direction:column;line-height:1.25;white-space:nowrap;overflow:hidden;min-width:0}
+.ttl b{font-weight:700}.ttl small{font-size:.82em;color:var(--muted)}
+.stage[data-p=adw] .ttl{position:absolute;inset:0;align-items:center;justify-content:center;pointer-events:none}
+.stage[data-p=adw] .ttl>*{pointer-events:auto}
+.stage[data-p=mac] .lights{order:0}.stage[data-p=mac] .ttl{order:1;margin-left:4px}.stage[data-p=mac] .tb .s{order:2;margin-left:12px}.stage[data-p=mac] .tb .e{order:3}
+.stage[data-p=mac] .ttl small{font-size:11px}
+.lights{display:none}
+.stage[data-p=mac] .lights{display:flex;gap:8px;padding:0 10px 0 20px}
+.lights i{width:12px;height:12px;border-radius:50%;background:#FF5F57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+.lights i:nth-child(2){background:#FEBC2E}.lights i:nth-child(3){background:#28C840}
+.stage[data-p=mac] .gclose{display:none!important}
+.stage[data-p=mac] .win.prefs .tb{height:62px}
+.stage[data-p=mac] .win.prefs .ttl{position:absolute;inset:0;align-items:center;justify-content:center;margin:0}
+
+/* boutons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;cursor:default;white-space:nowrap;color:var(--fg);background:var(--btn)}
+.stage[data-p=adw] .btn{min-height:34px;min-width:34px;padding:0 12px;border-radius:6px;font-weight:700}
+.stage[data-p=adw] .btn.flat{background:transparent}
+.stage[data-p=adw] .btn.icon{padding:0;width:34px}
+.stage[data-p=adw] .btn.pill{border-radius:999px;min-height:42px;padding:0 30px}
+.stage[data-p=adw] .gclose{width:24px;min-width:24px;min-height:24px;height:24px;border-radius:50%;padding:0;margin:0 7px 0 4px;background:var(--btn)}
+.stage[data-p=adw] .gclose .ic{width:12px;height:12px}
+.stage[data-p=mac] .btn{height:24px;padding:0 12px;border-radius:6px;font-size:13px;box-shadow:0 0 0 .5px rgba(0,0,0,.2),0 .5px 1.5px rgba(0,0,0,.14)}
+.stage[data-p=mac][data-t=dark] .btn{box-shadow:inset 0 .5px rgba(255,255,255,.14),0 0 0 .5px rgba(0,0,0,.55)}
+.stage[data-p=mac] .btn.flat{background:transparent;box-shadow:none}
+.stage[data-p=mac] .btn.icon{padding:0;width:28px}
+.stage[data-p=mac] .btn.pill{height:28px;padding:0 18px}
+.stage[data-p=mac] .tb .btn{height:28px;min-width:28px;padding:0 9px;background:transparent;box-shadow:none}
+.stage[data-p=mac] .tb .btn.boxed{background:var(--btn);box-shadow:0 0 0 .5px rgba(0,0,0,.2),0 .5px 1.5px rgba(0,0,0,.14)}
+.stage[data-p=mac] .tb .btn.icon{width:32px;padding:0}
+.btn.primary,.stage .tb .btn.primary{background:var(--acc-bg);color:var(--acc-fg)}
+.btn.danger{background:#E01B24;color:#fff}
+.btn.danger-flat{color:var(--err)}
+.btn.dis{opacity:.45}
+.split{display:inline-flex}
+.split .btn:first-child{border-radius:6px 0 0 6px}
+.split .btn:last-child{border-radius:0 6px 6px 0;margin-left:1px;padding:0 8px;min-width:0}
+.stage[data-p=mac] .split .btn:last-child{width:22px;padding:0}
+.focus{outline:2px solid var(--focus);outline-offset:1px}
+.stage[data-p=mac] .focus{outline-width:3px;outline-offset:0}
+
+/* listes, rangées, champs */
+.page{flex:1;overflow:hidden;padding:24px 0;display:flex;flex-direction:column;align-items:center}
+.clamp{width:100%;max-width:620px;display:flex;flex-direction:column;gap:24px;padding:0 12px}
+.stage[data-p=mac] .clamp{gap:18px}
+.grp-h{display:flex;align-items:flex-end;gap:12px;margin-bottom:10px}
+.grp-h>div:first-child{flex:1}
+.grp-h h5{font-size:1em;font-weight:700}
+.grp-h p{color:var(--muted);font-size:.9em}
+.grp-h .sfx{display:flex;gap:6px}
+.list{background:var(--card);overflow:hidden}
+.stage[data-p=adw] .list{border-radius:12px;box-shadow:0 0 0 1px var(--line2),0 1px 3px var(--shade)}
+.stage[data-p=mac] .list{border-radius:8px;box-shadow:0 0 0 1px var(--line2)}
+.row{display:flex;align-items:center;gap:12px;position:relative}
+.stage[data-p=adw] .row{min-height:50px;padding:8px 12px}
+.stage[data-p=adw] .row+.row{border-top:1px solid var(--line2)}
+.stage[data-p=mac] .row{min-height:38px;padding:7px 10px}
+.stage[data-p=mac] .row+.row::before{content:"";position:absolute;left:10px;right:10px;top:0;height:1px;background:var(--line2)}
+.row .rt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.row .rt small{color:var(--muted);font-size:.88em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .rt small.wrap{white-space:normal}
+.row .sfx{display:flex;gap:8px;align-items:center;flex:none}
+.row.dim{opacity:.55}
+.row .pre{flex:none;color:var(--muted);display:flex}
+.tag{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--btn);margin-left:6px;vertical-align:1px}
+.tag.acc{background:var(--acc-bg);color:var(--acc-fg)}
+.stat{display:inline-flex;align-items:center;gap:6px}
+.stat.ok svg{color:var(--ok)}.stat.err svg{color:var(--err)}.stat.warn svg{color:var(--warn)}
+.sw{flex:none;position:relative;display:inline-block}
+.sw::after{content:"";position:absolute;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.stage[data-p=adw] .sw{width:48px;height:26px;border-radius:13px;background:var(--btn-on)}
+.stage[data-p=adw] .sw::after{top:3px;left:3px;width:20px;height:20px}
+.stage[data-p=adw] .sw.on::after{left:25px}
+.stage[data-p=mac] .sw{width:38px;height:22px;border-radius:11px;background:var(--seg)}
+.stage[data-p=mac] .sw::after{top:1px;left:1px;width:20px;height:20px}
+.stage[data-p=mac] .sw.on::after{left:17px}
+.sw.on{background:var(--acc-bg)!important}
+.entry{display:inline-flex;align-items:center;gap:8px;color:var(--fg);min-width:0}
+.stage[data-p=adw] .entry{min-height:34px;padding:0 9px;border-radius:6px;background:var(--entry)}
+.stage[data-p=mac] .entry{height:24px;padding:0 7px;border-radius:5px;background:var(--entry);box-shadow:0 0 0 .5px rgba(0,0,0,.28),inset 0 .5px 1px rgba(0,0,0,.08)}
+.stage[data-p=mac][data-t=dark] .entry{box-shadow:0 0 0 .5px rgba(255,255,255,.2)}
+.entry.err{box-shadow:0 0 0 2px var(--err)!important}
+.entry .ph{color:var(--muted)}
+.combo{display:inline-flex;align-items:center;gap:6px}
+.stage[data-p=adw] .combo{color:var(--fg)}
+.stage[data-p=adw] .combo .ic{width:12px;height:12px}
+.stage[data-p=mac] .combo{height:22px;padding:0 6px 0 9px;border-radius:5px;background:var(--btn);box-shadow:0 0 0 .5px rgba(0,0,0,.2),0 .5px 1.5px rgba(0,0,0,.14)}
+.stage[data-p=mac] .combo .ic{width:11px;height:11px;color:var(--acc-fg);background:var(--acc-bg);border-radius:3px;padding:1px}
+.seg2{display:flex}
+.seg2 .btn{flex:1;font-weight:500!important}
+.stage[data-p=adw] .seg2 .btn{border-radius:0;margin-left:1px}
+.stage[data-p=adw] .seg2 .btn:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.stage[data-p=adw] .seg2 .btn:last-child{border-radius:0 6px 6px 0}
+.stage[data-p=adw] .seg2 .btn.on{background:var(--btn-on);font-weight:700!important}
+.stage[data-p=mac] .seg2{background:var(--seg);border-radius:7px;padding:2px;gap:2px}
+.stage[data-p=mac] .seg2 .btn{background:transparent;box-shadow:none;height:22px}
+.stage[data-p=mac] .seg2 .btn.on{background:var(--btn-on);box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.16)}
+.notice{display:flex;gap:10px;text-align:left;padding:10px 12px;border-radius:10px;background:var(--btn);font-size:.94em;align-items:flex-start}
+.notice>svg{flex:none;margin-top:2px}
+.notice.warn{background:color-mix(in srgb,var(--warn) 14%,transparent)}.notice.warn>svg{color:var(--warn)}
+.notice.err{background:color-mix(in srgb,var(--err) 12%,transparent)}.notice.err>svg{color:var(--err)}
+.notice .body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.code{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.9em;background:var(--entry);border-radius:6px;padding:6px 6px 6px 10px;box-shadow:inset 0 0 0 1px var(--line2)}
+.code span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+kbd{font:600 12px/1 var(--font);min-width:22px;height:22px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;background:var(--k-raised);color:var(--k-text);box-shadow:inset 0 -1px 0 var(--k-line-strong)}
+.win kbd,.dlg kbd,.gn kbd,.mn kbd{background:var(--btn);color:var(--fg);box-shadow:inset 0 -1px 0 var(--line)}
+.kc{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.kc i{font-style:normal;color:var(--muted);font-size:11px}
+.hud .kc i{color:var(--k-muted)}
+.vs{display:flex;gap:4px}
+.vsb{border:0;background:transparent;color:var(--fg);display:inline-flex;align-items:center;gap:8px;border-radius:6px;font-weight:700}
+.stage[data-p=adw] .vsb{height:34px;padding:0 16px}
+.stage[data-p=adw] .vsb.on{background:var(--btn-h)}
+.stage[data-p=mac] .vsb{flex-direction:column;gap:2px;padding:4px 12px;font-size:11px;font-weight:500;height:50px;justify-content:center}
+.stage[data-p=mac] .vsb svg{width:20px;height:20px}
+.stage[data-p=mac] .vsb.on{background:rgba(0,0,0,.07);color:var(--acc)}
+.stage[data-p=mac][data-t=dark] .vsb.on{background:rgba(255,255,255,.1)}
+.vsbar{flex:none;display:flex;justify-content:space-around;background:var(--hb);border-top:1px solid var(--line);padding:4px}
+.vsbar .vsb{flex-direction:column;gap:2px;font-size:12px;height:52px;padding:0 10px;justify-content:center}
+.status{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:36px}
+.status .big{width:96px;height:96px;color:var(--muted);opacity:.7}
+.status h1{font-size:26.67px;font-weight:800}
+.stage[data-p=mac] .status h1{font-size:20px;font-weight:700}
+.status p{max-width:420px;color:var(--muted)}
+.banner{flex:none;display:flex;align-items:center;gap:12px;padding:8px 10px 8px 14px}
+.stage[data-p=adw] .banner{background:color-mix(in srgb,var(--acc-bg) 20%,var(--win))}
+.stage[data-p=mac] .banner{background:var(--card);border-bottom:1px solid var(--line)}
+.banner>span{flex:1}.banner>svg{color:var(--err)}
+.prog{flex:none;height:4px;background:var(--line2)}.prog i{display:block;height:100%;background:var(--acc-bg)}
+
+/* dialogues */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:4}
+.dlg{position:absolute;z-index:6;background:var(--dlg);color:var(--fg);display:flex;flex-direction:column}
+.stage[data-p=adw] .dlg{width:400px;border-radius:18px;padding:28px 24px 24px;text-align:center;gap:10px;box-shadow:0 0 0 1px rgba(0,0,6,.08),0 10px 40px rgba(0,0,6,.3)}
+.stage[data-p=adw] .dlg h2{font-size:20px;font-weight:800}
+.stage[data-p=adw] .dlg .acts{display:flex;gap:12px;margin-top:14px}
+.stage[data-p=adw] .dlg .acts .btn{flex:1;min-height:40px;border-radius:10px}
+.stage[data-p=mac] .dlg{width:300px;border-radius:12px;padding:20px 16px 16px;text-align:center;gap:8px;box-shadow:0 0 0 .5px rgba(0,0,0,.3),0 18px 50px rgba(0,0,0,.35)}
+.stage[data-p=mac][data-t=dark] .dlg{box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 18px 50px rgba(0,0,0,.6)}
+.stage[data-p=mac] .dlg h2{font-size:13px;font-weight:700}
+.stage[data-p=mac] .dlg p{font-size:11.5px}
+.stage[data-p=mac] .dlg .acts{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.stage[data-p=mac] .dlg .acts .btn{width:100%;height:28px}
+.dlg .ico{align-self:center;width:56px;height:56px;display:grid;place-items:center;color:var(--muted)}
+.dlg .ico svg{width:44px;height:44px}
+.dlg .fld{display:flex;flex-direction:column;gap:6px;text-align:left;margin-top:6px}
+.dlg .fld .entry{width:100%}
+.dlg .msg{display:flex;align-items:flex-start;gap:8px;text-align:left;font-size:.92em}
+.dlg .msg svg{flex:none;margin-top:2px}
+.dlg .msg.err svg{color:var(--err)}
+.dlg .foot{font-size:.86em;color:var(--muted);text-align:left}
+.sheetm{position:absolute;z-index:6;left:50%;top:62px;transform:translateX(-50%);width:620px;background:var(--win);border-radius:12px;padding:20px;box-shadow:0 0 0 .5px rgba(0,0,0,.3),0 18px 50px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:16px}
+.sheetm .acts{display:flex;justify-content:flex-end;gap:10px}
+.sheetm h3{font-size:13px;font-weight:700}
+
+/* ---------- overlay (à nous) ---------- */
+.ov{position:absolute;inset:0;overflow:hidden;cursor:crosshair}
+.veil{position:absolute;inset:0;background:rgba(17,19,24,.55)}
+.sel{position:absolute;border:1px solid #fff;box-shadow:0 0 0 1px rgba(17,19,24,.65),0 0 0 3000px rgba(17,19,24,.55)}
+.hd{position:absolute;width:9px;height:9px;background:#fff;border:1px solid #111318;transform:translate(-50%,-50%)}
+.hd.br{width:13px;height:13px;background:#FF8A1F}
+.hud{background:var(--k-surface);color:var(--k-text);border-radius:8px;box-shadow:var(--k-hud-sh);font-family:var(--font)}
+.hud .muted{color:var(--k-muted)}
+.badge{position:absolute;display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:13px;border-radius:6px;font-variant-numeric:tabular-nums}
+.badge b{font-weight:700}
+.badge span{color:var(--k-muted)}
+.loupe{position:absolute;padding:8px;display:flex;flex-direction:column;gap:6px}
+.lgrid{position:relative;display:grid;grid-template-columns:repeat(15,8px);grid-template-rows:repeat(15,8px);box-shadow:0 0 0 1px var(--k-line-strong)}
+.lgrid i{display:block;box-shadow:inset -1px -1px rgba(17,19,24,.07)}
+.lgrid .lc{position:absolute;left:56px;top:56px;width:8px;height:8px;box-shadow:0 0 0 1px #111318,0 0 0 2px #fff,0 0 0 3px #111318}
+.lgrid .le{position:absolute;background:#fff}
+.lgrid .le.v{left:63px;top:0;width:1px;height:64px;box-shadow:1px 0 #111318}
+.lgrid .le.h{left:0;top:63px;width:64px;height:1px;box-shadow:0 1px #111318}
+.lread{font-size:12px;display:flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lread .swatch{width:12px;height:12px;border-radius:2px;box-shadow:0 0 0 1px var(--k-line-strong)}
+.ov-help{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);padding:10px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px}
+.ov-help .r{display:flex;gap:18px;align-items:center;white-space:nowrap}
+.ov-help .it{display:inline-flex;gap:7px;align-items:center}
+.ov-help .lbl{color:var(--k-muted)}
+.ov-chip{position:absolute;left:50%;top:16px;transform:translateX(-50%);padding:6px 12px;font-size:13px;border-radius:999px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.xh{position:absolute;background:rgba(255,255,255,.8)}
+.xh.h{left:0;right:0;height:1px;box-shadow:0 1px rgba(17,19,24,.55)}
+.xh.v{top:0;bottom:0;width:1px;box-shadow:1px 0 rgba(17,19,24,.55)}
+.mon{position:absolute;overflow:hidden;border-radius:4px;box-shadow:0 0 0 3px #0B0C10,0 10px 30px rgba(0,0,0,.5)}
+.mon-in{position:absolute;left:0;top:0;width:1200px;height:760px;transform-origin:0 0}
+.monlbl{position:absolute;font:600 12.5px Inter,sans-serif;color:#ECEEF2}
+.term{position:absolute;inset:0;background:#16181D;color:#C9D1D9;font:22px/1.5 "JetBrains Mono",monospace;padding:30px;white-space:pre}
+.term .g{color:#56D364}.term .y{color:#E3B341}
+
+/* ---------- capture simulée (contenu d'un tiers) ---------- */
+.shot{position:absolute;left:0;top:0;width:1200px;height:760px;background:#fff;color:#1F2328;font:14px/1.4 Inter,Arial,sans-serif;overflow:hidden;text-align:left}
+.sh-tabs{height:38px;background:#DEE1E6;display:flex;align-items:flex-end;gap:4px;padding:0 12px}
+.sh-tab{width:230px;padding:8px 14px;font-size:12px;border-radius:8px 8px 0 0;background:#CDD1D7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sh-tab.on{background:#F6F8FA}
+.sh-url{height:40px;background:#F6F8FA;border-bottom:1px solid #D0D7DE;display:flex;align-items:center;padding:0 16px}
+.sh-url span{width:540px;padding:5px 14px;font-size:12.5px;color:#57606A;background:#fff;border:1px solid #D0D7DE;border-radius:16px}
+.sh-nav{position:absolute;left:0;top:78px;bottom:0;width:200px;background:#F6F8FA;border-right:1px solid #D0D7DE;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
+.sh-nav b{font-size:15px}.sh-nav i{display:block;height:9px;border-radius:5px;background:#D0D7DE}.sh-nav i.on{background:#3A5F9E}
+.sh-h{position:absolute;left:232px;top:98px;font-size:24px;font-weight:600;white-space:nowrap}.sh-h span{color:#59636E;font-weight:400}
+.sh-meta{position:absolute;left:232px;top:140px;display:flex;align-items:center;gap:8px;color:#59636E}
+.sh-meta code{font:12px "JetBrains Mono",monospace;background:#DDF4FF;color:#0550AE;padding:1px 6px;border-radius:6px}
+.sh-av{display:inline-block;width:20px;height:20px;border-radius:50%;background:#B392F0;flex:none}.sh-av.b{background:#56D364}.sh-av.c{background:#F0883E}
+.sh-t2{position:absolute;left:232px;top:176px;width:620px;height:33px;border-bottom:1px solid #D0D7DE;display:flex;gap:22px;color:#59636E}
+.sh-t2 b{color:#1F2328;border-bottom:2px solid #FD8C73;font-weight:600}
+.sh-card{position:absolute;left:232px;top:232px;width:620px;height:178px;border:1px solid #D0D7DE;border-radius:6px;background:#fff;overflow:hidden}
+.sh-ch{height:40px;background:#F6F8FA;border-bottom:1px solid #D0D7DE;display:flex;align-items:center;gap:8px;padding:0 16px;color:#59636E}.sh-ch b{color:#1F2328}
+.sh-l{position:absolute;left:16px;font:13px/18px "JetBrains Mono",ui-monospace,monospace;white-space:pre;color:#1F2328}.sh-l.e{color:#CF222E}
+.sh-p{position:absolute;left:16px;top:144px;font-size:14px;line-height:20px;white-space:nowrap}
+.sh-card2{position:absolute;left:232px;top:470px;width:620px;height:76px;border:1px solid #D0D7DE;background:#F6F8FA;display:flex;align-items:center;gap:8px;padding:0 16px}
+.sh-merge{position:absolute;left:503px;top:18px;width:100px;height:38px;border-radius:6px;background:#3A5F9E;color:#fff;font-weight:600;display:flex;align-items:center;justify-content:center}
+.sh-side{position:absolute;left:884px;top:100px;width:280px;font-size:13px;color:#59636E}
+.sh-side h6{font-size:12px;color:#1F2328;margin:16px 0 8px;font-weight:600}
+.sh-side p{display:flex;gap:6px;align-items:center;padding-bottom:10px;border-bottom:1px solid #D0D7DE}
+.sh-chip{padding:1px 8px;border-radius:10px;background:#FFEBE9;color:#A40E26;font-size:12px}.sh-chip.b{background:#DDF4FF;color:#0550AE}
+.cropbox{position:relative;overflow:hidden;flex:none}
+.cropbox>.sc{position:absolute;left:0;top:0;width:1200px;height:760px;transform-origin:0 0}
+
+/* ---------- éditeur ---------- */
+.tools{flex:none;display:flex;align-items:center;gap:2px;padding:6px 8px;background:var(--hb);border-bottom:1px solid var(--line)}
+.stage[data-p=mac] .tools{background:var(--win)}
+.tools.dis .tool{opacity:.45}
+.tool{width:44px;height:52px;border:0;border-radius:8px;background:transparent;color:var(--fg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.tool svg{width:20px;height:20px}
+.tool span{font-size:11px;font-weight:700;line-height:1;color:var(--muted);letter-spacing:.02em}
+.tool.on{background:var(--k-accent);color:var(--k-on-accent)}.tool.on span{color:var(--k-on-accent)}
+.stage[data-t=light] .tool.on{box-shadow:inset 0 0 0 1px #A84B00}
+.tool.hov{background:var(--btn)}
+.tsep{width:1px;height:30px;background:var(--line);margin:0 6px}
+.tools .end{margin-left:auto;display:flex;gap:6px;align-items:center}
+.ed{flex:1;display:flex;min-height:0}
+.cv{flex:1;position:relative;background:var(--side);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.crop{box-shadow:0 0 0 1px rgba(0,0,0,.14),0 4px 16px rgba(0,0,0,.2)}
+.crop svg.ann{position:absolute;left:0;top:0}
+.a-mask{position:absolute;background:#15171C}
+.a-blur{position:absolute;-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);background:rgba(255,255,255,.08)}
+.a-selbox{position:absolute;outline:1px dashed #111318;box-shadow:0 0 0 1px #fff}
+.a-selbox i{position:absolute;width:8px;height:8px;background:#fff;border:1px solid #111318;transform:translate(-50%,-50%)}
+.osd{position:absolute;left:12px;bottom:12px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:700}
+.side{width:288px;flex:none;background:var(--win);border-left:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:18px;overflow:hidden}
+.side h4{font-size:1.05em;font-weight:700;display:flex;align-items:center;gap:8px}
+.side .lbl{font-weight:700;font-size:.86em;margin-bottom:6px;display:block}
+.sws{display:flex;flex-wrap:wrap;gap:0}
+.swb{width:36px;height:36px;border:0;background:transparent;display:grid;place-items:center;border-radius:50%;padding:0}
+.swb i{width:26px;height:26px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);display:grid;place-items:center;color:var(--ck)}
+.swb.on i{box-shadow:inset 0 0 0 1px rgba(0,0,0,.25),0 0 0 2px var(--win),0 0 0 4px var(--fg)}
+.swb svg{width:14px;height:14px}
+.alist .row{min-height:38px!important;padding:5px 10px!important;gap:10px}
+.stage[data-p=adw] .alist .row.sel{background:var(--btn-h)}
+.stage[data-p=mac] .alist .row.sel{background:var(--acc-bg);color:var(--acc-fg)}
+.stage[data-p=mac] .alist .row.sel .muted{color:rgba(255,255,255,.9)}
+.alist svg{width:16px;height:16px;flex:none}
+.anum{width:22px;text-align:right;font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.stage[data-p=mac] .alist .row.sel .anum{color:#fff}
+
+/* ---------- barres système, notifications, miniature ---------- */
+.gtop{position:absolute;left:0;right:0;top:0;height:30px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13.5px;z-index:3}
+.gtop .l{position:absolute;left:10px;display:flex;gap:5px;align-items:center}
+.gtop .l i{width:28px;height:8px;border-radius:4px;background:#fff}.gtop .l i.o{width:8px;background:#777}
+.gtop .r{position:absolute;right:12px;display:flex;gap:10px;align-items:center}
+.mbar{position:absolute;left:0;right:0;top:0;height:26px;display:flex;align-items:center;gap:18px;padding:0 14px;font-size:13px;z-index:3;background:rgba(255,255,255,.5);color:#111;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.stage[data-t=dark] .mbar{background:rgba(20,20,22,.45);color:#fff}
+.mbar b{font-weight:700}.mbar .r{margin-left:auto;display:flex;gap:14px;align-items:center}
+.kpanel{position:absolute;left:0;right:0;bottom:0;height:44px;background:rgba(32,35,40,.94);display:flex;align-items:center;gap:8px;padding:0 10px;color:#fff;font-size:12px;z-index:3}
+.kpanel i{width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.14)}
+.kpanel .r{margin-left:auto;display:flex;gap:10px;align-items:center}
+.gn{position:absolute;width:420px;border-radius:14px;background:var(--dlg);color:var(--fg);box-shadow:0 0 0 1px var(--line2),0 6px 22px rgba(0,0,0,.28);padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px}
+.gn .h{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.gn .b{display:flex;gap:12px;align-items:flex-start}
+.gn .b>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.gn .acts{display:flex;gap:6px;margin-top:4px}
+.gn .acts .btn{flex:1;border-radius:999px}
+.mn{position:absolute;width:344px;border-radius:16px;background:rgba(246,246,246,.9);color:#1D1D1F;box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 10px 30px rgba(0,0,0,.22);padding:12px 14px;display:flex;gap:10px;-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);font-size:13px}
+.stage[data-t=dark] .mn{background:rgba(44,44,46,.9);color:#EEE;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 10px 30px rgba(0,0,0,.5)}
+.mn .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mn .tx .t{display:flex;justify-content:space-between;gap:8px}
+.mn time{font-size:11px;color:var(--muted)}
+.mn .acts{display:flex;gap:6px;margin-top:8px}.mn .acts .btn{flex:1}
+.na{position:absolute;width:420px;border:1.5px dashed rgba(255,255,255,.7);border-radius:14px;padding:16px;color:#fff;font-size:13px;background:rgba(17,19,24,.35)}
+.url{font-family:var(--mono);font-size:.9em;word-break:break-all}
+.thumb{position:absolute;width:300px;padding:8px;border-radius:14px;background:var(--dlg);color:var(--fg);display:flex;flex-direction:column;gap:8px;box-shadow:0 0 0 1px var(--line),0 12px 32px rgba(0,0,0,.35)}
+.stage[data-p=mac] .thumb{border-radius:12px;background:color-mix(in srgb,var(--dlg) 88%,transparent);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+.thumb .img{position:relative;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.thumb .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:0 2px}
+.thumb .acts{display:flex;gap:6px}
+.thumb .acts .btn{flex:1;flex-direction:column;gap:2px;min-height:48px!important;height:auto!important;padding:4px 0!important;font-size:12px;font-weight:600}
+.thumb .acts .btn kbd{height:16px;min-width:16px;font-size:10px;padding:0 4px}
+.thumb .close{position:absolute;left:-10px;top:-10px;width:28px;height:28px;border-radius:50%;background:var(--dlg);box-shadow:0 0 0 1px var(--line),0 2px 6px rgba(0,0,0,.3);display:grid;place-items:center;color:var(--fg)}
+.timer{height:3px;border-radius:2px;background:var(--line2);overflow:hidden}.timer i{display:block;height:100%;background:var(--k-accent)}
+.half{position:absolute;top:0;bottom:0;overflow:hidden}
+
+/* ---------- premier lancement, file ---------- */
+.fr{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 48px 0;text-align:center;gap:14px;min-height:0}
+.fr .hero{width:96px;height:96px;display:grid;place-items:center;color:var(--muted)}.fr .hero svg{width:72px;height:72px}
+.fr .hero.ok{color:var(--ok)}.fr .hero.err{color:var(--err)}
+.fr h1{font-size:26.67px;font-weight:800;line-height:1.15}
+.stage[data-p=mac] .fr h1{font-size:22px;font-weight:700}
+.fr>p{max-width:470px}
+.fr .list,.fr .notice{width:100%;text-align:left}
+.fr ol{text-align:left;width:100%;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.fr-foot{flex:none;display:flex;align-items:center;gap:12px;padding:16px 24px}
+.fr-foot .acts{margin-left:auto;display:flex;gap:10px}
+.dots{display:flex;gap:8px;align-items:center}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--fg)}
+.q{flex:1;padding:18px 24px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.qt{width:56px;height:36px;border-radius:4px;flex:none;background:linear-gradient(#DEE1E6 0 22%,#fff 22%);box-shadow:0 0 0 1px var(--line);position:relative}
+.qt::after{content:"";position:absolute;left:8px;right:18px;top:13px;height:3px;background:#D0D7DE;box-shadow:0 6px #D0D7DE,0 12px #3A5F9E}
+.qprog{height:6px;border-radius:3px;background:var(--line2);overflow:hidden;margin-top:5px;width:240px}.qprog i{display:block;height:100%;background:var(--acc-bg)}
+
+/* ---------- icônes ---------- */
+.icons{position:absolute;inset:0;background:var(--k-bg);color:var(--k-text);padding:24px 28px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-content:start;font-family:Inter,sans-serif}
+.icard{background:var(--k-surface);border-radius:10px;box-shadow:0 0 0 1px var(--k-line);padding:12px;display:flex;flex-direction:column;gap:8px}
+.icard .rowi{display:flex;align-items:center;gap:14px}
+.icard .g80{width:80px;height:80px;background-image:linear-gradient(var(--k-line) 1px,transparent 1px),linear-gradient(90deg,var(--k-line) 1px,transparent 1px);background-size:4px 4px;box-shadow:0 0 0 1px var(--k-line-strong);position:relative}
+.icard .g80::before{content:"";position:absolute;inset:8px;outline:1px dashed var(--k-accent-text)}
+.icard .g80 svg{position:absolute;inset:0;width:80px;height:80px}
+.icard .act{width:44px;height:52px;border-radius:8px;background:var(--k-accent);color:#111318;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:700 11px Inter,sans-serif}
+.stage[data-t=light] .icard .act{box-shadow:inset 0 0 0 1px #A84B00}
+.icard .drk{width:44px;height:44px;border-radius:8px;background:#111318;color:#ECEEF2;display:grid;place-items:center}
+.icard .lt{width:44px;height:44px;border-radius:8px;background:#FFFFFF;color:#15171C;display:grid;place-items:center;box-shadow:0 0 0 1px var(--k-line)}
+.icard h6{font-size:13px;font-weight:700;display:flex;justify-content:space-between}
+.icard code{font:11px "JetBrains Mono",monospace;color:var(--k-muted);background:none;padding:0}
+.icard .s16 svg{width:16px;height:16px}
+</style>
+</head>
+<body>
+<header class="doc" id="ctl"></header>
+<main id="main"><div id="wrap"></div><section class="notes" id="notes"></section></main>
+<script>
+"use strict";
+const S={screen:'overlay',p:'adw',t:'light',lang:'fr',state:'select'};
+const T=(fr,en)=>S.lang==='fr'?fr:en;
+const mac=()=>S.p==='mac';
+
+/* ---------- touches ---------- */
+function kn(k){
+  if(k==='mod')k=mac()?'cmd':'ctrl';
+  if(k==='step')k=mac()?'alt':'ctrl';
+  if(k==='arrows')return '← ↑ ↓ →';
+  if(k==='space')return T('Espace','Space');
+  const m=mac()?{ctrl:'⌃',shift:'⇧',alt:'⌥',cmd:'⌘',enter:'↩',esc:'⎋',del:'⌫',tab:'⇥'}
+    :(S.lang==='fr'?{ctrl:'Ctrl',shift:'Maj',alt:'Alt',enter:'Entrée',esc:'Échap',del:'Suppr',tab:'Tab',super:'Super'}
+                   :{ctrl:'Ctrl',shift:'Shift',alt:'Alt',enter:'Enter',esc:'Esc',del:'Delete',tab:'Tab',super:'Super'});
+  return m[k]||k;
+}
+function kc(...a){return `<span class="kc">${a.map(k=>`<kbd>${kn(k)}</kbd>`).join(mac()?'':'<i>+</i>')}</span>`}
+function ks(...a){return a.map(kn).join(mac()?'':'+')}
+const capKeys=()=>mac()?['ctrl','shift','4']:['ctrl','shift','4'];
+
+/* ---------- icônes système (substituts dessinés ici ; en production : Adwaita symbolic / SF Symbols) ---------- */
+const IC={undo:'M5.5 3 2.5 6l3 3M2.5 6h7a4 4 0 0 1 0 8H6',redo:'M10.5 3l3 3-3 3M13.5 6h-7a4 4 0 0 0 0 8H10',menu:'M2.5 4h11M2.5 8h11M2.5 12h11',
+close:'M4 4l8 8M12 4l-8 8','chev-r':'M6 3l5 5-5 5','chev-d':'M3.5 6l4.5 4.5L12.5 6','chev-l':'M10 3 5 8l5 5',plus:'M8 2.5v11M2.5 8h11',check:'M3 8.5 6.5 12 13 4.5',
+warn:'M8 1.8 15 14H1zM8 6.2v3.6M8 11.6v.4',err:'M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13zM5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8',
+info:'M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13zM8 7v4.5M8 4.7v.4',folder:'M1.5 4.5V13h13V5.5H8L6.5 3.5h-5z',
+lock:'M3.5 7.5h9v6.5h-9zM5.5 7.5V5a2.5 2.5 0 0 1 5 0v2.5',copy:'M5.5 5.5h8v8h-8zM10.5 5.5v-3h-8v8h3',
+image:'M2 3h12v10H2zM2 11l3.5-3.5 3 3 2-2L14 12M10.5 6.2v.1',sidebar:'M2 3h12v10H2zM10 3v10',eye:'M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4z',
+upload:'M8 11V2.5M4.5 6 8 2.5 11.5 6M2.5 10.5v3h11v-3',save:'M8 2.5V11M4.5 7.5 8 11l3.5-3.5M2.5 13.5h11',keyboard:'M1.5 4h13v8h-13zM4 7h1M7 7h1M10 7h1M4.5 9.5h7',
+screen:'M1.5 2.5h13v9h-13zM5.5 14h5M8 11.5V14',sliders:'M2 4.5h12M2 11.5h12M5 2.5v4M11 9.5v4',clock:'M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13zM8 4.5V8l2.5 1.5',
+ext:'M9 2.5h4.5V7M13.5 2.5 7 9M11.5 9.5v4h-9v-9h4',edit:'M10.5 2.5l3 3-8 8h-3v-3z',bell:'M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14h3'};
+function ic(n,c=''){return `<svg class="ic ${c}" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[n]}"/></svg>`}
+
+/* ---------- icônes d'outils Kropa (copie des fichiers docs/design/icons/*.svg) ---------- */
+const TI={
+arrow:['nonzero','M9.5 3.5h7v7h-1.75V5.25H9.5z M3.26 15.5 14.58 4.18 15.82 5.42 4.5 16.74z'],
+rect:['evenodd','M3 4h14v12H3z M4.75 5.75v8.5h10.5v-8.5z'],
+ellipse:['evenodd','M3 10a7 6 0 1 0 14 0a7 6 0 1 0-14 0z M4.75 10a5.25 4.25 0 1 0 10.5 0a5.25 4.25 0 1 0-10.5 0z'],
+line:['nonzero','M3.26 15.5 15.5 3.26 16.74 4.5 4.5 16.74z'],
+text:['nonzero','M4 3.5h12V7h-1.75V5.25h-3.375v9.5H12.5v1.75h-5v-1.75h1.625v-9.5H5.75V7H4z'],
+pencil:['evenodd','M3.6 16.4 4.22 12.07 12.7 3.58 16.42 7.3 7.93 15.78z M6.69 12.07 7.93 13.31 13.94 7.3 12.7 6.06z'],
+highlighter:['evenodd','M3.3 12.22 13.02 2.5 16.74 6.21 8.6 14.34 5.78 14.7z M7.37 10.63 8.6 11.87 14.26 6.21 13.02 4.98z M2.5 16.25H10V18H2.5z'],
+counter:['evenodd','M10 2.5a7.5 7.5 0 1 1 0 15a7.5 7.5 0 1 1 0-15z M10 4.25a5.75 5.75 0 1 0 0 11.5a5.75 5.75 0 1 0 0-11.5z M8 6.25h2.875V12H12.5v1.75h-5V12h1.625V8H8z'],
+blur:['nonzero','M3.625 4.5a.875 .875 0 1 0 1.75 0a.875 .875 0 1 0-1.75 0z M14.625 4.5a.875 .875 0 1 0 1.75 0a.875 .875 0 1 0-1.75 0z M3.625 15.5a.875 .875 0 1 0 1.75 0a.875 .875 0 1 0-1.75 0z M14.625 15.5a.875 .875 0 1 0 1.75 0a.875 .875 0 1 0-1.75 0z M8.5 4.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M3 10a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M14 10a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M8.5 15.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z M7.75 10a2.25 2.25 0 1 0 4.5 0a2.25 2.25 0 1 0-4.5 0z'],
+pixelate:['nonzero','M2 2h4v4H2z M14 2h4v4h-4z M8 8h4v4H8z M2 14h4v4H2z M14 14h4v4h-4z M9 3h2v2H9z M3 9h2v2H3z M15 9h2v2h-2z M9 15h2v2H9z'],
+mask:['nonzero','M3 4h14v1.75H3z M3 8h14v4.5H3z M3 14.75h8v1.75H3z']};
+function ti(n,sz=20){const [r,d]=TI[n];return `<svg viewBox="0 0 20 20" width="${sz}" height="${sz}" aria-hidden="true"><path fill="currentColor" fill-rule="${r}" d="${d}"/></svg>`}
+const TOOLS=()=>[['A','arrow',T('Flèche','Arrow'),'kropa-tool-arrow'],['R','rect',T('Cadre','Rectangle'),'kropa-tool-rectangle'],['O','ellipse','Ellipse','kropa-tool-ellipse'],['L','line',T('Ligne','Line'),'kropa-tool-line'],'|',
+ ['T','text',T('Texte','Text'),'kropa-tool-text'],['P','pencil',T('Crayon','Pencil'),'kropa-tool-pencil'],['H','highlighter',T('Surligneur','Highlighter'),'kropa-tool-highlighter'],'|',
+ ['N','counter',T('Compteur','Counter'),'kropa-tool-counter'],'|',['B','blur',T('Flou','Blur'),'kropa-tool-blur'],['X','pixelate',T('Pixellisation','Pixelate'),'kropa-tool-pixelate'],['M','mask',T('Masque','Mask'),'kropa-tool-mask']];
+
+/* ---------- marque ---------- */
+const SYM='<g fill="#F2F4F7"><rect x="3" y="3" width="8.5" height="2.5"/><rect x="3" y="3" width="2.5" height="8.5"/><rect x="12.5" y="18.5" width="8.5" height="2.5"/><rect x="18.5" y="12.5" width="2.5" height="8.5"/></g><rect x="16" y="16" width="5.5" height="5.5" fill="#FF8A1F"/>';
+function appIcon(sz=32){
+  if(mac())return `<svg width="${sz}" height="${sz}" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="6.5" fill="#1F232B"/><g transform="translate(2 2)"><rect x="4.2" y="4.2" width="15.6" height="15.6" rx=".6" fill="#343A46"/>${SYM}</g></svg>`;
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 32 32" aria-hidden="true"><rect x="1.5" y="4.5" width="29" height="23" rx="3.5" fill="#262A33" stroke="#FFFFFF" stroke-opacity=".14"/><g transform="translate(6.2 6.2) scale(.82)"><rect x="4.2" y="4.2" width="15.6" height="15.6" rx=".6" fill="#343A46"/>${SYM}</g></svg>`;
+}
+const symK=(c='currentColor')=>`<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><g fill="${c}"><path d="M1 1h6v2H3v4H1z"/><path d="M8 13h4v2H8zM13 8h2v4h-2z"/><rect x="11" y="11" width="4" height="4"/></g></svg>`;
+
+/* ---------- capture simulée (zone de référence : x 212, y 186, 640 × 360 points = 1280 × 720 px à 200 %) ---------- */
+const SEL={x:212,y:186,w:640,h:360};
+function shot(){return `<div class="shot" aria-hidden="true">
+<div class="sh-tabs"><span class="sh-tab on">Corriger la reprise des envois · #482</span><span class="sh-tab">Zipline · Fichiers</span></div>
+<div class="sh-url"><span>git.maison.lan/lea/kropa/pulls/482</span></div>
+<div class="sh-nav"><b>kropa</b><i style="width:120px"></i><i style="width:90px"></i><i class="on" style="width:110px"></i><i style="width:70px"></i><i style="width:100px"></i></div>
+<div class="sh-h">Corriger la reprise des envois <span>#482</span></div>
+<div class="sh-meta"><i class="sh-av"></i>lea veut fusionner 3 commits dans <code>main</code></div>
+<div class="sh-t2"><b>Conversation</b><span>Commits 3</span><span>Fichiers 4</span></div>
+<div class="sh-card"><div class="sh-ch"><i class="sh-av b"></i><b>ci-bot</b> a commenté il y a 4 min</div>
+<div class="sh-l" style="top:52px">$ kropa upload ./shot.png --to zipline</div>
+<div class="sh-l e" style="top:72px">error[upload_failed]: Zipline rejected the token (401)</div>
+<div class="sh-l" style="top:92px">  token: zt_live_8f2a91c4e7b0a9F2</div>
+<div class="sh-l" style="top:112px">  retry: queued (job 17)</div>
+<div class="sh-p">Le jeton expiré n’est pas signalé avant l’envoi.</div></div>
+<div class="sh-card2"><i class="sh-av c"></i>Relecture demandée à <u>lea@maison.lan</u><span class="sh-merge">Fusionner</span></div>
+<div class="sh-side"><h6>Relecteurs</h6><p><i class="sh-av"></i>lea</p><h6>Étiquettes</h6><p><span class="sh-chip">bug</span><span class="sh-chip b">envoi</span></p><h6>Jalon</h6><p>v0.2</p></div>
+</div>`}
+function crop(s,extra=''){return `<div class="cropbox" style="width:${640*s}px;height:${360*s}px"><div class="sc" style="transform:scale(${s}) translate(-${SEL.x}px,-${SEL.y}px)">${shot()}</div>${extra}</div>`}
+function term(){return `<div class="term"><div>lea@fedora:~/kropa$ cargo nextest run --workspace</div><div class="g">    PASS [ 0.012s] kropa-core config::tests::name_stays_in_dir</div><div class="g">    PASS [ 0.031s] kropa-upload sxcu::tests::secrets_are_masked</div><div class="y">    SLOW [ 2.104s] kropa-store queue::tests::resume_after_restart</div><div>     Summary [ 3.2s] 214 tests run: 214 passed</div><div>lea@fedora:~/kropa$ █</div></div>`}
+
+/* ---------- briques de fenêtre ---------- */
+function win(o){return `<div class="win ${o.cls||''}" style="left:${o.x}px;top:${o.y}px;width:${o.w}px;height:${o.h}px">
+<div class="tb"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><div class="s">${o.start||''}</div><div class="ttl">${o.center||`<b>${o.title||''}</b>${o.subtitle?`<small>${o.subtitle}</small>`:''}`}</div><div class="e">${o.end||''}<button class="btn icon gclose" aria-label="${T('Fermer','Close')}">${ic('close')}</button></div></div>
+${o.body}${o.after||''}</div>`}
+const btn=(l,c='')=>`<button class="btn ${c}">${l}</button>`;
+const grp=(title,desc,rows,sfx='')=>`<section class="grp"><div class="grp-h"><div><h5>${title}</h5>${desc?`<p>${desc}</p>`:''}</div>${sfx?`<div class="sfx">${sfx}</div>`:''}</div><div class="list">${rows}</div></section>`;
+const row=(title,sub,sfx='',o={})=>`<div class="row ${o.cls||''}">${o.pre?`<span class="pre">${o.pre}</span>`:''}<div class="rt"><span>${title}</span>${sub?`<small class="${o.wrap?'wrap':''}">${sub}</small>`:''}</div>${sfx?`<div class="sfx">${sfx}</div>`:''}</div>`;
+const combo=v=>`<span class="combo">${v}${ic('chev-d')}</span>`;
+const sw=on=>`<span class="sw${on?' on':''}" role="switch" aria-checked="${on}"></span>`;
+const stat=(i,c,t)=>`<span class="stat ${c}">${ic(i)}<span>${t}</span></span>`;
+const notice=(i,c,html)=>`<div class="notice ${c}">${ic(i)}<div class="body">${html}</div></div>`;
+const codeLine=(c)=>`<div class="code"><span>${c}</span>${btn(ic('copy')+T('Copier','Copy'),'flat')}</div>`;
+function desk(top){let h='<div class="desk"></div>';
+  if(top==='gnome')h+=`<div class="gtop"><span class="l"><i></i><i class="o"></i><i class="o"></i></span><span>${T('mer. 11 nov.  14:03','Wed 11 Nov  14:03')}</span><span class="r">${ic('bell')}${ic('sliders')}</span></div>`;
+  if(top==='mac')h+=`<div class="mbar"><b>Finder</b><span>${T('Fichier','File')}</span><span>${T('Édition','Edit')}</span><span>${T('Présentation','View')}</span><span class="r">${symK()}<span>${T('mer. 11 nov. 14:03','Wed 11 Nov 2:03 PM')}</span></span></div>`;
+  return h;}
+
+/* =================== (a) OVERLAY =================== */
+function loupe(kind){let c='';
+  for(let j=0;j<15;j++)for(let i=0;i<15;i++){let v;
+    if(kind==='corner'){v=(i>7||j>7)?'#FFFFFF':((i>=6||j>=6)?'#D0D7DE':'#F6F8FA');}
+    else{v=i<6?'#F6F8FA':(i===6?'#B9C7DC':'#3A5F9E');if(i>=11&&i<=13&&j>=4&&j<=10&&((i*3+j)%4!==0))v='#E8EDF5';}
+    c+=`<i style="background:${v}"></i>`;}
+  const hex=kind==='corner'?'#D0D7DE':'#3A5F9E', xy=kind==='corner'?'x 1703 · y 1091':'x 1472 · y 1016';
+  return `<div class="lgrid">${c}<b class="lc"></b>${kind==='corner'?'<b class="le v"></b><b class="le h"></b>':''}</div><div class="lread"><span class="swatch" style="background:${hex}"></span><span class="mono">${hex}</span><span class="muted">${xy}</span></div>`;}
+function ovHelp(cross){const it=(k,l)=>`<span class="it">${k}<span class="lbl">${l}</span></span>`;
+  return `<div class="hud ov-help" role="note" aria-label="${T('Aide clavier','Keyboard help')}">
+${cross?`<div class="r"><b>${T('Glissez pour sélectionner une zone','Drag to select an area')}</b><span class="lbl">${T('ou','or')}</span>${it(kc('enter'),T('pour l’écran entier','for the whole screen'))}</div>`:''}
+<div class="r">${it(kc('arrows'),cross?T('Déplacer le réticule','Move the crosshair'):T('Déplacer','Move'))}${it(kc('shift','arrows'),T('Agrandir ou réduire','Grow or shrink'))}${it(kc('step','arrows'),T('Par 10 px','By 10 px'))}${it(kc('R'),T('Dernière zone','Last area'))}${it(kc('tab'),T('Écran suivant','Next screen'))}</div>
+<div class="r">${it(kc('enter'),cross?T('Écran entier','Whole screen'):T('Valider','Confirm'))}${it(kc('E'),T('Annoter','Annotate'))}${it(kc('esc'),T('Annuler','Cancel'))}${it(kc('?'),T('Masquer l’aide','Hide help'))}</div></div>`;}
+function ovChip(){const out=mac()?T('Écran intégré','Built-in display')+' · 3024 × 1964':'DP-1 · 2560 × 1440';
+  return `<div class="hud ov-chip">${ic('screen')}<span>${T('Écran figé','Frozen screen')} · 14:03:22</span><span class="muted">${out} · 200 %</span></div>`;}
+function cursor(x,y){return `<svg style="position:absolute;left:${x-12}px;top:${y-12}px" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v8M12 14v8M2 12h8M14 12h8" stroke="#111318" stroke-width="3"/><path d="M12 2v8M12 14v8M2 12h8M14 12h8" stroke="#fff" stroke-width="1"/></svg>`}
+function ovSingle(o={}){const s=SEL;
+  if(o.cross){const cx=736,cy=508;
+    return `${shot()}<div class="veil"></div><i class="xh h" style="top:${cy}px"></i><i class="xh v" style="left:${cx}px"></i>${cursor(cx,cy)}<div class="hud loupe" style="left:${cx+24}px;top:${cy-182}px">${loupe('button')}</div>${ovChip()}${ovHelp(true)}`;}
+  const hs=[[0,0],[.5,0],[1,0],[0,.5],[1,.5],[0,1],[.5,1]].map(([a,b])=>`<i class="hd" style="left:${s.x+a*s.w}px;top:${s.y+b*s.h}px"></i>`).join('');
+  return `${shot()}<div class="sel" role="img" aria-label="${T('Zone 1280 par 720 pixels, position 424, 372','Area 1280 by 720 pixels, at 424, 372')}" style="left:${s.x}px;top:${s.y}px;width:${s.w}px;height:${s.h}px"></div>${hs}<i class="hd br" style="left:${s.x+s.w}px;top:${s.y+s.h}px"></i>
+<div class="hud badge" style="left:${s.x}px;top:${s.y+s.h+10}px"><b>1280 × 720</b><span>px</span><span>·</span><span>x 424 · y 372</span></div>
+<div class="hud loupe" style="left:${s.x+s.w+20}px;top:${s.y+s.h-178}px">${loupe('corner')}</div>${ovChip()}${o.nohelp?'':ovHelp(false)}`;}
+function scrOverlay(){
+  if(S.state!=='multi')return `<div class="ov">${ovSingle({cross:S.state==='crosshair'})}</div>`;
+  const L=mac()?T('Écran intégré · 3024 × 1964 · 200 %','Built-in display · 3024 × 1964 · 200%'):'DP-1 · 2560 × 1440 · 200 %';
+  const R=mac()?'LG UltraFine · 1920 × 1080 · 100 %':'HDMI-1 · 1920 × 1080 · 100 %';
+  return `<div class="ov" style="background:#0E1014">
+<p class="cap" style="left:40px;top:28px">${T('Vue d’ensemble pour la maquette : chaque écran reçoit son propre overlay, à sa propre échelle. La sélection reste sur un écran ; Tab passe au suivant.','Overview for the mockup: each screen gets its own overlay at its own scale. The selection stays on one screen; Tab moves to the next.')}</p>
+<div class="mon" style="left:40px;top:110px;width:640px;height:405px"><div class="mon-in" style="transform:scale(.5334)">${ovSingle({})}</div></div>
+<div class="mon" style="left:704px;top:110px;width:456px;height:257px"><div class="mon-in" style="transform:scale(.38)">${term()}</div><div class="veil"></div>
+<div class="hud ov-chip" style="top:50%;transform:translate(-50%,-50%);flex-direction:column;border-radius:8px;padding:10px 14px;gap:6px"><span>${ic('screen')} ${R}</span><span class="muted">${kc('tab')} ${T('pour sélectionner sur cet écran','to select on this screen')}</span></div></div>
+<p class="monlbl" style="left:40px;top:528px">${L} · ${T('curseur ici','cursor here')}</p><p class="monlbl" style="left:704px;top:380px">${R}</p></div>`;}
+
+/* =================== (b) ÉDITEUR =================== */
+function annotations(st){const z=1.2,X=x=>(x-SEL.x)*z,Y=y=>(y-SEL.y)*z;
+  const tb={l:X(315),t:Y(325),w:195*z,h:20*z};
+  const tok=st==='blur'
+   ?`<div class="a-blur" style="left:${tb.l}px;top:${tb.t}px;width:${tb.w}px;height:${tb.h}px"></div><div class="a-selbox" style="left:${tb.l}px;top:${tb.t}px;width:${tb.w}px;height:${tb.h}px"><i style="left:0;top:0"></i><i style="left:100%;top:0"></i><i style="left:0;top:100%"></i><i style="left:100%;top:100%"></i></div>`
+   :`<div class="a-mask" style="left:${tb.l}px;top:${tb.t}px;width:${tb.w}px;height:${tb.h}px"></div>`;
+  const pin=(x,y,n)=>`<circle cx="${x}" cy="${y}" r="12" fill="#E01B24" stroke="#fff" stroke-width="2"/><text x="${x}" y="${y+5}" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="14" fill="#fff">${n}</text>`;
+  const A=[566,446],B=[732,506],H1=[716.45,507.82],H2=[721.21,494.66],BS=[718.83,501.24];
+  const sel=st==='default'?`<rect x="${A[0]-3.5}" y="${A[1]-3.5}" width="7" height="7" fill="#fff" stroke="#111318" stroke-width=".9"/><rect x="${B[0]-3.5}" y="${B[1]-3.5}" width="7" height="7" fill="#fff" stroke="#111318" stroke-width=".9"/>`:'';
+  return `<svg class="ann" width="768" height="432" viewBox="${SEL.x} ${SEL.y} 640 360" aria-hidden="true">
+<rect x="246" y="377" width="340" height="20" fill="#F6D32D" opacity=".55" style="mix-blend-mode:multiply"/>
+<rect x="243" y="302" width="433" height="23" fill="none" stroke="#fff" stroke-width="5"/><rect x="243" y="302" width="433" height="23" fill="none" stroke="#E01B24" stroke-width="2.5"/>
+<line x1="${A[0]}" y1="${A[1]}" x2="${BS[0]}" y2="${BS[1]}" stroke="#fff" stroke-width="7"/><polygon points="${B} ${H1} ${H2}" fill="#fff" stroke="#fff" stroke-width="3" stroke-linejoin="miter"/>
+<line x1="${A[0]}" y1="${A[1]}" x2="${BS[0]}" y2="${BS[1]}" stroke="#E01B24" stroke-width="3.5"/><polygon points="${B} ${H1} ${H2}" fill="#E01B24"/>
+${pin(243,302,1)}${pin(726,479,2)}${sel}</svg>${tok}`;}
+function toolsBar(act,dis){let h=`<div class="tools${dis?' dis':''}" role="toolbar" aria-label="${T('Outils d’annotation','Annotation tools')}">`;
+  for(const t of TOOLS()){if(t==='|'){h+='<span class="tsep" aria-hidden="true"></span>';continue;}
+    const [k,n,l]=t,on=k===act;h+=`<button class="tool${on?' on':''}" aria-pressed="${on}" aria-label="${l} (${k})" title="${l} · ${k}">${ti(n)}<span>${k}</span></button>`;}
+  return h+`<div class="end"><button class="btn flat" title="${T('Taille réelle','Actual size')} ${ks('mod','0')}">120 %</button><button class="btn icon flat" aria-pressed="true" aria-label="${T('Panneau de style','Style panel')} (${mac()?ks('ctrl','cmd','S'):'F9'})">${ic('sidebar')}</button></div></div>`;}
+function side(st){const blur=st==='blur';
+  const sws=[['#E01B24',T('Rouge','Red'),'#fff'],['#FF8A1F',T('Ambre','Amber'),'#111318'],['#F6D32D',T('Jaune','Yellow'),'#111318'],['#2EC27E',T('Vert','Green'),'#111318'],['#1C71D8',T('Bleu','Blue'),'#fff'],['#15171C',T('Noir','Black'),'#fff'],['#FFFFFF',T('Blanc','White'),'#111318']];
+  let h=`<aside class="side" aria-label="${T('Style de l’outil','Tool style')}"><div><h4>${blur?T('Flou','Blur'):T('Flèche','Arrow')} <kbd>${blur?'B':'A'}</kbd></h4><p class="muted small">${blur?T('Glissez sur la zone à flouter.','Drag over the area to blur.'):T('Maintenez ','Hold ')+kc('shift')+T(' pour des angles de 45°.',' for 45° angles.')}</p></div>`;
+  if(!blur){
+    h+=`<div><span class="lbl">${T('Couleur','Colour')}</span><div class="sws" role="radiogroup">${sws.map(([c,n,k],i)=>`<button class="swb${i===0?' on':''}" role="radio" aria-checked="${i===0}" aria-label="${n}" title="${n}" style="--c:${c};--ck:${k}"><i>${i===0?ic('check'):''}</i></button>`).join('')}</div></div>
+<div><span class="lbl">${T('Épaisseur','Thickness')}</span><div class="seg2" role="radiogroup">${btn(T('Fine','Thin'))}${btn(T('Moyenne','Medium'),'on')}${btn(T('Épaisse','Thick'))}</div></div>
+<div class="list">${row(T('Contour de lisibilité','Legibility outline'),T('Liseré blanc ou noir selon la couleur','White or black edge, by colour'),sw(true))}</div>`;
+  }else{
+    h+=`<div><span class="lbl">${T('Intensité','Strength')}</span><div class="seg2" role="radiogroup">${btn(T('Moyenne','Medium'))}${btn(T('Forte','Strong'),'on')}</div></div>
+${notice('warn','warn',`<span>${T('Un flou peut parfois être inversé. Pour un mot de passe ou un jeton, utilisez le masque : il est opaque.','A blur can sometimes be reversed. For a password or a token, use the mask: it is opaque.')}</span><span>${btn(ti('mask',16)+T('Utiliser le masque','Use the mask')+' <kbd>M</kbd>')}</span>`)}`;}
+  const items=[['rect',T('Cadre','Rectangle'),T('rouge','red')],['counter',T('Pastille 1','Badge 1'),''],['counter',T('Pastille 2','Badge 2'),''],['arrow',T('Flèche','Arrow'),T('rouge, moyenne','red, medium')],['highlighter',T('Surligneur','Highlighter'),''],blur?['blur',T('Flou','Blur'),T('fort','strong')]:['mask',T('Masque','Mask'),T('opaque','opaque')]];
+  const selI=blur?5:3;
+  h+=`<div><span class="lbl">${T('Annotations','Annotations')} (${items.length})</span><div class="list alist" role="listbox">${items.map(([i,n,d],k)=>`<div class="row${k===selI?' sel':''}" role="option" aria-selected="${k===selI}"><span class="anum">${k+1}</span>${ti(i,16)}<div class="rt"><span>${n}${d?` <span class="muted small">· ${d}</span>`:''}</span></div></div>`).join('')}</div>
+<p class="muted small" style="margin-top:8px">${kc('tab')} ${T('suivante','next')} · ${kc('del')} ${T('effacer','delete')} · ${kc('arrows')} ${T('déplacer de 1 px','move 1 px')}</p></div></aside>`;
+  return h;}
+function scrEditor(){const st=S.state,act=st==='blur'?'B':'A',sending=st==='sending';
+  const start=`<button class="btn icon flat" aria-label="${T('Annuler','Undo')} (${ks('mod','Z')})" title="${T('Annuler','Undo')} ${ks('mod','Z')}">${ic('undo')}</button><button class="btn icon flat dis" aria-label="${T('Rétablir','Redo')} (${ks('mod','shift','Z')})">${ic('redo')}</button>`;
+  const end=`<button class="btn icon flat" aria-label="${T('Copier l’image','Copy image')} (${ks('mod','C')})" title="${ks('mod','C')}">${ic('copy')}</button><button class="btn boxed${sending?' dis':''}" title="${ks('mod','S')}">${ic('save')}${T('Enregistrer','Save')}</button><span class="split">${sending?`<button class="btn primary dis"><span class="spin"></span>${T('Envoi…','Uploading…')}</button>`:`<button class="btn primary" title="${ks('mod','U')}">${ic('upload')}${T('Envoyer','Upload')}</button>`}<button class="btn primary${sending?' dis':''}" aria-label="${T('Choisir la destination','Choose destination')} (${ks('mod','shift','U')})">${ic('chev-d')}</button></span>${mac()?'':`<button class="btn icon flat" aria-label="${T('Menu principal','Main menu')}">${ic('menu')}</button>`}`;
+  const title=T('Capture du 11/11/2026 à 14:03','Capture, 11 Nov 2026, 14:03');
+  const subtitle=sending?T('Envoi vers Zipline maison… 62 %','Uploading to Zipline maison… 62%'):(st==='error'?T('Enregistrée dans ~/Images/Kropa · non envoyée','Saved to ~/Pictures/Kropa · not uploaded'):T('1280 × 720 px · non enregistrée','1280 × 720 px · not saved'));
+  const banner=st==='error'?`<div class="banner" role="alert">${ic('err')}<span>${T('<b>Envoi échoué</b> : Zipline a répondu 503 (service indisponible). La capture est enregistrée dans ~/Images/Kropa et reste dans la file d’attente.','<b>Upload failed</b>: Zipline answered 503 (service unavailable). The capture is saved to ~/Pictures/Kropa and stays in the queue.')}</span>${btn(T('Réessayer','Retry'))}</div>`:'';
+  const body=`${banner}${sending?'<div class="prog" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><i style="width:62%"></i></div>':''}${toolsBar(act,sending)}<div class="ed"><div class="cv">${crop(1.2,annotations(st)).replace('class="cropbox"','class="cropbox crop"')}<div class="osd">120 %</div></div>${side(st)}</div>`;
+  return desk()+win({x:20,y:20,w:1160,h:720,title,subtitle,start,end,body});}
+
+/* =================== (c) NOTIFICATIONS =================== */
+function notifCard(n,x,y){
+  if(n.gnomeOnly&&mac())return `<div class="na" style="left:${x}px;top:${y}px"><b>${T('Sans objet sur macOS','Not applicable on macOS')}</b><br>${T('NSPasteboard copie le lien directement : la notification « Lien copié » suffit. Cette variante n’existe que sous GNOME, faute de presse-papiers sans focus.','NSPasteboard copies the link directly: the “Link copied” notification is enough. This variant only exists on GNOME, which has no clipboard access without focus.')}</div>`;
+  const acts=n.acts.map((a,i)=>btn(a,i===0&&n.primary?'primary':'')).join('');
+  if(mac())return `<div class="mn" style="left:${x+38}px;top:${y}px" role="alert">${appIcon(34)}<div class="tx"><div class="t"><b>${n.title}</b><time>${T('maintenant','now')}</time></div><div>${n.body}</div><div class="acts">${acts}</div></div></div>`;
+  return `<div class="gn" style="left:${x}px;top:${y}px" role="alert"><div class="h">${appIcon(16)}<span>Kropa</span><span>·</span><span>${T('maintenant','now')}</span></div><div class="b"><div><b>${n.title}</b><span>${n.body}</span></div></div><div class="acts">${acts}</div></div>`;}
+function scrNotif(){const url='<span class="url">https://img.maison.lan/u/a3F9k.png</span>';
+  const N=[
+   {cap:T('Lien copié · KDE et macOS ; GNOME après le clic sur « Copier le lien »','Link copied · KDE and macOS; GNOME after clicking “Copy link”'),title:T('Lien copié','Link copied'),body:`${url}<br>${T('Enregistrée dans ~/Images/Kropa.','Saved to ~/Pictures/Kropa.')}`,acts:[T('Ouvrir','Open'),T('Annoter','Annotate')]},
+   {cap:T('Lien prêt · GNOME seulement (pas de copie sans focus)','Link ready · GNOME only (no copy without focus)'),gnomeOnly:true,primary:true,title:T('Lien prêt','Link ready'),body:`${url}<br>${T('GNOME ne permet pas de copier sans votre clic.','GNOME does not allow copying without your click.')}`,acts:[T('Copier le lien','Copy link'),T('Ouvrir','Open')]},
+   {cap:T('Envoi échoué · le serveur a répondu','Upload failed · the server answered'),primary:true,title:T('Envoi échoué','Upload failed'),body:T('Zipline a répondu 503 (service indisponible). La capture est enregistrée en local et reste dans la file d’attente.','Zipline answered 503 (service unavailable). The capture is saved locally and stays in the queue.'),acts:[T('Réessayer','Retry'),T('Voir le journal','View log')]},
+   {cap:T('Envoi en attente · réseau','Upload pending · network'),title:T('Envoi en attente','Upload pending'),body:T('img.maison.lan ne répond pas. Nouvel essai dans 30 s.','img.maison.lan is not responding. Retrying in 30 s.'),acts:[T('Réessayer maintenant','Retry now')]},
+   {cap:T('Coffre verrouillé · la tâche attend, elle n’échoue pas','Vault locked · the job waits, it does not fail'),primary:true,title:T('Envoi en attente : coffre verrouillé','Upload waiting: vault locked'),body:T('2 captures attendent le jeton de img.maison.lan.','2 captures are waiting for the img.maison.lan token.'),acts:[T('Déverrouiller…','Unlock…')]}];
+  const pos=[[150,62],[630,62],[150,262],[630,262],[150,452]];
+  let h=desk(mac()?'mac':'gnome');
+  N.forEach((n,i)=>{const [x,y]=pos[i];h+=`<p class="cap" style="left:${x}px;top:${y}px">${n.cap}</p>`+notifCard(n,x,y+26);});
+  h+=`<p class="cap" style="left:630px;top:470px;max-width:420px">${mac()?T('macOS : bannière UNUserNotificationCenter ; les actions apparaissent au survol (« Options ») sauf en style « Alerte ». Elles sont dessinées ici pour la lecture.','macOS: UNUserNotificationCenter banner; actions appear on hover (“Options”) unless the style is “Alert”. They are drawn here for reading.'):T('Linux : portail Notification. GNOME Shell dessine la bannière ; KDE Plasma dessine la sienne avec le même contenu. Jamais « Lien copié » avant la copie réelle.','Linux: Notification portal. GNOME Shell draws the banner; KDE Plasma draws its own with the same content. Never “Link copied” before the real copy.')}</p>`;
+  return h;}
+
+/* =================== (d) RÉGLAGES =================== */
+const keyring=()=>mac()?T('Trousseau macOS','macOS Keychain'):T('Trousseau GNOME (collection « Connexion »)','GNOME Keyring (“Login” collection)');
+function pgGeneral(narrow){const folder=narrow?'~/Documents/Captures d’écran/Projets clients/2026':'~/Images/Kropa';
+  return grp(T('Captures','Captures'),'',
+    row(T('Dossier des captures','Captures folder'),`<span class="mono" title="${folder}">${narrow?'~/Documents/Captures d’écran/…/2026':folder}</span>`,btn(ic('folder')+(narrow?'':T('Choisir…','Choose…')),narrow?'icon flat':''))+
+    row(T('Modèle de nom','File name pattern'),T('Aperçu : ','Preview: ')+'<span class="mono">2026-11-11_14-03-22.png</span>',`<span class="entry mono" style="width:${narrow?110:180}px">{date}_{time}</span>`)+
+    row(T('Après une capture de zone','After an area capture'),narrow?T('Ouvrir l’éditeur','Open the editor'):'',narrow?ic('chev-r'):combo(T('Ouvrir l’éditeur','Open the editor')))+
+    row(T('Copier l’image','Copy the image'),mac()?T('Après chaque capture','After every capture'):T('Après chaque capture. Sous GNOME : seulement tant que la sélection a le focus.','After every capture. On GNOME: only while the selection has focus.'),sw(true),{wrap:true}))+
+  grp(T('Langue','Language'),'',row(T('Langue de l’interface','Interface language'),T('S’applique immédiatement.','Applies immediately.'),narrow?ic('chev-r'):combo(T('Selon le système (Français)','System (English)'))))+
+  grp(T('Confidentialité','Privacy'),'',
+    row(T('Aucune requête réseau sans destination configurée.','No network request without a configured destination.'),'','',{pre:ic('info')})+
+    row(T('Les métadonnées (EXIF, position) sont retirées de chaque image envoyée.','Metadata (EXIF, location) is stripped from every uploaded image.'),'','',{pre:ic('info')})+
+    row(T('Mises à jour','Updates'),T('Vérifiées seulement quand vous le demandez.','Checked only when you ask.'),btn(T('Vérifier','Check'))));}
+function pgDest(){
+  return grp(T('Destinations','Destinations'),T('La destination par défaut reçoit les envois de ','The default destination receives ')+kc('mod','U')+T('.',' uploads.'),
+    row(`Zipline maison<span class="tag acc">${T('Par défaut','Default')}</span>`,'Zipline · <span class="mono">img.maison.lan</span> · Markdown',btn(T('Tester…','Test…'))+ic('chev-r'))+
+    row('Garage','S3 · <span class="mono">s3.maison.lan/captures</span> · URL',btn(T('Tester…','Test…'))+ic('chev-r'))+
+    row('xbackbone',`${T('HTTP, importée de .sxcu','HTTP, imported from .sxcu')} · <span class="mono">xbackbone.example.net</span>`,stat('warn','warn',T('Secret manquant','Missing secret'))+ic('chev-r')),
+    btn(ic('plus')+T('Ajouter','Add')))+
+  grp(T('Importer','Import'),'',row(T('Fichier ShareX (.sxcu)','ShareX file (.sxcu)'),T('Rien n’est envoyé pendant l’import. Vous vérifiez l’hôte avant de confirmer.','Nothing is sent during import. You check the host before confirming.'),btn(T('Choisir un fichier…','Choose a file…')),{wrap:true}))+
+  grp(T('Secrets','Secrets'),T('Jetons et mots de passe ne sont jamais écrits en clair. Aucune bascule silencieuse entre trousseau et coffre.','Tokens and passwords are never written in plain text. No silent switch between keyring and vault.'),
+    row(T('Stockage','Storage'),keyring(),stat('check','ok',T('Disponible','Available')))+
+    row(T('Coffre chiffré (age)','Encrypted vault (age)'),T('Repli si aucun trousseau n’est disponible.','Fallback when no keyring is available.'),combo(T('Inutilisé','Not used'))));}
+function pgDestEmpty(){return `<div class="status" style="padding:40px 0">${ic('upload','big')}<h1>${T('Aucune destination','No destination')}</h1><p>${T('Vos captures restent sur cette machine. Ajoutez une destination pour obtenir un lien après chaque envoi.','Your captures stay on this machine. Add a destination to get a link after each upload.')}</p><div style="display:flex;gap:12px">${btn(T('Ajouter une destination','Add a destination'),'primary pill')}${btn(T('Importer un .sxcu…','Import a .sxcu…'),'pill')}</div><p class="small">${T('En terminal : ','In a terminal: ')}<code>kropa dest add</code></p></div>`;}
+function pgDestDetail(result){
+  return grp(T('Connexion','Connection'),'',
+    row(T('Type','Type'),'','Zipline')+row('URL','',`<span class="entry mono" style="width:250px">https://img.maison.lan</span>`)+
+    row(T('Jeton','Token'),`${mac()?T('Trousseau macOS','macOS Keychain'):T('Trousseau GNOME','GNOME Keyring')} · ${T('réservé à img.maison.lan','bound to img.maison.lan')}`,`<span class="mono muted">••••a9F2</span>${btn(T('Remplacer…','Replace…'))}`))+
+  grp(T('Lien','Link'),'',row(T('Format du lien copié','Copied link format'),'',combo('Markdown'))+row(T('Destination par défaut','Default destination'),'',sw(true)))+
+  grp(T('Test','Test'),result?'':T('Envoie une image de 1 × 1 pixel. Rien ne part sans votre confirmation.','Sends a 1 × 1 pixel image. Nothing goes out without your confirmation.'),
+   result?row(stat('check','ok',T('Réponse 200 en 312 ms','Response 200 in 312 ms')),T('Testée à 14:05','Tested at 14:05'),btn(T('Tester à nouveau…','Test again…')))+
+     row(T('URL obtenue','Returned URL'),'<span class="mono">https://img.maison.lan/u/Qm1x.png</span>',btn(ic('copy')+T('Copier','Copy')))+
+     row(T('Lien formaté (Markdown)','Formatted link (Markdown)'),'<span class="mono">![kropa-test.png](https://img.maison.lan/u/Qm1x.png)</span>')+
+     row(T('Image témoin','Test image'),T('Encore sur le serveur.','Still on the server.'),btn(T('Supprimer du serveur','Delete from server'),'danger-flat'))
+   :row(T('Tester l’envoi','Test the upload'),T('Jamais testée','Never tested'),btn(T('Tester…','Test…'),'focus')));}
+function pgImport(){
+  return `<p>${T('Kropa a lu <b>xbackbone.sxcu</b> sans rien envoyer. Vérifiez où partiront vos captures.','Kropa read <b>xbackbone.sxcu</b> without sending anything. Check where your captures will go.')}</p>`+
+  grp(T('Hôte','Host'),'',
+    row(`<b class="mono" style="font-size:1.05em">xbackbone.example.net</b>`,'<span class="mono">https://xbackbone.example.net:443</span>',stat('check','ok','HTTPS'))+
+    row(T('Requête','Request'),'','<span class="mono">POST /upload.php</span>')+row(T('Champ du fichier','File field'),'','<span class="mono">upload</span>')+row(T('Lien extrait de la réponse','Link read from the response'),'','<span class="mono">{json:url}</span>'))+
+  grp(T('Secrets détectés (2)','Detected secrets (2)'),T('Rangés dans le ','Stored in the ')+(mac()?T('trousseau macOS','macOS Keychain'):T('trousseau GNOME','GNOME Keyring'))+T(', réservés à cette origine. Le profil ne garde qu’une référence.',', bound to this origin. The profile only keeps a reference.'),
+    row(T('En-tête ','Header ')+'<span class="mono">Authorization</span>','<span class="mono">••••••••a9F2</span>','<span class="mono muted small">{secret:authorization}</span>',{pre:ic('key')||ic('lock')})+
+    row(T('Argument ','Argument ')+'<span class="mono">token</span>','<span class="mono">••••••••77Qe</span>','<span class="mono muted small">{secret:token}</span>',{pre:ic('lock')}))+
+  grp(T('Non repris','Not imported'),'',row('<span class="mono">RegexList</span>',T('Non pris en charge en v1 : ignoré. Le lien reste extrait par {json:url}.','Not supported in v1: ignored. The link is still read with {json:url}.'),'',{pre:ic('info'),wrap:true}))+
+  notice('warn','warn',T('Ce fichier contient le jeton en clair. Kropa ne le recopie pas : supprimez-le après l’import.','This file contains the token in plain text. Kropa does not copy it: delete it after the import.'));}
+function pgShortcuts(alt){
+  if(mac()){const rec=(v,err)=>`<span class="entry${err?' err':''}" style="width:120px;justify-content:space-between"><span class="kc">${v}</span>${ic('close')}</span>`;
+    return grp(T('Raccourcis globaux','Global shortcuts'),T('Actifs dans toutes les applications. macOS refuse ceux qui n’utilisent que ⌥ ou ⌥⇧.','Active in every app. macOS refuses those that only use ⌥ or ⌥⇧.'),
+      row(T('Capturer une zone','Capture an area'),alt?`<span class="stat err" style="white-space:normal">${ic('err')}<span>${T('macOS 15 refuse ⌥⇧4 (⌥ ou ⌥⇧ sans ⌘ ni ⌃). Ajoutez ⌘ ou ⌃. Le raccourci précédent, ⌃⇧4, reste actif.','macOS 15 refuses ⌥⇧4 (⌥ or ⌥⇧ without ⌘ or ⌃). Add ⌘ or ⌃. The previous shortcut, ⌃⇧4, stays active.')}</span></span>`:'',rec(alt?'⌥⇧4':'⌃⇧4',alt),{wrap:true})+
+      row(T('Capturer l’écran','Capture the screen'),'',rec('⌃⇧3'))+row(T('Reprendre la dernière zone','Repeat the last area'),'',`<span class="entry ph" style="width:120px">${T('Cliquer pour saisir','Click to record')}</span>`))+
+    grp(T('Sans raccourci','Without a shortcut'),T('Chaque capture existe aussi en ligne de commande.','Every capture also exists on the command line.'),`<div class="row"><div class="rt">${codeLine('kropa capture area')}</div></div>`)+
+    grp(T('Éditeur','Editor'),'',row(T('Outils à une touche','Single-key tools'),'<span class="mono">A R O L T P H N B X M</span>',T('Fixes en v1','Fixed in v1')));}
+  const first=alt
+   ?grp(T('Raccourcis globaux','Global shortcuts'),'',`<div class="row" style="display:block">${notice('info','',`<b>${T('Sway ne permet pas aux applications de définir des raccourcis globaux.','Sway does not let applications define global shortcuts.')}</b><span>${T('Ajoutez cette ligne à ~/.config/sway/config, puis rechargez la configuration (','Add this line to ~/.config/sway/config, then reload the configuration (')}${kc('super','shift','C')}).</span>${codeLine('bindsym Print exec kropa capture area')}`)}</div>`+
+      row(T('Capturer une zone','Capture an area'),T('Indisponible sur Sway','Unavailable on Sway'),'',{cls:'dim'})+row(T('Capturer l’écran','Capture the screen'),T('Indisponible sur Sway','Unavailable on Sway'),'',{cls:'dim'}))
+   :grp(T('Raccourcis globaux','Global shortcuts'),T('Gérés par GNOME : Kropa les propose, GNOME vous demande de confirmer.','Managed by GNOME: Kropa proposes them, GNOME asks you to confirm.'),
+      row(T('Capturer une zone','Capture an area'),'',kc('ctrl','shift','4'))+row(T('Capturer l’écran','Capture the screen'),'',kc('ctrl','shift','3'))+row(T('Reprendre la dernière zone','Repeat the last area'),'',`<span class="muted">${T('Non défini','Not set')}</span>`),
+      btn(T('Modifier dans GNOME…','Change in GNOME…')));
+  return first+grp(T('Sans raccourci global','Without a global shortcut'),T('Chaque capture existe en ligne de commande : liez-la à un raccourci du bureau.','Every capture exists on the command line: bind it to a desktop shortcut.'),`<div class="row"><div class="rt">${codeLine('kropa capture area')}</div></div>`)+
+    grp(T('Éditeur','Editor'),'',row(T('Outils à une touche','Single-key tools'),'<span class="mono">A R O L T P H N B X M</span>',`<span class="muted">${T('Fixes en v1','Fixed in v1')}</span>`));}
+function scrSettings(){const st=S.state;
+  const tabs=[['general',T('Général','General'),'sliders'],['dest',T('Destinations','Destinations'),'upload'],['shortcuts',T('Raccourcis','Shortcuts'),'keyboard']];
+  const cur=(st.startsWith('dest')||st.startsWith('test')||st==='import')?'dest':(st.startsWith('shortcuts')?'shortcuts':'general');
+  const vs=`<div class="vs" role="tablist">${tabs.map(([k,l,i])=>`<button class="vsb${k===cur?' on':''}" role="tab" aria-selected="${k===cur}">${ic(i)}<span>${l}</span></button>`).join('')}</div>`;
+  const W={x:150,y:36,w:900,h:688,cls:'prefs'};
+  const page=c=>`<div class="page"><div class="clamp">${c}</div></div>`;
+  if(st==='narrow')return desk()+win({x:420,y:36,w:360,h:688,title:T('Réglages','Preferences'),body:page(pgGeneral(true))+`<div class="vsbar" role="tablist">${tabs.map(([k,l,i])=>`<button class="vsb${k==='general'?' on':''}" role="tab">${ic(i)}<span>${l}</span></button>`).join('')}</div>`});
+  const sub=(title,content,dialog)=>{
+    if(mac()){const sheet=st==='import'
+      ?`<div class="sheetm" role="dialog" aria-modal="true"><h3>${T('Vérifier l’import','Review the import')}</h3>${content}<div class="acts">${btn(T('Annuler','Cancel'))}${btn(T('Importer vers xbackbone.example.net','Import to xbackbone.example.net'),'primary')}</div></div>`
+      :dialog||'';
+      const base=st==='import'?pgDest():content;
+      return desk()+win({...W,center:vs,body:page(base),after:(st==='import'?'':'')+sheet});}
+    const back=`<button class="btn icon flat" aria-label="${T('Retour','Back')}">${ic('chev-l')}</button>`;
+    const foot=st==='import'?`<div class="fr-foot" style="border-top:1px solid var(--line)"><div class="acts">${btn(T('Annuler','Cancel'))}${btn(T('Importer vers xbackbone.example.net','Import to xbackbone.example.net'),'primary')}</div></div>`:'';
+    return desk()+win({...W,start:back,title,body:page(content)+foot,after:dialog?`<div class="scrim"></div>${dialog}`:''});};
+  if(st==='test'){const d=`<div class="dlg" role="alertdialog" aria-modal="true" style="left:${mac()?300:250}px;top:${mac()?62:200}px">${mac()?`<div class="ico">${appIcon(56)}</div>`:''}<h2>${T('Tester « Zipline maison » ?','Test “Zipline maison”?')}</h2><p>${T('Kropa va envoyer une image témoin de 1 × 1 pixel à <b class="mono">img.maison.lan</b>. Elle restera sur votre serveur si vous ne la supprimez pas.','Kropa will send a 1 × 1 pixel test image to <b class="mono">img.maison.lan</b>. It stays on your server unless you delete it.')}</p><div class="acts">${mac()?btn(T('Envoyer l’image témoin','Send the test image'),'primary')+btn(T('Annuler','Cancel')):btn(T('Annuler','Cancel'))+btn(T('Envoyer l’image témoin','Send the test image'),'primary')}</div></div>`;
+    return sub('Zipline maison',pgDestDetail(false),d);}
+  if(st==='test-result')return sub('Zipline maison',pgDestDetail(true));
+  if(st==='import')return sub(T('Vérifier l’import','Review the import'),pgImport());
+  const content=st==='general'?pgGeneral():st==='dest'?pgDest():st==='dest-empty'?pgDestEmpty():pgShortcuts(st==='shortcuts-alt');
+  return desk()+win({...W,center:vs,body:page(content)});}
+
+/* =================== (e) COFFRE age =================== */
+function scrVault(){const st=S.state,busy=st==='busy',err=st==='error'||st==='delay',delay=st==='delay';
+  const path=mac()?'~/Library/Application Support/io.github.<compte>.Kropa/secrets.age':'~/.local/share/kropa/secrets.age';
+  const why=mac()?T('Vous avez choisi le coffre plutôt que le trousseau macOS.','You chose the vault instead of the macOS Keychain.'):T('Aucun trousseau système n’est disponible sur cette session.','No system keyring is available in this session.');
+  const msg=busy?`<div class="msg"><span class="spin"></span><span>${T('Déchiffrement… environ 1 seconde.','Decrypting… about 1 second.')}</span></div>`
+    :err?`<div class="msg err" role="alert">${ic('err')}<span>${T('Phrase de passe incorrecte ou fichier altéré.','Wrong passphrase or damaged file.')}${delay?'<br>'+T('3 essais incorrects : nouvel essai possible dans 8 s.','3 wrong attempts: you can try again in 8 s.'):''}</span></div>`:'';
+  const primary=busy?`<span class="spin"></span>${T('Déverrouillage…','Unlocking…')}`:delay?T('Réessayer dans 8 s','Retry in 8 s'):T('Déverrouiller','Unlock');
+  const pb=btn(primary,'primary'+((busy||delay)?' dis':'')),cb=btn(T('Annuler','Cancel'));
+  const d=`<div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="vh" style="left:${mac()?450:400}px;top:${mac()?150:130}px">
+<div class="ico">${mac()?appIcon(56):ic('lock')}</div><h2 id="vh">${T('Déverrouiller le coffre','Unlock the vault')}</h2>
+<p>${T('2 envois vers <b>img.maison.lan</b> attendent leur jeton.','2 uploads to <b>img.maison.lan</b> are waiting for their token.')}</p>
+<div class="fld"><label class="small" for="pp"><b>${T('Phrase de passe','Passphrase')}</b></label><span id="pp" class="entry${err?' err':''}${!busy&&!err?' focus':''}">${(busy||err)?'<span style="flex:1;letter-spacing:2px">••••••••••••••</span>':`<span class="ph" style="flex:1">${T('Phrase de passe du coffre','Vault passphrase')}</span>`}${ic('eye')}</span>${msg}</div>
+<p class="foot">${T('Le coffre reste ouvert 15 min d’inactivité, puis se referme. Il se referme aussi quand l’écran se verrouille.','The vault stays open for 15 min of inactivity, then closes. It also closes when the screen locks.')}</p>
+<p class="foot">${why} ${T('Fichier chiffré age :','age-encrypted file:')} <span class="mono">${path}</span></p>
+<div class="acts">${mac()?pb+cb:cb+pb}</div>
+<p class="foot">${T('En terminal : ','In a terminal: ')}<code>kropa secrets unlock</code></p></div>`;
+  return desk(mac()?'mac':'gnome')+d;}
+
+/* =================== (f) FILE D'ATTENTE =================== */
+function mid(s,n){return s.length<=n?s:s.slice(0,Math.ceil(n/2)-1)+'…'+s.slice(s.length-Math.floor(n/2))}
+function scrQueue(){const empty=S.state==='empty';
+  const R=[{n:'2026-11-11_14-03-22.png',d:'Zipline maison',sz:T('482 Ko','482 KB'),i:'upload',c:'',s:T('Envoi… 62 %','Uploading… 62%'),p:62,a:[T('Annuler','Cancel')]},
+   {n:'2026-11-11_13-58-04.png',d:'Zipline maison',sz:T('1,2 Mo','1.2 MB'),i:'lock',c:'warn',s:T('En attente du coffre','Waiting for the vault'),a:[T('Déverrouiller…','Unlock…')],pa:1},
+   {n:'grafana-tableau-de-bord-production-cluster-paris-2026-11-11.png',d:'Garage (S3)',sz:T('2,4 Mo','2.4 MB'),i:'clock',c:'',s:T('s3.maison.lan ne répond pas. Nouvel essai dans 30 s.','s3.maison.lan is not responding. Retrying in 30 s.'),a:[T('Réessayer maintenant','Retry now')]},
+   {n:'2026-11-11_11-20-47.png',d:'xbackbone',sz:T('640 Ko','640 KB'),i:'err',c:'err',s:T('Échec : xbackbone a refusé le jeton (401).','Failed: xbackbone rejected the token (401).'),a:[T('Mettre à jour le jeton…','Update token…'),T('Journal','Log')],pa:1},
+   {n:'2026-11-11_10-02-13.png',d:'Zipline maison',sz:T('380 Ko','380 KB'),i:'check',c:'ok',s:T('Envoyée à 10:02','Uploaded at 10:02'),a:[T('Copier le lien','Copy link')]}];
+  const rows=R.map(r=>`<div class="row"><span class="qt" aria-hidden="true"></span><div class="rt"><span title="${r.n}" class="mono" style="white-space:nowrap">${mid(r.n,44)}</span><small>→ ${r.d} · ${r.sz}</small><span class="stat ${r.c} small" style="margin-top:3px">${ic(r.i)}<span>${r.s}</span></span>${r.p?`<div class="qprog" role="progressbar" aria-valuenow="${r.p}"><i style="width:${r.p}%"></i></div>`:''}</div><div class="sfx">${r.a.map((a,i)=>btn(a,i===0&&r.pa?'primary':'')).join('')}</div></div>`).join('');
+  const body=empty?`<div class="status">${ic('upload','big')}<h1>${T('Aucun envoi en attente','No pending uploads')}</h1><p>${T('Les envois apparaissent ici pendant qu’ils partent, et y restent en cas d’échec.','Uploads appear here while they go out, and stay here if they fail.')}</p><p class="small">${T('En terminal : ','In a terminal: ')}<code>kropa queue list --all</code></p></div>`
+    :`<div class="q"><div class="list">${rows}</div><p class="muted small">${T('Les fichiers locaux ne sont jamais supprimés. En terminal : ','Local files are never deleted. In a terminal: ')}<code>kropa queue list</code></p></div>`;
+  return desk()+win({x:170,y:40,w:860,h:680,title:T('File d’envoi','Upload queue'),subtitle:empty?'':T('4 actives · 1 terminée','4 active · 1 done'),end:empty?'':btn(T('Tout réessayer','Retry all'),'boxed')+(mac()?'':`<button class="btn icon flat" aria-label="Menu">${ic('menu')}</button>`),body});}
+
+/* =================== (g) PREMIER LANCEMENT =================== */
+function scrFirst(){const st=S.state,idx={welcome:0,permission:1,waiting:1,denied:1,shortcut:2,done:3}[st];
+  const dots=`<div class="dots" role="img" aria-label="${T('Étape','Step')} ${idx+1} ${T('sur','of')} 4">${[0,1,2,3].map(i=>`<i class="${i===idx?'on':''}"></i>`).join('')}</div>`;
+  const G=!mac();let hero='',h1='',p='',extra='',acts='',sys='';
+  if(st==='welcome'){hero=`<div class="hero">${appIcon(88)}</div>`;h1=T('Bienvenue dans Kropa','Welcome to Kropa');p=T('Capture, annotation et envoi vers votre serveur. Rien ne quitte la machine sans votre accord.','Capture, annotate and upload to your own server. Nothing leaves the machine unless you say so.');
+    extra=`<div class="list">${row(T('Langue','Language'),'',combo(T('Selon le système (Français)','System (English)')))+row(T('Dossier des captures','Captures folder'),'<span class="mono">~/Images/Kropa</span>',btn(T('Changer…','Change…')))}</div><p class="muted small">${T('Aucune destination n’est nécessaire pour commencer.','No destination is needed to get started.')}</p>`;
+    acts=btn(T('Continuer','Continue'),'primary pill focus');}
+  if(st==='permission'||st==='waiting'){hero=`<div class="hero">${ic('screen')}</div>`;
+    h1=G?T('Autoriser les captures d’écran','Allow screenshots'):T('Autoriser l’enregistrement de l’écran','Allow screen recording');
+    p=G?T('GNOME va vous demander si Kropa peut faire des captures d’écran. Choisissez Autoriser. Kropa ne capture que quand vous le demandez.','GNOME will ask whether Kropa may take screenshots. Choose Allow. Kropa only captures when you ask it to.')
+       :T('macOS va afficher une demande, puis Réglages Système › Confidentialité et sécurité › Enregistrement de l’écran et de l’audio système. Activez Kropa.','macOS will show a request, then System Settings › Privacy & Security › Screen & System Audio Recording. Turn Kropa on.');
+    extra=G?notice('info','',T('Si vous refusez, GNOME retient ce choix. Vous pourrez le changer dans Paramètres › Applications › Kropa.','If you refuse, GNOME remembers it. You can change it in Settings › Apps › Kropa.'))
+       :notice('info','',`<span>${T('macOS redemande de confirmer environ une fois par mois. Ce rappel vient de macOS, pas de Kropa.','macOS asks you to confirm about once a month. This reminder comes from macOS, not from Kropa.')}</span><span>${T('Selon votre installation, une mise à jour de Kropa peut faire redemander cette autorisation.','Depending on how Kropa was installed, an update may ask for this permission again.')}</span>`);
+    if(st==='waiting'){acts=btn(T('Plus tard','Later'),'flat')+btn(`<span class="spin"></span>${G?T('En attente de GNOME…','Waiting for GNOME…'):T('En attente de macOS…','Waiting for macOS…')}`,'primary pill dis');
+      sys=`<p class="cap" style="left:${G?400:450}px;top:${G?196:150}px">${T('Dialogue du système, pas le nôtre (texte indicatif)','System dialog, not ours (indicative text)')}</p><div class="dlg" role="alertdialog" style="left:${G?400:450}px;top:${G?222:176}px">${G?'':`<div class="ico">${ic('screen')}</div>`}<h2>${G?T('Autoriser Kropa à faire des captures d’écran ?','Allow Kropa to take screenshots?'):T('« Kropa » souhaite enregistrer cet écran et l’audio système.','“Kropa” would like to record this screen and system audio.')}</h2><p>${G?T('L’application pourra capturer le contenu de l’écran.','The app will be able to capture the screen content.'):T('Autorisez-le dans Réglages Système.','Allow it in System Settings.')}</p><div class="acts">${G?btn(T('Refuser','Deny'))+btn(T('Autoriser','Allow'),'primary'):btn(T('Ouvrir Réglages Système','Open System Settings'),'primary')+btn(T('Refuser','Deny'))}</div></div>`;}
+    else acts=btn(T('Plus tard','Later'),'flat')+btn(G?T('Continuer vers la demande de GNOME','Continue to the GNOME request'):T('Ouvrir la demande de macOS','Open the macOS request'),'primary pill focus');}
+  if(st==='denied'){hero=`<div class="hero err">${ic('err')}</div>`;h1=T('Captures refusées','Screenshots denied');
+    p=G?T('GNOME a enregistré votre refus. Kropa ne peut pas capturer l’écran tant qu’il n’est pas levé.','GNOME has recorded your refusal. Kropa cannot capture the screen until it is lifted.'):T('Kropa n’a pas accès à l’enregistrement de l’écran.','Kropa has no access to screen recording.');
+    extra=G?`<ol><li>${T('Ouvrez Paramètres › Applications › Kropa.','Open Settings › Apps › Kropa.')}</li><li>${T('Activez « Captures d’écran ».','Turn on “Screenshots”.')}</li></ol><p class="muted small">${T('Diagnostic : ','Diagnosis: ')}<code>kropa doctor</code></p>`
+      :`<ol><li>${T('Ouvrez Réglages Système › Confidentialité et sécurité › Enregistrement de l’écran et de l’audio système.','Open System Settings › Privacy & Security › Screen & System Audio Recording.')}</li><li>${T('Activez Kropa, puis relancez-le si macOS le propose.','Turn Kropa on, then relaunch it if macOS offers to.')}</li></ol>${notice('info','',T('Kropa est déjà coché mais la capture échoue ? Retirez-le de la liste (−), puis ajoutez-le à nouveau (+).','Kropa is already ticked but capture fails? Remove it from the list (−), then add it again (+).'))}`;
+    acts=btn(G?T('Ouvrir les Paramètres','Open Settings'):T('Ouvrir Réglages Système','Open System Settings'))+btn(T('Réessayer','Try again'),'primary pill');}
+  if(st==='shortcut'){hero=`<div class="hero">${ic('keyboard')}</div>`;h1=T('Raccourci de capture','Capture shortcut');
+    p=G?T('GNOME va vous proposer ','GNOME will suggest ')+kc('ctrl','shift','4')+T(' pour capturer une zone. Vous pourrez le changer dans sa fenêtre.',' to capture an area. You can change it in its window.'):T('Appuyez sur la combinaison voulue pour capturer une zone.','Press the combination you want for capturing an area.');
+    extra=G?notice('info','',T('Sur Sway et les autres compositeurs wlroots, Kropa vous donnera une ligne à ajouter à votre configuration.','On Sway and other wlroots compositors, Kropa will give you a line to add to your configuration.'))
+      :`<div class="list">${row(T('Capturer une zone','Capture an area'),'',`<span class="entry focus" style="width:120px;justify-content:space-between"><span class="kc">⌃⇧4</span>${ic('close')}</span>`)}</div><p class="muted small">${T('macOS refuse ⌥ seul et ⌥⇧ : utilisez ⌘ ou ⌃.','macOS refuses ⌥ alone and ⌥⇧: use ⌘ or ⌃.')}</p>`;
+    acts=btn(T('Passer','Skip'),'flat')+btn(G?T('Continuer vers la demande de GNOME','Continue to the GNOME request'):T('Continuer','Continue'),'primary pill');}
+  if(st==='done'){hero=`<div class="hero ok">${ic('check')}</div>`;h1=T('Kropa est prêt','Kropa is ready');p=T('Appuyez sur ','Press ')+kc(...capKeys())+T(' pour capturer une zone.',' to capture an area.');
+    extra=`<div class="list">${row(T('Dossier','Folder'),'<span class="mono">~/Images/Kropa</span>','',{pre:`<span class="stat ok">${ic('check')}</span>`})+row(T('Captures autorisées','Screenshots allowed'),'','',{pre:`<span class="stat ok">${ic('check')}</span>`})+row(T('Raccourci','Shortcut'),'',kc(...capKeys()),{pre:`<span class="stat ok">${ic('check')}</span>`})+row(T('Destination','Destination'),T('Facultative : vos captures restent locales.','Optional: your captures stay local.'),btn(T('Ajouter…','Add…')),{pre:`<span class="stat">${ic('info')}</span>`})}</div>`;
+    acts=btn(T('Terminer','Finish'),'primary pill focus');}
+  const body=`<div class="fr">${hero}<h1>${h1}</h1><p>${p}</p>${extra}</div><div class="fr-foot">${dots}<div class="acts">${acts}</div></div>`;
+  return desk()+win({x:280,y:56,w:640,h:648,title:'',body})+(sys?`<div class="scrim"></div>${sys}`:'');}
+
+/* =================== (h) MINIATURE =================== */
+function thumbCard(x,y,hover){const k=(a)=>hover?kc(a):'';
+  return `<div class="thumb" style="left:${x}px;top:${y}px" role="dialog" aria-label="${T('Capture enregistrée','Capture saved')}">${hover?`<span class="close" aria-label="${T('Fermer','Close')}">${ic('close')}</span>`:''}
+<div class="img">${crop(284/640)}</div><div class="meta"><b>${T('Capture enregistrée','Capture saved')}</b><span class="muted">1280 × 720</span></div>
+<div class="acts">${btn(ic('edit')+T('Annoter','Annotate')+(hover?`<span class="kc"><kbd>${kn('enter')}</kbd></span>`:''))}${btn(ic('copy')+T('Copier','Copy')+(hover?kc('mod','C'):''))}${btn(ic('upload')+T('Envoyer','Upload')+(hover?kc('mod','U'):''))}</div>
+<div class="timer" aria-hidden="true"><i style="width:${hover?100:58}%"></i></div></div>`;}
+function scrThumb(){
+  if(mac())return desk('mac')+`<p class="cap" style="left:40px;top:44px">${T('Au repos : 5 s, la barre ambre décompte','At rest: 5 s, the amber bar counts down')}</p><p class="cap" style="left:620px;top:44px">${T('Survol ou clic : décompte suspendu, raccourcis visibles','Hover or click: countdown paused, shortcuts shown')}</p>`+
+    `<div style="position:absolute;left:599px;top:26px;bottom:0;width:2px;background:rgba(255,255,255,.35)"></div>`+thumbCard(280,494,false)+thumbCard(880,494,true)+
+    `<p class="cap" style="left:40px;top:690px;max-width:1100px">${T('NSPanel non activant, coin bas droit, tous les Spaces, exclu de la capture. Il ne vole pas le focus : au clavier, il répond après un clic ou via le raccourci « Ouvrir la dernière capture ». Glisser l’image la dépose dans une autre application.','Non-activating NSPanel, bottom-right corner, all Spaces, excluded from capture. It does not steal focus: by keyboard it responds after a click or via the “Open last capture” shortcut. Dragging the image drops it into another app.')}</p>`;
+  const gn=`<div class="gn" style="left:90px;top:44px" role="alert"><div class="h">${appIcon(16)}<span>Kropa</span><span>·</span><span>${T('maintenant','now')}</span></div><div class="b"><div class="cropbox" style="width:64px;height:36px;border-radius:4px;flex:none"><div class="sc" style="transform:scale(.1) translate(-${SEL.x}px,-${SEL.y}px)">${shot()}</div></div><div><b>${T('Capture enregistrée','Capture saved')}</b><span class="mono small">~/Images/Kropa/2026-11-11_14-03-22.png</span></div></div><div class="acts">${btn(T('Annoter','Annotate'))}${btn(T('Copier','Copy'))}${btn(T('Envoyer','Upload'))}</div></div>`;
+  return `<div class="half" style="left:0;width:599px"><div class="desk"></div><p class="cap" style="left:20px;top:16px">${T('KDE Plasma et wlroots : surface layer-shell ancrée en bas à droite','KDE Plasma and wlroots: layer-shell surface anchored bottom right')}</p>${thumbCard(280,446,false)}<div class="kpanel"><i></i><i></i><i></i><span class="r">${symK('#fff')}<span>14:03</span></span></div></div>
+<div style="position:absolute;left:599px;top:0;bottom:0;width:2px;background:#000"></div>
+<div class="half" style="left:601px;width:599px"><div class="desk"></div><div class="gtop"><span class="l"><i></i><i class="o"></i></span><span>14:03</span><span class="r">${ic('bell')}</span></div>${gn}
+<p class="cap" style="left:20px;top:250px;max-width:540px">${T('GNOME : aucune position ni premier plan possibles. La notification remplace la miniature ; son clic donne le focus, donc « Copier » fonctionne vraiment.','GNOME: no position and no always-on-top. The notification replaces the thumbnail; clicking it grants focus, so “Copy” really works.')}</p></div>`;}
+
+/* =================== ICÔNES =================== */
+function scrIcons(){const files={arrow:'kropa-tool-arrow',rect:'kropa-tool-rectangle',ellipse:'kropa-tool-ellipse',line:'kropa-tool-line',text:'kropa-tool-text',pencil:'kropa-tool-pencil',highlighter:'kropa-tool-highlighter',counter:'kropa-tool-counter',blur:'kropa-tool-blur',pixelate:'kropa-tool-pixelate',mask:'kropa-tool-mask'};
+  return `<div class="icons">${TOOLS().filter(t=>t!=='|').map(([k,n,l])=>`<div class="icard"><h6><span>${l}</span><span>${k}</span></h6><div class="rowi"><div class="g80">${ti(n,80)}</div><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px;align-items:center"><span class="lt">${ti(n,20)}</span><span class="lt s16">${ti(n,16)}</span></div><div style="display:flex;gap:8px"><span class="act">${ti(n,20)}<span>${k}</span></span><span class="drk">${ti(n,20)}</span></div></div></div><code>${files[n]}-symbolic.svg</code></div>`).join('')}
+<div class="icard" style="justify-content:center"><h6>${T('Construction','Construction')}</h6><p style="font-size:12px;color:var(--k-muted)">${T('Grille 20 px (1 case = 1 px), marge 2 px en pointillés. Contours pleins qui reproduisent un trait de 1,75 px, angles vifs, extrémités carrées. Une couleur, recolorée par GTK ; gabarit (Template) sous macOS. 16 px montré à titre de contrôle : à éviter.','20 px grid (1 cell = 1 px), 2 px margin dashed. Filled outlines reproducing a 1.75 px stroke, sharp corners, square caps. One colour, recoloured by GTK; Template image on macOS. 16 px shown as a check: avoid.')}</p></div></div>`;}
+
+/* =================== NOTES (habillage) =================== */
+const NOTES={
+overlay:`<h2>(a) Overlay de sélection</h2><ul>
+<li>Surface entièrement à Kropa, identique sur les deux plateformes. Changent seulement les étiquettes de touches (Maj / ⇧, Entrée / ↩) et le modificateur du pas de 10 px (Ctrl sous Linux, ⌥ sous macOS, où ⌥ n’est refusé que pour les raccourcis globaux).</li>
+<li>Image figée : la pastille du haut le dit (heure, écran, échelle). Voile <code>rgba(17,19,24,.55)</code> constant, zone à 100 %. Bord blanc 1 px doublé d’un liseré sombre : au moins 4,3:1 contre n’importe quel fond.</li>
+<li>Poignée ambre au coin bas droit = poignée du logo = coin que déplace Maj+flèches. Les autres poignées sont blanches, angles vifs.</li>
+<li>Dimensions et position en <b>pixels physiques</b> (taille du PNG produit) ; la loupe montre 15 × 15 pixels physiques × 8, pixel central cerclé, bord de sélection tracé, hex et coordonnées. Elle change de côté près d’un bord.</li>
+<li>Avant sélection : réticule pleine largeur, loupe ; Entrée capture l’écran entier sous le curseur (proposition).</li>
+<li>Multi-écran : un overlay par écran ; sélection limitée à un écran (échelles mixtes) ; Tab passe à l’écran suivant (proposition, à trancher).</li>
+<li>Accessibilité : annonce polie « Zone 1280 par 720 pixels, position 424, 372 » après 500 ms sans mouvement. Aucune animation d’apparition.</li>
+<li>Thème : seuls l’aide, la pastille, les dimensions et la loupe suivent clair/sombre ; le voile et la sélection ne changent pas.</li></ul>`,
+editor:`<h2>(b) Éditeur</h2><ul>
+<li>Fenêtre native : AdwToolbarView + AdwHeaderBar ; NSWindow à barre d’outils unifiée. Panneau de style : AdwOverlaySplitView (fin) / inspecteur NSSplitViewController.</li>
+<li>Barre d’outils à une touche, lettre visible sous chaque icône, cibles de 44 × 52 px. Groupes : formes (A R O L), tracé (T P H), compteur (N), masquage (B X M) isolé à droite.</li>
+<li>Outil actif : remplissage ambre, icône et lettre <code>#111318</code> (7,88:1) ; liseré <code>#A84B00</code> en clair car l’ambre seul fait 2,36:1 sur blanc. État aussi exposé (<code>aria-pressed</code> / AT-SPI « pressed »).</li>
+<li>Liste des annotations : ordre de Tab et accès lecteur d’écran ; pastilles, couleurs et épaisseur nommées, jamais la couleur seule (coche sur la pastille choisie).</li>
+<li>Flou : avertissement et raccourci vers le masque. Envoi : barre de progression, bouton occupé, outils désactivés ; au succès l’éditeur se ferme et la notification prend le relais. Erreur : AdwBanner / barre d’information ; rien n’est perdu.</li>
+<li>Bouton principal système : accent de l’utilisateur sous GNOME ; AccentColor ambre profond sous macOS (appliqué en mode « Multicolore »).</li></ul>`,
+notif:`<h2>(c) Notifications</h2><ul>
+<li>Textes du ton de la marque : ce qui s’est passé, où est le fichier, quoi faire. Pas de point d’exclamation.</li>
+<li>GNOME : « Lien prêt » + « Copier le lien » (le clic donne un jeton d’activation, donc le focus, donc la copie). Après la copie réelle seulement : « Lien copié ». Statut CLI <code>pending</code> puis <code>copied</code>.</li>
+<li>« Envoi échoué » : bouton Réessayer pour une erreur passagère (5xx, réseau). Pour un 401/403, l’action principale devient « Mettre à jour le jeton » (réessayer échouerait) : écart au tableau de ton de <code>brand.md</code>, à valider par <code>copywriter</code>.</li>
+<li>Coffre verrouillé : la tâche passe <code>waiting_unlock</code>, la notification propose Déverrouiller.</li></ul>`,
+settings:`<h2>(d) Réglages</h2><ul>
+<li>GNOME : AdwApplicationWindow + AdwViewSwitcher dans la barre d’en-tête (pas d’AdwPreferencesDialog : le résident n’a pas de fenêtre parente) ; sous 400 px, AdwBreakpoint passe la navigation en bas (état « Fenêtre étroite »). macOS : fenêtre Réglages à onglets de barre d’outils, ⌘,.</li>
+<li>Destinations : défaut marqué par texte, état « Secret manquant » icône + texte. Test : confirmation explicite qui nomme l’hôte, puis résultat (statut, URL, lien formaté, suppression si l’API le permet).</li>
+<li>Import .sxcu : hôte en entier, jamais tronqué ; HTTPS affiché ; secrets masqués (4 derniers caractères) avec leur magasin ; champs ignorés listés ; le bouton de confirmation répète l’hôte. Un <code>http://</code> avec secret est refusé avant cet écran.</li>
+<li>Raccourcis : GNOME délègue au portail (Kropa propose, GNOME confirme) ; wlroots dit franchement « indisponible » et donne la ligne <code>bindsym</code> ; macOS refuse ⌥ / ⌥⇧ seuls au moment de la saisie et garde l’ancien raccourci.</li></ul>`,
+vault:`<h2>(e) Déverrouillage du coffre age</h2><ul>
+<li>Dialogue sans parent (déclenché par la file ou une notification) : AdwAlertDialog + champ de mot de passe ; NSAlert + NSSecureTextField.</li>
+<li>États : saisie (focus dans le champ), déchiffrement (≈ 1 s, scrypt : bouton occupé), erreur unique « incorrecte ou fichier altéré » (age ne distingue pas), délai croissant après 3 essais.</li>
+<li>Dit pourquoi le coffre sert (pas de trousseau / choix de l’utilisateur), où est le fichier, combien de temps il reste ouvert, et la commande équivalente.</li></ul>`,
+queue:`<h2>(f) File d’attente</h2><ul>
+<li>Chaque tâche : nom (ellipse au milieu, nom complet en infobulle et description accessible), destination, taille, statut icône + texte, une action utile.</li>
+<li>Statuts <code>running</code>, <code>waiting_unlock</code>, <code>waiting_network</code>, <code>failed</code> (401 : mettre à jour le jeton), <code>done</code>. État vide avec la commande CLI.</li></ul>`,
+firstrun:`<h2>(g) Premier lancement et permissions</h2><ul>
+<li>Quatre étapes : bienvenue (langue, dossier), permission de capture, raccourci, prêt. Aucune destination exigée, aucune requête réseau.</li>
+<li>Une permission à la fois, expliquée <b>avant</b> le dialogue du système, qui est montré pour référence (état « En attente »). Refus : chemin exact pour le lever, et sur macOS le remède « retirer puis rajouter ».</li>
+<li>macOS : rappel mensuel et effet possible des mises à jour dits franchement.</li></ul>`,
+thumb:`<h2>(h) Miniature flottante et variante GNOME</h2><ul>
+<li>macOS : NSPanel non activant ; KDE et wlroots : surface layer-shell ancrée. Même carte : aperçu, Annoter, Copier, Envoyer, décompte de 5 s suspendu au survol ou au focus. Cibles de 48 px.</li>
+<li>GNOME : notification avec petit aperçu et les mêmes actions.</li>
+<li>Mouvement : entrée 200 ms par glissement de 16 px ; mouvement réduit = apparition sans glissement, décompte allongé à 10 s (proposition).</li></ul>`,
+icons:`<h2>Icônes d’outils (D2.2)</h2><ul>
+<li>Fichiers : <code>docs/design/icons/kropa-tool-*-symbolic.svg</code>, contours pleins <code>#2e3436</code> (recolorés par GTK). Sous macOS, exporter en PDF gabarit (<code>…Template</code>).</li>
+<li>Affichées à 20 px (<code>-gtk-icon-size: 20px</code> / taille de point 20) ; 16 px montré pour contrôle seulement : le trait tombe à 1,4 px.</li></ul>`};
+const COVER={
+overlay:'Couvert : sélection, avant sélection, multi-écran, clair/sombre, FR/EN, clavier. Reste : survol des poignées (curseurs système), zone de taille nulle, sélection collée à un bord (loupe retournée), GNOME 100 % vs 200 % sur image réelle.',
+editor:'Couvert : outil actif, flou + avertissement, envoi en cours, erreur, objet sélectionné, désactivé. Reste : saisie de texte (curseur, fond de texte), zoom extrême, image 5K, fenêtre minimale 720 × 480 (panneau replié).',
+notif:'Couvert : lien copié, lien prêt (GNOME), envoi échoué, envoi en attente, coffre verrouillé ; sans-objet macOS. Reste : regroupement de plusieurs notifications, rendu réel KDE.',
+settings:'Couvert : général, destinations, vide, test (confirmation, résultat), import .sxcu, raccourcis (portail, wlroots, refus ⌥), fenêtre étroite et texte long. Reste : formulaires S3 et SFTP, échec du test, import http refusé, chargement de la liste.',
+vault:'Couvert : saisie, déchiffrement, erreur, délai. Reste : création du coffre (phrase de passe neuve, avertissement de perte), coffre introuvable ou altéré.',
+queue:'Couvert : liste à cinq statuts, texte long, vide. Reste : chargement initial, sélection multiple, tâche annulée.',
+firstrun:'Couvert : bienvenue, permission, attente du système, refus, raccourci, prêt. Reste : retour arrière, relance après permission accordée (macOS), wlroots sans portail Screenshot.',
+thumb:'Couvert : miniature au repos et au survol (macOS, KDE), notification GNOME. Reste : glisser-déposer en cours, plusieurs miniatures empilées.',
+icons:'Couvert : 11 outils, 16/20/80 px, actif, clair et sombre.'};
+
+/* =================== habillage, rendu =================== */
+const SCREENS=[['overlay','a. Overlay'],['editor','b. Éditeur'],['notif','c. Notifications'],['settings','d. Réglages'],['vault','e. Coffre'],['queue','f. File'],['firstrun','g. Premier lancement'],['thumb','h. Miniature'],['icons','Icônes']];
+const STATES={overlay:[['select','Sélection'],['crosshair','Avant sélection'],['multi','Multi-écran']],editor:[['default','Flèche'],['blur','Flou'],['sending','Envoi en cours'],['error','Envoi échoué']],notif:[['all','Toutes']],
+ settings:[['general','Général'],['dest','Destinations'],['dest-empty','Destinations vides'],['test','Test : confirmation'],['test-result','Test : résultat'],['import','Import .sxcu'],['shortcuts','Raccourcis'],['shortcuts-alt','Raccourcis : cas limite'],['narrow','Fenêtre étroite']],
+ vault:[['default','Saisie'],['busy','Déchiffrement'],['error','Erreur'],['delay','Délai']],queue:[['list','Liste'],['empty','Vide']],
+ firstrun:[['welcome','1 Bienvenue'],['permission','2 Permission'],['waiting','2 Attente système'],['denied','2 Refus'],['shortcut','3 Raccourci'],['done','4 Prêt']],thumb:[['all','Toutes']],icons:[['all','Grille']]};
+const SCR={overlay:scrOverlay,editor:scrEditor,notif:scrNotif,settings:scrSettings,vault:scrVault,queue:scrQueue,firstrun:scrFirst,thumb:scrThumb,icons:scrIcons};
+function states(){let L=STATES[S.screen];
+  if(S.screen==='settings'){L=L.filter(([k])=>!(k==='narrow'&&mac())).map(([k,l])=>k==='shortcuts-alt'?[k,mac()?'Raccourci refusé (⌥)':'Raccourcis sous wlroots']:[k,l]);}
+  return L;}
+function stage(){return `<div class="stage" data-p="${S.p}" data-t="${S.t}" lang="${S.lang}">${SCR[S.screen]()}</div>`}
+function controls(){const seg=(k,o)=>`<div class="seg" role="group">${o.map(([v,l])=>`<button type="button" data-k="${k}" data-v="${v}" aria-pressed="${S[k]===v}">${l}</button>`).join('')}</div>`;
+  document.getElementById('ctl').innerHTML=`<h1>kropa <small>maquettes D2.1 · contrôles système imités en CSS, la référence reste le widget natif</small></h1>
+<div class="ctl">${seg('screen',SCREENS)}</div>
+<div class="ctl"><span>Plateforme</span>${seg('p',[['adw','libadwaita'],['mac','AppKit']])}</div>
+<div class="ctl"><span>Thème</span>${seg('t',[['light','Clair'],['dark','Sombre']])}</div>
+<div class="ctl"><span>Langue</span>${seg('lang',[['fr','FR'],['en','EN']])}</div>
+<div class="ctl"><span>État</span>${seg('state',states())}</div><span class="hint">Clavier : 1 à 9 écrans, P plateforme, D thème, L langue, S état suivant.</span>`;}
+function fit(){const w=document.getElementById('wrap');if(w)w.style.zoom=Math.min(1,(innerWidth-40)/1200);}
+function sync(){const q=new URLSearchParams();for(const k of ['screen','p','t','lang','state'])q.set(k,S[k]);history.replaceState(null,'','?'+q.toString());}
+function render(){if(!states().some(([k])=>k===S.state))S.state=states()[0][0];
+  controls();document.getElementById('wrap').innerHTML=stage();
+  document.getElementById('notes').innerHTML=NOTES[S.screen]+`<p class="hint" style="margin-top:8px">${COVER[S.screen]}</p>`;fit();sync();}
+function renderSheet(){document.body.classList.add('sheetmode');
+  const cells=[['overlay','select','adw','Overlay'],['editor','default','adw','Éditeur · libadwaita'],['editor','default','mac','Éditeur · AppKit']];let h='';
+  for(const [sc,st,p,l] of cells)for(const t of ['light','dark']){Object.assign(S,{screen:sc,state:st,p,t});h+=`<figure class="cell"><figcaption>${l} · ${t==='light'?'clair':'sombre'} · ${S.lang.toUpperCase()}</figcaption>${stage()}</figure>`;}
+  document.getElementById('main').innerHTML=`<div class="sheet" id="sheet"><h2>kropa · maquettes principales <small>docs/design/mockups.html · D2.1</small></h2>${h}</div>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(!b)return;S[b.dataset.k]=b.dataset.v;if(b.dataset.k==='screen')S.state=STATES[S.screen][0][0];render();});
+document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||document.body.classList.contains('sheetmode'))return;const k=e.key.toLowerCase();
+  if(/^[1-9]$/.test(k)){S.screen=SCREENS[+k-1][0];S.state=STATES[S.screen][0][0];}
+  else if(k==='p')S.p=S.p==='adw'?'mac':'adw';else if(k==='d')S.t=S.t==='light'?'dark':'light';else if(k==='l')S.lang=S.lang==='fr'?'en':'fr';
+  else if(k==='s'){const L=states(),i=L.findIndex(([v])=>v===S.state);S.state=L[(i+1)%L.length][0];}else return;render();});
+addEventListener('resize',fit);
+(function init(){const q=new URLSearchParams(location.search);for(const k of ['screen','p','t','lang','state'])if(q.get(k))S[k]=q.get(k);
+  if(!SCR[S.screen])S.screen='overlay';if(q.has('sheet'))renderSheet();else render();})();
+</script>
+</body>
+</html>
