@@ -170,8 +170,8 @@ fn run_inner(
     Ok(exec::execute(&cli, &ctx, &mut session))
 }
 
-/// Help and version go to stdout with code 0; every parse error is a usage error (2), localised
-/// when the kind is covered, with clap's own English text otherwise.
+/// Help and version go to stdout with code 0; every parse error is a usage error (2), localised.
+/// clap's own rendering is used only for help: its error texts quote the values typed by the user.
 fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut Io<'_>) -> ExitCode {
     let mut session = Session::new(io, json, false, 0, false);
     match err.kind() {
@@ -184,12 +184,7 @@ fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut I
             // Bare `kropa dest`: the help, on stderr, as a usage error.
             let _ = err.print();
         }
-        _ => match localize_clap_error(err, loc) {
-            Some(text) => session.raw_err(&text),
-            None => {
-                let _ = err.print();
-            }
-        },
+        _ => session.raw_err(&localize_clap_error(err, loc)),
     }
     if json {
         let error = CliError {

@@ -144,6 +144,8 @@ err-job = a job identifier uses 1 to 64 letters, digits, '-' or '_'
 err-connector = a screen name must be 1 to 128 characters without control characters
 err-delay = expected a number of seconds from 0 to 60
 err-template = { $detail }
+err-template-variable = unknown variable (available: date, time, n, w, h, kind, mode, output, host)
+err-template-argument = invalid argument for the variable { $detail }
 err-var = expected NAME=VALUE, where NAME starts with a letter or '_' and has only letters, digits and '_'
 err-set = expected KEY=VALUE, where KEY has only letters, digits, '.', '-' and '_'
 err-fd = expected a file descriptor number: 0, or 3 and above
@@ -159,15 +161,18 @@ error-prefix = error:
 error-hint = For more information, try '--help'.
 error-tip = tip:
 error-unknown-argument = unexpected argument '{ $arg }'
-error-unknown-subcommand = unrecognized subcommand '{ $name }'
-error-invalid-value = invalid value '{ $value }' for '{ $arg }'
+error-extra-argument = unexpected extra argument
+error-unknown-subcommand = unrecognized subcommand
+error-invalid-value = invalid value for '{ $arg }'
 error-possible-values = possible values: { $values }
-error-value-validation = invalid value '{ $value }' for '{ $arg }': { $reason }
+error-value-validation = invalid value for '{ $arg }': { $reason }
 error-conflict = the argument '{ $arg }' cannot be used with '{ $other }'
 error-missing-required = the following required arguments were not provided: { $args }
 error-missing-subcommand = a subcommand is required
 error-no-equals = a value for '{ $arg }' must be given as '{ $arg }=VALUE'
 error-missing-value = a value is required for '{ $arg }'
+error-too-many-values = too many values for '{ $arg }'
+error-usage-generic = invalid command line
 error-name-with-file = --name cannot be used when --output is a file path
 
 ## Run-time errors

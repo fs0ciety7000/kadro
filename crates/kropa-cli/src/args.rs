@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use kropa_core::NameTemplate;
+use kropa_core::{NameError, NameTemplate};
 use kropa_i18n::Lang;
 
 /// Longest delay accepted by `--delay`, in seconds.
@@ -552,10 +552,7 @@ pub enum HistoryCommand {
 fn parse_lang(value: &str) -> Result<String, ArgError> {
     Lang::parse(value)
         .map(|l| l.code().to_owned())
-        .map_err(|_| ArgError {
-            id: "err-lang",
-            detail: value.to_owned(),
-        })
+        .map_err(|_| ArgError::new("err-lang"))
 }
 
 fn parse_path(value: &str) -> Result<PathBuf, ArgError> {
@@ -625,9 +622,18 @@ fn parse_delay(value: &str) -> Result<f64, ArgError> {
 }
 
 fn parse_template(value: &str) -> Result<String, ArgError> {
-    NameTemplate::parse(value).map_err(|e| ArgError {
-        id: "err-template",
-        detail: e.to_string(),
+    // The user's text is never quoted back (a variable name, a format): only fixed texts and the
+    // name of a known variable.
+    NameTemplate::parse(value).map_err(|e| match e {
+        NameError::UnknownVariable(_) => ArgError::new("err-template-variable"),
+        NameError::BadArgument { variable, .. } => ArgError {
+            id: "err-template-argument",
+            detail: variable,
+        },
+        other => ArgError {
+            id: "err-template",
+            detail: other.to_string(),
+        },
     })?;
     Ok(value.to_owned())
 }

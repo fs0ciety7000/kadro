@@ -185,8 +185,9 @@ impl NameTemplate {
             match part {
                 Part::Literal(text) => name.push_str(text),
                 Part::Date(fmt) | Part::Time(fmt) => {
-                    let text = jiff::fmt::strtime::format(fmt.as_str(), &now)
-                        .map_err(|e| NameError::Syntax(format!("date format {fmt:?}: {e}")))?;
+                    let text = jiff::fmt::strtime::format(fmt.as_str(), &now).map_err(|_| {
+                        NameError::Syntax("the date or time format cannot be applied".into())
+                    })?;
                     name.push_str(&sanitize(&text));
                 }
                 Part::Counter(width) => {
@@ -285,9 +286,9 @@ fn check_format(variable: &str, fmt: &str) -> Result<String, NameError> {
         });
     }
     let probe = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
-    jiff::fmt::strtime::format(fmt, &probe).map_err(|e| NameError::BadArgument {
+    jiff::fmt::strtime::format(fmt, &probe).map_err(|_| NameError::BadArgument {
         variable: variable.into(),
-        reason: e.to_string(),
+        reason: "not a valid strftime format".into(),
     })?;
     Ok(fmt.to_owned())
 }

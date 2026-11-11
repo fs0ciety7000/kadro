@@ -89,24 +89,39 @@ fn ctx(err: &clap::Error, kind: ContextKind) -> String {
     err.get(kind).and_then(context_text).unwrap_or_default()
 }
 
-/// The message of a clap error in the language in use, or `None` for the kinds not covered (the
-/// caller then falls back to clap's own English text).
-fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
+/// The name of an unknown option (`--bogus`, `-x`) out of what clap reports, and nothing of a value:
+/// `--opt=VALUE` is cut at the `=`, and anything that is not shaped like an option name (a
+/// positional value such as a secret given in the wrong place) gives `None`.
+fn option_name(raw: &str) -> Option<String> {
+    if let Some(long) = raw.strip_prefix("--") {
+        let name = long.split('=').next().unwrap_or_default();
+        let shaped = (1..=40).contains(&name.len())
+            && !name.starts_with('-')
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        return shaped.then(|| format!("--{name}"));
+    }
+    let short = raw.strip_prefix('-')?.chars().next()?;
+    short.is_ascii_alphanumeric().then(|| format!("-{short}"))
+}
+
+/// The message of a clap error in the language in use.
+///
+/// It never repeats a value typed by the user, which may be a secret given in the wrong place: an
+/// invalid or unexpected value is reported by the name of its option (or `<NAME>` for a positional),
+/// an unexpected positional by "unexpected extra argument", and kinds that are not translated by a
+/// generic line.
+fn message(err: &clap::Error, loc: &Localizer) -> String {
     let arg = ctx(err, ContextKind::InvalidArg);
-    let text = match err.kind() {
-        ErrorKind::UnknownArgument => loc.message_args("error-unknown-argument", &[("arg", &arg)]),
-        ErrorKind::InvalidSubcommand => loc.message_args(
-            "error-unknown-subcommand",
-            &[("name", &ctx(err, ContextKind::InvalidSubcommand))],
-        ),
+    match err.kind() {
+        ErrorKind::UnknownArgument => match option_name(&arg) {
+            Some(name) => loc.message_args("error-unknown-argument", &[("arg", &name)]),
+            None => loc.message("error-extra-argument"),
+        },
+        ErrorKind::InvalidSubcommand => loc.message("error-unknown-subcommand"),
         ErrorKind::InvalidValue => {
-            let mut text = loc.message_args(
-                "error-invalid-value",
-                &[
-                    ("value", &ctx(err, ContextKind::InvalidValue)),
-                    ("arg", &arg),
-                ],
-            );
+            let mut text = loc.message_args("error-invalid-value", &[("arg", &arg)]);
             let valid = ctx(err, ContextKind::ValidValue);
             if !valid.is_empty() {
                 text.push_str("\n  ");
@@ -115,19 +130,17 @@ fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
             text
         }
         ErrorKind::ValueValidation => {
-            let source = std::error::Error::source(err);
-            let reason = match source.and_then(|s| s.downcast_ref::<ArgError>()) {
-                Some(e) => loc.message_args(e.id, &[("detail", &e.detail)]),
-                None => source.map(ToString::to_string).unwrap_or_default(),
-            };
-            loc.message_args(
-                "error-value-validation",
-                &[
-                    ("value", &ctx(err, ContextKind::InvalidValue)),
-                    ("arg", &arg),
-                    ("reason", &reason),
-                ],
-            )
+            // Only the Fluent reason of our own parsers: a foreign source error may quote the value.
+            let reason = std::error::Error::source(err)
+                .and_then(|s| s.downcast_ref::<ArgError>())
+                .map(|e| loc.message_args(e.id, &[("detail", &e.detail)]));
+            match reason {
+                Some(reason) => loc.message_args(
+                    "error-value-validation",
+                    &[("arg", &arg), ("reason", &reason)],
+                ),
+                None => loc.message_args("error-invalid-value", &[("arg", &arg)]),
+            }
         }
         ErrorKind::ArgumentConflict => loc.message_args(
             "error-conflict",
@@ -143,16 +156,15 @@ fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
         ErrorKind::TooFewValues | ErrorKind::WrongNumberOfValues => {
             loc.message_args("error-missing-value", &[("arg", &arg)])
         }
-        _ => return None,
-    };
-    Some(text)
+        ErrorKind::TooManyValues => loc.message_args("error-too-many-values", &[("arg", &arg)]),
+        _ => loc.message("error-usage-generic"),
+    }
 }
 
-/// Full text of a usage error: message, suggestion, usage and hint. `None` if clap's own text must
-/// be used (kinds that are not translated).
+/// Full text of a usage error: message, suggestion, usage and hint.
 #[must_use]
-pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> Option<String> {
-    let mut out = format!("{} {}\n", loc.message("error-prefix"), message(err, loc)?);
+pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> String {
+    let mut out = format!("{} {}\n", loc.message("error-prefix"), message(err, loc));
     for kind in [ContextKind::SuggestedSubcommand, ContextKind::SuggestedArg] {
         let tip = ctx(err, kind);
         if !tip.is_empty() {
@@ -169,19 +181,28 @@ pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> Option<String>
         let _ = write!(out, "\n{} {usage}\n", loc.message("cli-usage-heading"));
     }
     let _ = write!(out, "\n{}\n", loc.message("error-hint"));
-    Some(out)
+    out
 }
 
 /// One-line plain message of a clap error, for the JSON `error.message`.
 #[must_use]
 pub fn plain_clap_message(err: &clap::Error, loc: &Localizer) -> String {
-    message(err, loc).unwrap_or_else(|| {
-        let rendered = err.to_string();
-        rendered
-            .lines()
-            .next()
-            .unwrap_or_default()
-            .trim_start_matches("error: ")
-            .to_owned()
-    })
+    message(err, loc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::option_name;
+
+    #[test]
+    fn only_option_names_are_echoed() {
+        assert_eq!(option_name("--bogus").as_deref(), Some("--bogus"));
+        assert_eq!(option_name("--bogus=sk-live-1").as_deref(), Some("--bogus"));
+        assert_eq!(option_name("-x").as_deref(), Some("-x"));
+        assert_eq!(option_name("-xvalue").as_deref(), Some("-x"));
+        for value in ["sk-live-ABC", "", "--", "---x", "--a b", "-", "-é", "--é"] {
+            assert_eq!(option_name(value), None, "{value:?}");
+        }
+        assert_eq!(option_name(&format!("--{}", "a".repeat(41))), None);
+    }
 }

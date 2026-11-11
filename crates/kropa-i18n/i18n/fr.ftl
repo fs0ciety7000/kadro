@@ -144,6 +144,8 @@ err-job = un identifiant de tâche comporte de 1 à 64 lettres, chiffres, '-' ou
 err-connector = un nom d'écran comporte de 1 à 128 caractères, sans caractère de contrôle
 err-delay = un nombre de secondes de 0 à 60 est attendu
 err-template = { $detail }
+err-template-variable = variable inconnue (disponibles : date, time, n, w, h, kind, mode, output, host)
+err-template-argument = argument invalide pour la variable { $detail }
 err-var = NOM=VALEUR attendu, où NOM commence par une lettre ou '_' et ne contient que des lettres, chiffres et '_'
 err-set = CLÉ=VALEUR attendu, où CLÉ ne contient que des lettres, chiffres, '.', '-' et '_'
 err-fd = un numéro de descripteur de fichier est attendu : 0, ou 3 et plus
@@ -159,15 +161,18 @@ error-prefix = erreur :
 error-hint = Pour plus d'informations, essayez '--help'.
 error-tip = astuce :
 error-unknown-argument = argument inattendu '{ $arg }'
-error-unknown-subcommand = sous-commande inconnue '{ $name }'
-error-invalid-value = valeur invalide '{ $value }' pour '{ $arg }'
+error-extra-argument = argument en trop
+error-unknown-subcommand = sous-commande inconnue
+error-invalid-value = valeur invalide pour '{ $arg }'
 error-possible-values = valeurs possibles : { $values }
-error-value-validation = valeur invalide '{ $value }' pour '{ $arg }' : { $reason }
+error-value-validation = valeur invalide pour '{ $arg }' : { $reason }
 error-conflict = l'argument '{ $arg }' ne peut pas être utilisé avec '{ $other }'
 error-missing-required = les arguments obligatoires suivants n'ont pas été fournis : { $args }
 error-missing-subcommand = une sous-commande est obligatoire
 error-no-equals = la valeur de '{ $arg }' doit être donnée sous la forme '{ $arg }=VALEUR'
 error-missing-value = une valeur est obligatoire pour '{ $arg }'
+error-too-many-values = trop de valeurs pour '{ $arg }'
+error-usage-generic = ligne de commande invalide
 error-name-with-file = --name est inutilisable quand --output est un chemin de fichier
 
 ## Erreurs d'exécution
