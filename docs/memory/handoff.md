@@ -37,4 +37,4 @@
     Kropa : à vérifier en 1.12, décision à prendre ensuite.
   - Les valeurs de test ressemblant à des jetons doivent être construites à l'exécution (dépôt public, GitGuardian).
   - Le skill `rust-backend` du profil `rust` du kit concerne Windmill : retiré du projet ; à corriger dans le kit.
-  - Engram : fiche du projet à créer (voir ci-dessous si non fait).
+  - Engram : fiche `kropa` et leçons dans la PR fs0ciety7000/engram#22 (à fusionner par l'utilisateur).
