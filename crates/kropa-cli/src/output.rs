@@ -94,6 +94,7 @@ impl<'a, 'b> Session<'a, 'b> {
 pub fn error_document(schema: &str, error: &CliError) -> Value {
     let mut detail = json!({
         "code": error.code.name(),
+        "reason": error.reason,
         "message": error.message,
         "step": error.step,
     });

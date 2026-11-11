@@ -21,6 +21,8 @@ pub struct CliError {
     pub step: Option<&'static str>,
     /// Lots that bring the missing feature (only for `unsupported`).
     pub lots: Vec<&'static str>,
+    /// Machine sub-cause, `error.reason` in JSON (`docs/cli.md` section 4); `None` when there is none.
+    pub reason: Option<String>,
 }
 
 impl CliError {
@@ -32,7 +34,22 @@ impl CliError {
             message: loc.message_args(id, args),
             step: None,
             lots: Vec::new(),
+            reason: None,
         }
+    }
+
+    /// The same error with a machine sub-cause.
+    #[must_use]
+    pub fn with_reason(mut self, reason: &str) -> Self {
+        self.reason = Some(reason.to_owned());
+        self
+    }
+
+    /// The same error attributed to a step of the chain (`capture`, `save`, ...).
+    #[must_use]
+    pub fn at_step(mut self, step: &'static str) -> Self {
+        self.step = Some(step);
+        self
     }
 
     /// Wraps an error of `kropa-core`; its own text is technical and stays in English.

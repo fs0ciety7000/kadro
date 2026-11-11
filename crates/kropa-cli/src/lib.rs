@@ -163,6 +163,7 @@ fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut I
             message: plain_clap_message(err, loc),
             step: None,
             lots: Vec::new(),
+            reason: None,
         };
         session.document(&error_document(ERROR_SCHEMA, &error));
     }
