@@ -14,6 +14,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+kropa-core.workspace = true
+kropa-i18n.workspace = true
 
 [lints]
 workspace = true
