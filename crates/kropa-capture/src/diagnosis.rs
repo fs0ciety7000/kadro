@@ -89,7 +89,7 @@ impl Fact {
 pub struct Diagnosis {
     /// Platform (`linux`, `macos`).
     pub platform: &'static str,
-    /// Backend in use (`portal-screenshot`).
+    /// Backend in use (`portal-screenshot`, `screencapturekit`).
     pub backend: &'static str,
     /// What `capture` can do.
     pub capabilities: Capabilities,
@@ -117,17 +117,20 @@ impl Diagnosis {
 pub const ALL_FEATURES: [&str; 2] = ["capture_screen", "capture_output"];
 
 /// Reason codes of [`Capability::reason`].
-pub const ALL_REASONS: [&str; 3] = [
+pub const ALL_REASONS: [&str; 6] = [
     "no_session_bus",
     "portal_unavailable",
     "output_not_isolable",
+    "no_graphical_session",
+    "screen_recording_denied",
+    "macos_too_old",
 ];
 
 /// Fallback codes of [`Capability::fallback`].
 pub const ALL_FALLBACKS: [&str; 1] = ["capture_screen_instead"];
 
 /// Fact codes the backends emit.
-pub const ALL_FACT_KEYS: [&str; 17] = [
+pub const ALL_FACT_KEYS: [&str; 23] = [
     "desktop",
     "session_type",
     "wayland_display",
@@ -145,6 +148,12 @@ pub const ALL_FACT_KEYS: [&str; 17] = [
     "desktop_file",
     "layer_shell",
     "data_control",
+    "macos_version",
+    "graphical_session",
+    "screen_recording",
+    "app_bundle",
+    "bundle_identifier",
+    "display",
 ];
 
 #[cfg(test)]

@@ -15,6 +15,11 @@ pub enum Denial {
     PortalDismissed,
     /// The portal replied with the D-Bus error `NotAllowed`.
     NotAllowed,
+    /// macOS: the Screen Recording permission (TCC) is not granted to Kropa.
+    ScreenRecordingDenied,
+    /// macOS: the permission looks granted but ScreenCaptureKit still refuses, which is what a
+    /// stale entry looks like after the application was replaced by a differently signed build.
+    ScreenRecordingStale,
 }
 
 /// A feature this platform or backend cannot offer (maps to `unsupported`, code 5).
@@ -25,6 +30,8 @@ pub enum Unsupported {
     OutputNotIsolable,
     /// The backend cannot deliver the configured image format.
     ImageFormat,
+    /// macOS: the system is older than the oldest version Kropa supports (15).
+    MacosTooOld,
 }
 
 /// A capture that failed for a reason other than a refusal (maps to `capture_failed`, code 10).
@@ -45,6 +52,16 @@ pub enum Failure {
     FileUnreadable,
     /// The image is not a valid PNG.
     InvalidImage,
+    /// There is no graphical session to capture (macOS: no login session on the console).
+    NoGraphicalSession,
+    /// The screen asked for does not exist, or its name designates several screens.
+    OutputNotFound,
+    /// macOS: ScreenCaptureKit answered with an error that is not a refusal.
+    ScreenCaptureKitError,
+    /// macOS: ScreenCaptureKit never answered.
+    ScreenCaptureKitNoResponse,
+    /// The image could not be turned into a PNG file.
+    ImageEncoding,
 }
 
 /// Why a capture did not produce an image.
@@ -75,6 +92,8 @@ impl Denial {
             Self::PortalDeclined => "portal_declined",
             Self::PortalDismissed => "portal_dismissed",
             Self::NotAllowed => "portal_not_allowed",
+            Self::ScreenRecordingDenied => "screen_recording_denied",
+            Self::ScreenRecordingStale => "screen_recording_stale",
         }
     }
 }
@@ -86,6 +105,7 @@ impl Unsupported {
         match self {
             Self::OutputNotIsolable => "output_not_isolable",
             Self::ImageFormat => "image_format_unsupported",
+            Self::MacosTooOld => "macos_too_old",
         }
     }
 }
@@ -102,17 +122,25 @@ impl Failure {
             Self::InvalidResponse => "portal_invalid_response",
             Self::FileUnreadable => "portal_file_unreadable",
             Self::InvalidImage => "invalid_image",
+            Self::NoGraphicalSession => "no_graphical_session",
+            Self::OutputNotFound => "output_not_found",
+            Self::ScreenCaptureKitError => "screencapturekit_error",
+            Self::ScreenCaptureKitNoResponse => "screencapturekit_no_response",
+            Self::ImageEncoding => "image_encoding_failed",
         }
     }
 }
 
 /// Every reason a [`CaptureError`] can carry, for tests of the translations.
-pub const ALL_ERROR_REASONS: [&str; 12] = [
+pub const ALL_ERROR_REASONS: [&str; 20] = [
     "portal_declined",
     "portal_dismissed",
     "portal_not_allowed",
+    "screen_recording_denied",
+    "screen_recording_stale",
     "output_not_isolable",
     "image_format_unsupported",
+    "macos_too_old",
     "no_session_bus",
     "portal_unavailable",
     "portal_error",
@@ -120,6 +148,11 @@ pub const ALL_ERROR_REASONS: [&str; 12] = [
     "portal_invalid_response",
     "portal_file_unreadable",
     "invalid_image",
+    "no_graphical_session",
+    "output_not_found",
+    "screencapturekit_error",
+    "screencapturekit_no_response",
+    "image_encoding_failed",
 ];
 
 impl CaptureError {
@@ -190,8 +223,11 @@ mod tests {
             Denial::PortalDeclined.reason(),
             Denial::PortalDismissed.reason(),
             Denial::NotAllowed.reason(),
+            Denial::ScreenRecordingDenied.reason(),
+            Denial::ScreenRecordingStale.reason(),
             Unsupported::OutputNotIsolable.reason(),
             Unsupported::ImageFormat.reason(),
+            Unsupported::MacosTooOld.reason(),
             Failure::NoSessionBus.reason(),
             Failure::PortalUnavailable.reason(),
             Failure::PortalError.reason(),
@@ -199,6 +235,11 @@ mod tests {
             Failure::InvalidResponse.reason(),
             Failure::FileUnreadable.reason(),
             Failure::InvalidImage.reason(),
+            Failure::NoGraphicalSession.reason(),
+            Failure::OutputNotFound.reason(),
+            Failure::ScreenCaptureKitError.reason(),
+            Failure::ScreenCaptureKitNoResponse.reason(),
+            Failure::ImageEncoding.reason(),
         ];
         assert_eq!(all, ALL_ERROR_REASONS);
         let mut sorted = all.to_vec();

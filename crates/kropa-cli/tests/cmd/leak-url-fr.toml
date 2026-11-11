@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "fr", "dest", "add", "z", "--type", "zipline", "--url", "sk-live-SENTINEL123"]
+status.code = 2
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"

@@ -3,20 +3,29 @@
 //! Screen capture abstraction of Kropa, with an explicit status and fallback per platform.
 //!
 //! [`CaptureBackend`] is the contract every platform fills: the Linux portal backend lives in
-//! `linux` (compiled on Linux only), the macOS one arrives with lot 1.5. A backend never reports a
-//! success it did not get: what it cannot do is a [`CaptureError`] with a stable reason, and what
-//! is degraded shows in its [`Diagnosis`]. Nothing here depends on a toolkit; the async runtime
-//! needed by D-Bus stays inside the Linux backend.
+//! `linux` (compiled on Linux only), the macOS ScreenCaptureKit one in `macos` (macOS only). A
+//! backend never reports a success it did not get: what it cannot do is a [`CaptureError`] with a
+//! stable reason, and what is degraded shows in its [`Diagnosis`]. Nothing here depends on a
+//! toolkit; the async runtime needed by D-Bus stays inside the Linux backend, and the Objective-C
+//! calls (the only `unsafe` code of this crate) inside the macOS one.
 //!
 //! The backend is chosen from what the system offers (portals present, interface versions), never
 //! from the name of the desktop: `XDG_CURRENT_DESKTOP` is only reported for information.
+//!
+//! [`screens`] and [`apple`] hold the logic of the macOS backend that needs no system call (which
+//! screen a name designates, how several screens share one canvas, how the permission is checked),
+//! so that it is tested on every platform.
 
+pub mod apple;
 mod diagnosis;
 mod error;
 mod png;
+pub mod screens;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "macos")]
+pub mod macos;
 
 pub use diagnosis::{
     ALL_FACT_KEYS, ALL_FALLBACKS, ALL_FEATURES, ALL_REASONS, Capabilities, Capability, Diagnosis,
@@ -64,6 +73,8 @@ pub struct CaptureRequest<'a> {
 pub enum BackendId {
     /// The `org.freedesktop.portal.Screenshot` portal.
     PortalScreenshot,
+    /// `SCScreenshotManager` of ScreenCaptureKit (macOS).
+    ScreenCaptureKit,
 }
 
 impl BackendId {
@@ -72,6 +83,7 @@ impl BackendId {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::PortalScreenshot => "portal-screenshot",
+            Self::ScreenCaptureKit => "screencapturekit",
         }
     }
 }
@@ -124,6 +136,16 @@ pub trait CaptureBackend {
         Ok(())
     }
 
+    /// Asks for the permission the capture needs, so that a refusal comes before any `--delay`.
+    /// May show a system dialog; never captures anything. The default asks for nothing: the Linux
+    /// portal asks for its permission itself, when the screenshot is requested.
+    ///
+    /// # Errors
+    /// [`CaptureError::PermissionDenied`] when the permission is not granted.
+    fn authorize(&self, _request: &CaptureRequest<'_>) -> Result<(), CaptureError> {
+        Ok(())
+    }
+
     /// Takes the screenshot. May wait for the user (permission dialog). Fails like
     /// [`CaptureBackend::check`] on a request that cannot be satisfied.
     ///
@@ -132,14 +154,18 @@ pub trait CaptureBackend {
     fn capture(&self, request: &CaptureRequest<'_>) -> Result<CapturedImage, CaptureError>;
 }
 
-/// The backend this system offers, or `None` when the platform has none yet (macOS before lot 1.5).
+/// The backend this system offers, or `None` when the platform has none.
 #[must_use]
 pub fn default_backend() -> Option<Box<dyn CaptureBackend>> {
     #[cfg(target_os = "linux")]
     {
         Some(Box::new(linux::PortalScreenshot::new()))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        Some(Box::new(macos::ScreenCaptureKit::new()))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         None
     }
