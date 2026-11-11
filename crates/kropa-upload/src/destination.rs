@@ -1026,10 +1026,10 @@ success_status = [200, 201]
     fn toml_errors_do_not_quote_values() {
         let text = MAISON.replace(
             "headers = { Authorization = \"Bearer {secret:token}\", Accept = \"application/json\" }",
-            "headers = \"Bearer sk-live-0123456789abcdef\"",
+            "headers = \"Bearer FAKE-value-for-test-0001\"",
         );
         let detail = config_error(&text);
-        assert!(!detail.contains("sk-live"), "{detail}");
+        assert!(!detail.contains("FAKE-value"), "{detail}");
         assert!(detail.contains("d.toml:"), "{detail}");
     }
 

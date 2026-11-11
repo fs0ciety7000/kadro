@@ -1183,9 +1183,12 @@ dependencies = [
  "kropa-capture",
  "kropa-core",
  "kropa-i18n",
+ "kropa-upload",
  "serde_json",
  "tempfile",
+ "tokio",
  "trycmd",
+ "wiremock",
  "zbus",
 ]
 

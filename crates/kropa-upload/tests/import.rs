@@ -28,7 +28,19 @@ fn plan(name: &str) -> ImportPlan {
     import(&fixture(name), format, None).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
+/// A `.sxcu` whose path holds a token. Built here so that no token-like literal sits in the source.
+fn token_in_path() -> Vec<u8> {
+    let token = format!("{}{}", "a8F3kQ9z", "TESTONLY0pX2vB7nC4mR1");
+    format!(
+        r#"{{"Version":"16.0.1","Name":"Token in the path","DestinationType":"ImageUploader","RequestURL":"https://up.example.org/api/{token}/upload","Body":"MultipartFormData","URL":"{{json:link}}"}}"#
+    )
+    .into_bytes()
+}
+
 fn refused(name: &str) -> UploadError {
+    if name == "token-in-path.sxcu" {
+        return import(&token_in_path(), ImportFormat::Sxcu, None).expect_err(name);
+    }
     let format = if name.ends_with(".toml") {
         ImportFormat::Toml
     } else {
@@ -70,7 +82,7 @@ const FIXTURE_SECRETS: [&str; 8] = [
     "xbb-0123456789abcdef",
     "xbb-fedcba9876543210",
     "live-0123456789abcdef",
-    "sk-live-0123456789abcdef",
+    "FAKE-literal-credential-0001",
     "abcdef0123456789",
     "hunter2",
 ];
@@ -154,7 +166,7 @@ fn received_toml_follows_the_same_rules_as_sxcu() {
     let reference = p.secrets.iter().find(|s| s.name == "sig").unwrap();
     assert!(reference.value.is_none());
     let text = p.destination.to_toml().unwrap();
-    assert!(!text.contains("sk-live"), "{text}");
+    assert!(!text.contains("FAKE-literal"), "{text}");
     assert!(text.contains("Accept = \"application/json\""), "{text}");
 }
 

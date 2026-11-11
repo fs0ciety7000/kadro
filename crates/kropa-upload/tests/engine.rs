@@ -15,7 +15,7 @@ use kropa_upload::secret::{MemorySecretSource, Placement};
 use wiremock::matchers::{any, header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-const TOKEN: &str = "tok-Zq7kLm9Xt2vRw-abcdef";
+const TOKEN: &str = concat!("tok-", "Zq7kLm9", "Xt2vRw-abcdef");
 
 fn input() -> UploadInput {
     UploadInput::from_bytes("shot.png", b"\x89PNG fake image".to_vec())

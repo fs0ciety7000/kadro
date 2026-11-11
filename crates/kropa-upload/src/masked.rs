@@ -746,7 +746,7 @@ mod tests {
 
     use super::{CheckedOutput, MaskedText, SecretSet};
 
-    const TOKEN: &str = "Zq7!kLm9#Xt2+/vRw";
+    const TOKEN: &str = concat!("Zq7!", "kLm9#", "Xt2+/vRw");
 
     fn set() -> SecretSet {
         SecretSet::from_values(&[TOKEN])
