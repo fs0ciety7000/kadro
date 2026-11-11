@@ -91,7 +91,9 @@ fn negotiated_language(args: &[OsString], lookup: &dyn Fn(&str) -> Option<String
         None
     } else {
         let dir = prescan(args, "--config").map(std::path::PathBuf::from);
-        Config::load_from(dir.as_deref()).ok().and_then(|c| c.language)
+        Config::load_from(dir.as_deref())
+            .ok()
+            .and_then(|c| c.language)
     };
     kropa_i18n::negotiate(cli.as_deref(), config.as_deref(), lookup)
 }
@@ -338,7 +340,13 @@ mod tests {
             &["dest", "edit", "z", "--url", SENTINEL],
             &["dest", "edit", "z", "--set", SENTINEL],
             &["dest", "edit", "z", "--set", "token=sk-live-SENTINEL123"],
-            &["dest", "edit", "z", "--url", "https://h.example.org/?k=sk-live-SENTINEL123"],
+            &[
+                "dest",
+                "edit",
+                "z",
+                "--url",
+                "https://h.example.org/?k=sk-live-SENTINEL123",
+            ],
             &["capture", "screen", "--var", SENTINEL],
             &["capture", "screen", "--var", "h=sk-live-SENTINEL123"],
             &["capture", "screen", "--copy", SENTINEL],
@@ -404,10 +412,19 @@ mod tests {
         };
         // The configuration wins over the environment.
         let from_config = error_of(&["kropa", "--config", config, "nope"], &en_env);
-        assert!(from_config.contains("sous-commande inconnue"), "{from_config}");
+        assert!(
+            from_config.contains("sous-commande inconnue"),
+            "{from_config}"
+        );
         // `--lang` wins over the configuration.
-        let from_option = error_of(&["kropa", "--config", config, "--lang", "en", "nope"], &fr_env);
-        assert!(from_option.contains("unrecognized subcommand"), "{from_option}");
+        let from_option = error_of(
+            &["kropa", "--config", config, "--lang", "en", "nope"],
+            &fr_env,
+        );
+        assert!(
+            from_option.contains("unrecognized subcommand"),
+            "{from_option}"
+        );
         // No configuration: the environment.
         let empty = tempfile::tempdir().unwrap();
         let from_env = error_of(

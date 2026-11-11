@@ -53,7 +53,10 @@ fn names() -> HashMap<CGDirectDisplayID, String> {
         let Ok(number) = value.downcast::<NSNumber>() else {
             continue;
         };
-        out.insert(number.unsignedIntValue(), screen.localizedName().to_string());
+        out.insert(
+            number.unsignedIntValue(),
+            screen.localizedName().to_string(),
+        );
     }
     out
 }

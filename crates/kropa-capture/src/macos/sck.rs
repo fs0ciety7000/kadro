@@ -12,8 +12,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use block2::RcBlock;
-use objc2::rc::Retained;
 use objc2::AnyThread;
+use objc2::rc::Retained;
 use objc2_core_foundation::CFRetained;
 use objc2_core_graphics::CGImage;
 use objc2_foundation::{NSArray, NSError};
@@ -101,16 +101,18 @@ fn wait<T>(rx: &mpsc::Receiver<Answer<T>>, what: &str) -> Result<T, CaptureError
 /// The displays `ScreenCaptureKit` can capture. Needs the Screen Recording permission.
 fn shareable_content() -> Result<Retained<SCShareableContent>, CaptureError> {
     let (tx, rx) = mpsc::channel::<Answer<Retained<SCShareableContent>>>();
-    let handler = RcBlock::new(move |content: *mut SCShareableContent, error: *mut NSError| {
-        // SAFETY: `content` is null or a valid object that is not owned by the handler; `retain`
-        // takes our own reference before the handler returns.
-        let answer = match unsafe { Retained::retain(content) } {
-            Some(content) => Ok(Handoff(content)),
-            None => Err(ErrorInfo::read(error)),
-        };
-        // The receiver is gone when the wait timed out: nobody is interested any more.
-        let _ = tx.send(answer);
-    });
+    let handler = RcBlock::new(
+        move |content: *mut SCShareableContent, error: *mut NSError| {
+            // SAFETY: `content` is null or a valid object that is not owned by the handler; `retain`
+            // takes our own reference before the handler returns.
+            let answer = match unsafe { Retained::retain(content) } {
+                Some(content) => Ok(Handoff(content)),
+                None => Err(ErrorInfo::read(error)),
+            };
+            // The receiver is gone when the wait timed out: nobody is interested any more.
+            let _ = tx.send(answer);
+        },
+    );
     // SAFETY: `handler` has the signature the method documents, and it is copied by the callee, so
     // it may be dropped as soon as the call returns.
     unsafe { SCShareableContent::getShareableContentWithCompletionHandler(&handler) };

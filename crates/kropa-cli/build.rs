@@ -70,7 +70,9 @@ fn commit(manifest_dir: &Path) -> Option<String> {
     }
 
     let full = git(manifest_dir, &["rev-parse", "HEAD"])?;
-    let hash = full.get(..12).filter(|h| h.bytes().all(|b| b.is_ascii_hexdigit()))?;
+    let hash = full
+        .get(..12)
+        .filter(|h| h.bytes().all(|b| b.is_ascii_hexdigit()))?;
     // `--no-optional-locks`: do not refresh the index, which would look like a change to cargo.
     let dirty = git(
         manifest_dir,

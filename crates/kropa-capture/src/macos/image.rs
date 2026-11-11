@@ -5,9 +5,7 @@
 use std::ffi::c_void;
 use std::ptr::NonNull;
 
-use objc2_core_foundation::{
-    CFData, CFMutableData, CFRetained, CFString, CGPoint, CGRect, CGSize,
-};
+use objc2_core_foundation::{CFData, CFMutableData, CFRetained, CFString, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{
     CGBitmapContextCreateImage, CGColorSpace, CGContext, CGImage, CGInterpolationQuality,
     kCGColorSpaceSRGB,

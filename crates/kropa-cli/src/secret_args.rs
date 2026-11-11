@@ -189,9 +189,7 @@ pub fn looks_like_credential_value(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
     let jwt = value.starts_with("eyJ") && value.matches('.').count() >= 2;
-    aws || jwt
-        || value.starts_with("AIza")
-        || TOKEN_PREFIXES.iter().any(|p| value.starts_with(p))
+    aws || jwt || value.starts_with("AIza") || TOKEN_PREFIXES.iter().any(|p| value.starts_with(p))
 }
 
 /// `NAME=VALUE` pairs of a query, a fragment or a matrix parameter list: separators `&` and `;`.
@@ -328,7 +326,14 @@ mod tests {
         ] {
             assert!(is_sensitive_key(bad), "{bad}");
         }
-        for good in ["response.url", "monkey", "design", "keyboard", "author", "note"] {
+        for good in [
+            "response.url",
+            "monkey",
+            "design",
+            "keyboard",
+            "author",
+            "note",
+        ] {
             assert!(!is_sensitive_key(good), "{good}");
         }
         assert_eq!(words("AWSAccessKeyId"), ["aws", "access", "key", "id"]);
@@ -389,7 +394,10 @@ mod tests {
             assert!(!only_secret_references(not), "{not}");
         }
         // A reference does not excuse a literal secret next to it.
-        assert!(set_carries_secret("headers.Authorization", "Bearer abc{secret:t}"));
+        assert!(set_carries_secret(
+            "headers.Authorization",
+            "Bearer abc{secret:t}"
+        ));
         assert!(!var_carries_secret("{secret:t}"));
     }
 

@@ -316,7 +316,10 @@ mod tests {
         assert_eq!(negotiate(None, None, &env(&all)), Lang::Fr);
         let msg = [("LC_MESSAGES", "fr_BE.UTF-8"), ("LANG", "en_US.UTF-8")];
         assert_eq!(negotiate(None, None, &env(&msg)), Lang::Fr);
-        assert_eq!(negotiate(None, None, &env(&[("LANG", "fr_CA@euro")])), Lang::Fr);
+        assert_eq!(
+            negotiate(None, None, &env(&[("LANG", "fr_CA@euro")])),
+            Lang::Fr
+        );
         // An empty LC_ALL is ignored.
         assert_eq!(
             negotiate(None, None, &env(&[("LC_ALL", ""), ("LANG", "fr_FR")])),
@@ -324,7 +327,11 @@ mod tests {
         );
         // The first set variable decides even if it is not supported.
         assert_eq!(
-            negotiate(None, None, &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])),
+            negotiate(
+                None,
+                None,
+                &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])
+            ),
             Lang::En
         );
     }
@@ -335,7 +342,10 @@ mod tests {
         // The option wins over the configuration, which wins over the environment.
         assert_eq!(negotiate(Some("en"), Some("fr"), &fr_env), Lang::En);
         assert_eq!(negotiate(None, Some("en"), &fr_env), Lang::En);
-        assert_eq!(negotiate(None, Some("FR-ca"), &env(&[("LANG", "en_US")])), Lang::Fr);
+        assert_eq!(
+            negotiate(None, Some("FR-ca"), &env(&[("LANG", "en_US")])),
+            Lang::Fr
+        );
         assert_eq!(negotiate(None, None, &fr_env), Lang::Fr);
         // A language that is not supported is skipped, at each level.
         assert_eq!(negotiate(Some("de"), Some("en"), &fr_env), Lang::En);
@@ -348,10 +358,19 @@ mod tests {
         assert_eq!(negotiate(None, None, &env(&[])), Lang::En);
         assert_eq!(negotiate(None, None, &env(&[("LANG", "C")])), Lang::En);
         assert_eq!(negotiate(None, None, &env(&[("LANG", "POSIX")])), Lang::En);
-        assert_eq!(negotiate(None, None, &env(&[("LANG", "ja_JP.UTF-8")])), Lang::En);
-        assert_eq!(negotiate(None, None, &env(&[("LANG", "%%garbage")])), Lang::En);
+        assert_eq!(
+            negotiate(None, None, &env(&[("LANG", "ja_JP.UTF-8")])),
+            Lang::En
+        );
+        assert_eq!(
+            negotiate(None, None, &env(&[("LANG", "%%garbage")])),
+            Lang::En
+        );
         // An unsupported --lang falls through to the environment.
-        assert_eq!(negotiate(Some("de"), None, &env(&[("LANG", "fr_FR")])), Lang::Fr);
+        assert_eq!(
+            negotiate(Some("de"), None, &env(&[("LANG", "fr_FR")])),
+            Lang::Fr
+        );
     }
 
     #[test]

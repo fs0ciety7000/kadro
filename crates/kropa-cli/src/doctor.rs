@@ -321,7 +321,8 @@ mod tests {
     fn screens_are_not_pending_once_the_backend_lists_them() {
         let mut d = diagnosis();
         assert!(pending(&d).any(|(item, _, _)| item == "outputs"));
-        d.facts.push(Fact::new("display", FactValue::Text("DELL".into())));
+        d.facts
+            .push(Fact::new("display", FactValue::Text("DELL".into())));
         assert!(pending(&d).all(|(item, _, _)| item != "outputs"));
         assert_eq!(pending(&d).count(), PENDING.len() - 1);
     }

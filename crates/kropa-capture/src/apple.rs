@@ -93,7 +93,10 @@ pub enum Permission {
 /// The permission cannot be granted while the process runs (macOS asks to reopen the application),
 /// so after a request the answer is read again, and a `false` is final for this run: the caller
 /// reports it with the way to the setting instead of waiting for it.
-pub fn ensure_permission(preflight: impl Fn() -> bool, request: impl FnOnce() -> bool) -> Permission {
+pub fn ensure_permission(
+    preflight: impl Fn() -> bool,
+    request: impl FnOnce() -> bool,
+) -> Permission {
     if preflight() {
         return Permission::Granted;
     }

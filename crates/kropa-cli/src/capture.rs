@@ -622,7 +622,11 @@ mod tests {
         let err = out.result.unwrap_err();
         assert_eq!(err.code, ExitCode::PermissionDenied);
         assert_eq!(err.reason.as_deref(), Some("screen_recording_denied"));
-        assert_eq!(out.slept.len(), 0, "no wait for a capture that cannot happen");
+        assert_eq!(
+            out.slept.len(),
+            0,
+            "no wait for a capture that cannot happen"
+        );
         assert_eq!(out.calls, 0);
         assert!(!dir.path().join("x.png").exists());
     }

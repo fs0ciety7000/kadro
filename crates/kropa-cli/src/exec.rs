@@ -518,7 +518,14 @@ mod tests {
         assert!(COMMIT.is_none_or(is_commit), "{COMMIT:?}");
         assert!(is_commit("0123456789ab"));
         assert!(is_commit("0123456789ab-dirty"));
-        for bad in ["", "0123456789a", "0123456789abc", "0123456789AB", "0123456789ag", "0123456789ab-dirt"] {
+        for bad in [
+            "",
+            "0123456789a",
+            "0123456789abc",
+            "0123456789AB",
+            "0123456789ag",
+            "0123456789ab-dirt",
+        ] {
             assert!(!is_commit(bad), "{bad}");
         }
     }
@@ -542,7 +549,10 @@ mod tests {
             ]
         );
         for schema in SCHEMAS {
-            assert!(schema.starts_with("kropa.") && schema.ends_with("/1"), "{schema}");
+            assert!(
+                schema.starts_with("kropa.") && schema.ends_with("/1"),
+                "{schema}"
+            );
         }
     }
 }

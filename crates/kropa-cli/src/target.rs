@@ -239,7 +239,13 @@ mod tests {
     #[test]
     fn an_explicit_file_name_is_only_refused_when_it_cannot_name_a_file() {
         let dir = tempfile::tempdir().unwrap();
-        for name in [".hidden.png", "a:b.png", "x y .png", "é\u{202E}.png", "..png"] {
+        for name in [
+            ".hidden.png",
+            "a:b.png",
+            "x y .png",
+            "é\u{202E}.png",
+            "..png",
+        ] {
             let file = dir.path().join(name);
             assert_eq!(
                 resolve(&spec(Some(&file), None)).unwrap(),
@@ -248,7 +254,10 @@ mod tests {
             );
         }
         let nul = dir.path().join("a\0b.png");
-        assert_eq!(resolve(&spec(Some(&nul), None)).unwrap_err().code, ExitCode::Usage);
+        assert_eq!(
+            resolve(&spec(Some(&nul), None)).unwrap_err().code,
+            ExitCode::Usage
+        );
     }
 
     #[cfg(unix)]

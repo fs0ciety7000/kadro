@@ -242,7 +242,15 @@ mod tests {
 
     fn two() -> Vec<Screen> {
         vec![
-            screen(1, Some("Built-in Retina Display"), 0.0, 0.0, 1512.0, 982.0, 2.0),
+            screen(
+                1,
+                Some("Built-in Retina Display"),
+                0.0,
+                0.0,
+                1512.0,
+                982.0,
+                2.0,
+            ),
             screen(7, Some("DELL U2720Q"), 1512.0, -200.0, 2560.0, 1440.0, 1.0),
         ]
     }
