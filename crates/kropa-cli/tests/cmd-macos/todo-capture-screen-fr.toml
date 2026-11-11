@@ -4,5 +4,5 @@ status.code = 5
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"
 env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
-fs.cwd = "ctx/empty"
+fs.cwd = "../cmd/ctx/empty"
 fs.sandbox = true

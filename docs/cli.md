@@ -276,7 +276,7 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `upload.status` | `done`, `queued` (lot 4, `job_id` renseigné), `failed`, `skipped` (pas d'envoi demandé). `upload` vaut `null` avec `--no-upload`. |
 | `clipboard.status` | `copied`, `pending` (notification « Lien prêt, Copier » en attente d'un clic), `unavailable`, `failed`, `skipped`. |
 | `error` | `null` ou `{ "code": "security_refused", "reason": "origin_not_allowed", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
-| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. |
+| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). La clé `reason` est toujours présente (`null` sans sous-cause). |
 | `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
 `deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
@@ -332,6 +332,8 @@ le code déjà rendu.
    (`--output-dir`, `--file`) pour éviter les ambiguïtés de chemins sans extension ?
 3. **Isolation d'un écran sur GNOME** : le portail Screenshot ne rend que l'ensemble des écrans ; le découpage exige
    la géométrie des écrans (non vérifiée sans `DisplayConfig` de Mutter). Sinon, code 5 sous GNOME ?
+   *Lot 1.4 : avec le portail (GNOME, KDE, wlroots), `capture output` rend le code 5 `output_not_isolable`, sans boîte de
+   dialogue ni attente, et renvoie vers `capture screen`. À rouvrir avec la géométrie des écrans (lot 2.5).*
 4. **`secrets unlock` avant le lot 4.7** : sans session du coffre dans le résident, `unlock` au lot 2.8 ne vaut que
    pour le `kropa-app` lancé ; faut-il le livrer seulement au lot 4.7 et se contenter de `--password-fd` au lot 2 ?
 5. **Copie servie par un processus fils (lot 1, KDE/wlroots)** : acceptable avant le démon, ou copie reportée au

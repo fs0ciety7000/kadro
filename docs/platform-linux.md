@@ -249,6 +249,33 @@ complets (ScreenShot2, layer-shell, evdev). AppImage en dernier recours, avec mo
    plus de session X11 ?
 9. Hyprland : capture de fenêtre par son protocole propre ou attendre ext-image-copy-capture ? Non vérifié.
 
+## 9. État de l'implémentation (lot 1.4, `kropa capture screen|output`, `kropa doctor`)
+
+> Ajout du 11/11/2026, lot 1.4. Ce qui est livré, ce qui est vérifié et ce qui reste à essayer sur un vrai bureau
+> (`docs/testing/manual-linux.md`).
+
+- **Moteur** : portail `org.freedesktop.portal.Screenshot` via `ashpd` 0.14.0 (zbus, runtime `async-io`, **sans tokio**),
+  requête **non interactive** (`interactive=false`). Le portail décide : GNOME demande l'autorisation la première fois puis
+  la mémorise ; le comportement de KDE n'est pas vérifié (question 2).
+- **Identité** : `data/io.github.fs0ciety7000.Kropa.desktop` (installé par `scripts/dev-install.sh`) et enregistrement
+  de l'identifiant auprès de l'interface hôte `org.freedesktop.host.portal.Registry` avant chaque requête. Un portail sans
+  Registry (xdg-desktop-portal < 1.19) n'est pas une erreur : la capture continue, `kropa -v` le dit, et la permission
+  n'est alors peut-être pas rattachée à l'identifiant.
+- **Écran isolé** : impossible avec le portail seul (une image de tout le bureau) : `capture output` rend le code 5,
+  raison `output_not_isolable`, avant toute attente. Aucun découpage n'est tenté.
+- **Réponses du portail** : réponse 1 (fermée) et 2 (autre, ce que GNOME et KDE rendent après un refus) et l'erreur D-Bus
+  `NotAllowed` donnent le code 4 (`portal_dismissed`, `portal_declined`, `portal_not_allowed`). La réponse 2 est
+  indiscernable d'un échec du module de portail : le message le dit. Portail absent, interface absente, bus de session
+  injoignable : code 10 (`portal_unavailable`, `no_session_bus`).
+- **Image** : l'URI `file://` rendue par le portail est lue, vérifiée (structure et sommes de contrôle PNG), puis réécrite
+  **sans métadonnées** (texte, EXIF, date, résolution) en gardant les blocs qui changent les couleurs ; la copie du portail
+  est supprimée si elle est dans le dossier temporaire, laissée ailleurs. Format : PNG seul ; `jpeg` et `webp` rendent le
+  code 5 (`image_format_unsupported`) avant toute capture.
+- **Détection** : par capacités (bus de session, version de chaque interface de portail, cibles de la version 3,
+  présence de KWin sur le bus, fichier `.desktop`). `XDG_CURRENT_DESKTOP` est affiché, jamais utilisé pour choisir.
+  `layer-shell` et `data-control` ne sont pas encore sondés (`not_probed` dans `kropa doctor --json`) : il faut une
+  connexion Wayland (lots 1.10 et 2.5).
+
 ## Sources
 
 1. https://linuxiac.com/gnome-50-ends-the-x11-era-after-decades/ · https://fedoraproject.org/wiki/Changes/WaylandOnlyGNOME

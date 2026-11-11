@@ -1,5 +1,5 @@
 bin.name = "kropa"
-args = ["--lang", "en", "capture", "screen", "--copy", "image", "--output", "."]
+args = ["--lang", "en", "capture", "area", "--copy", "image", "--output", "."]
 status.code = 5
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"

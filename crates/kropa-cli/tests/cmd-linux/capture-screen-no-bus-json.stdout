@@ -1,0 +1,1 @@
+{"schema":"kropa.capture/1","status":"error","exit_code":10,"error":{"code":"capture_failed","reason":"no_session_bus","message":"No graphical session to capture: the D-Bus session bus is not reachable. Run kropa from a terminal inside your desktop session.","step":"capture"}}

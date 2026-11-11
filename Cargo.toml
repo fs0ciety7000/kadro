@@ -24,6 +24,7 @@ thiserror = "2.0.21"
 toml = "1.2.1"
 trycmd = "1.2.1"
 unic-langid = "0.9.6"
+zbus = { version = "6.2.1", default-features = false }
 kropa-core = { path = "crates/kropa-core", version = "0.0.1" }
 kropa-doc = { path = "crates/kropa-doc", version = "0.0.1" }
 kropa-render = { path = "crates/kropa-render", version = "0.0.1" }

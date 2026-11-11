@@ -61,6 +61,8 @@ pub enum FactValue {
     Bool(bool),
     /// Looked for and not found.
     Absent,
+    /// Could not be looked for: the session bus is not reachable.
+    Unreachable,
     /// Not looked for: the probe is not written yet.
     NotProbed,
 }

@@ -1,0 +1,39 @@
+Kropa diagnostic
+
+System
+  linux ([..]), kropa [..]
+
+Capabilities
+  capture screen: unavailable
+    Why: no D-Bus session bus: run kropa inside a graphical session
+  capture output: unavailable
+    Why: the portal returns all screens as one image
+
+Details
+  Desktop (information only, never used to choose a backend): not found
+  Session type: not found
+  WAYLAND_DISPLAY set: no
+  DISPLAY set: no
+  D-Bus session bus reachable: no
+  Session bus error: failed to connect to `unix:path=/nonexistent-kropa-bus`: No such file or directory (os error 2)
+  Screenshot portal, interface version: not checked: no session bus
+  Screenshot portal targets: not checked: no session bus
+  ScreenCast portal, interface version: not checked: no session bus
+  GlobalShortcuts portal, interface version: not checked: no session bus
+  Secret portal, interface version: not checked: no session bus
+  Host application registry, interface version: not checked: no session bus
+  KWin on the session bus (its ScreenShot2 interface is not used): not checked: no session bus
+  Application ID: io.github.fs0ciety7000.Kropa
+  Desktop file of the application ID installed (scripts/dev-install.sh): no
+  Wayland layer-shell: not checked yet
+  Wayland data-control (clipboard): not checked yet
+
+Paths
+  Configuration file: /nonexistent-kropa-home/.config/kropa/config.toml
+  Captures folder: /nonexistent-kropa-home/Images/Kropa
+
+Not available yet
+  Secret store: lot 1.8
+  kropa-app socket and version: lot 2.1
+  Clipboard: lot 1.10
+  Screens and their names: lot 2.5

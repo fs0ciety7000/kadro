@@ -75,7 +75,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [x] 1.2 `kropa-i18n` : Fluent branché sur la CLI. Agent : `backend-dev`. Fin : `LANG=fr` / `LANG=en` distincts.
 - [x] 1.3 CLI clap conforme à `docs/cli.md`. Agent : `backend-dev`. Fin : fixtures `trycmd` vertes.
 - [ ] 1.3b Corrections de la revue de code 1.1-1.3 (`docs/reviews/2026-11-11-lot1-1.1-1.3.md` : 1 bloquant, 6 importants). Agent : `backend-dev`. Après 1.4 (mêmes fichiers).
-- [ ] 1.4 Capture Linux : trait de capacités, portail Screenshot (`screen`, `output`), `kropa doctor`, `.desktop` + Registry (`scripts/dev-install.sh`). Agent : `linux-desktop-dev`. Fin : test sur portail factice en CI ; refus du portail = code d'erreur dédié.
+- [x] 1.4 (automatique : portail factice D-Bus ; essai réel GNOME/KDE en 1.12) Capture Linux : trait de capacités, portail Screenshot (`screen`, `output`), `kropa doctor`, `.desktop` + Registry (`scripts/dev-install.sh`). Agent : `linux-desktop-dev`. Fin : test sur portail factice en CI ; refus du portail = code d'erreur dédié.
 - [ ] 1.5 Capture macOS : `SCScreenshotManager`, TCC, `.app` minimal. Agent : `macos-desktop-dev`. Fin : `.app` construit en CI ; capture réussie sur le Mac.
 - [ ] 1.6 **[Utilisateur]** Certificat auto-signé (20 ans, sauvegarde `age` hors ligne) ; vérifier que la permission survit à deux builds. Fin : résultat dans `decisions.md`.
 - [ ] 1.7 `kropa-upload` : client HTTP unique, destinations TOML (gabarits, JSONPath, redirections même origine, HTTPS obligatoire avec secret, réponse ≤ 1 Mio), préréglage Zipline, import `.sxcu`. Agent : `backend-dev`. Fin : tests `wiremock` + `insta` verts.

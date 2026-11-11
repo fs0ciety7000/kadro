@@ -191,9 +191,9 @@ pub(crate) async fn diagnose(connection: Option<&Connection>) -> Diagnosis {
                 "session_bus_error",
                 FactValue::Text(e.to_string()),
             ));
-            facts.push(Fact::new("portal_screenshot", FactValue::NotProbed));
+            facts.push(Fact::new("portal_screenshot", FactValue::Unreachable));
             for key in portal_keys {
-                facts.push(Fact::new(key, FactValue::NotProbed));
+                facts.push(Fact::new(key, FactValue::Unreachable));
             }
             false
         }

@@ -241,6 +241,7 @@ doctor-value-yes = yes
 doctor-value-no = no
 doctor-value-absent = not found
 doctor-value-not-probed = not checked yet
+doctor-value-unreachable = not checked: no session bus
 doctor-fact-desktop = Desktop (information only, never used to choose a backend)
 doctor-fact-session-type = Session type
 doctor-fact-wayland-display = WAYLAND_DISPLAY set

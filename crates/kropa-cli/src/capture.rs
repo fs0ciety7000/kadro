@@ -319,14 +319,14 @@ mod tests {
     use std::time::Duration;
 
     use kropa_capture::{
-        BackendId, Capabilities, Capability, CaptureBackend, CaptureError, CaptureMode,
-        CaptureRequest, CapturedImage, Denial, Diagnosis, Failure, ImageFormat, Status,
-        Unsupported,
+        ALL_ERROR_REASONS, ALL_NOTES, BackendId, Capabilities, Capability, CaptureBackend,
+        CaptureError, CaptureMode, CaptureRequest, CapturedImage, Denial, Diagnosis, Failure,
+        ImageFormat, Status, Unsupported,
     };
     use kropa_core::{Config, ExitCode, FixedClock};
     use kropa_i18n::{Lang, Localizer};
 
-    use super::{Job, run, write_file};
+    use super::{Job, error_id, note_id, run, write_file};
     use crate::args::CaptureOpts;
     use crate::exec::Context;
     use crate::output::{Io, Session};
@@ -541,7 +541,7 @@ mod tests {
             "{}",
             err.message
         );
-        assert!(out.slept.is_empty());
+        assert_eq!(out.slept.len(), 0);
         assert_eq!(out.calls, 0);
         assert!(!dir.path().join("o.png").exists());
     }
@@ -621,7 +621,7 @@ mod tests {
             &[],
             false,
         );
-        assert!(none.slept.is_empty());
+        assert_eq!(none.slept.len(), 0);
     }
 
     #[test]
@@ -692,5 +692,20 @@ mod tests {
         let err = write_file(&blocker.join("child.png"), b"x", false, &loc).unwrap_err();
         assert_eq!(err.code, ExitCode::Io);
         assert_eq!(err.step, Some("save"));
+    }
+
+    #[test]
+    fn every_reason_and_note_has_a_message_in_both_languages() {
+        for lang in Lang::ALL {
+            let loc = Localizer::new(lang).unwrap();
+            for reason in ALL_ERROR_REASONS {
+                let id = error_id(reason);
+                assert_ne!(loc.message(&id), id, "{lang:?}: {id}");
+            }
+            for note in ALL_NOTES {
+                let id = note_id(note);
+                assert_ne!(loc.message(&id), id, "{lang:?}: {id}");
+            }
+        }
     }
 }

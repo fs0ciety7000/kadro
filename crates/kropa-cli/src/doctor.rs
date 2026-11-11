@@ -69,6 +69,7 @@ fn fact_json(fact: &Fact) -> Value {
         FactValue::Number(n) => ("present", json!(n)),
         FactValue::Bool(b) => ("present", json!(b)),
         FactValue::Absent => ("absent", Value::Null),
+        FactValue::Unreachable => ("unreachable", Value::Null),
         FactValue::NotProbed => ("not_probed", Value::Null),
     };
     json!({ "key": fact.key, "state": state, "value": value })
@@ -122,6 +123,7 @@ fn fact_value_text(value: &FactValue, loc: &Localizer) -> String {
         FactValue::Bool(true) => loc.message("doctor-value-yes"),
         FactValue::Bool(false) => loc.message("doctor-value-no"),
         FactValue::Absent => loc.message("doctor-value-absent"),
+        FactValue::Unreachable => loc.message("doctor-value-unreachable"),
         FactValue::NotProbed => loc.message("doctor-value-not-probed"),
     }
 }
@@ -222,4 +224,139 @@ pub fn run(
         render(&diagnosis, &paths, ctx.loc, session);
     }
     ExitCode::Ok
+}
+
+#[cfg(test)]
+mod tests {
+    use kropa_capture::{
+        ALL_FACT_KEYS, ALL_FALLBACKS, ALL_FEATURES, ALL_REASONS, Capabilities, Capability,
+        Diagnosis, Fact, FactValue, Status,
+    };
+    use kropa_i18n::{Lang, Localizer};
+
+    use super::{PENDING, Paths, document, fluent_id, render};
+    use crate::output::{Io, Session};
+
+    fn diagnosis() -> Diagnosis {
+        Diagnosis {
+            platform: "linux",
+            backend: "portal-screenshot",
+            capabilities: Capabilities {
+                screen: Capability {
+                    feature: "capture_screen",
+                    status: Status::Available,
+                    reason: None,
+                    fallback: None,
+                },
+                output: Capability {
+                    feature: "capture_output",
+                    status: Status::Unavailable,
+                    reason: Some("output_not_isolable"),
+                    fallback: Some("capture_screen_instead"),
+                },
+            },
+            facts: vec![
+                Fact::new("desktop", FactValue::Text("KDE".into())),
+                Fact::new("portal_screenshot", FactValue::Number(2)),
+                Fact::new("wayland_display", FactValue::Bool(true)),
+                Fact::new("portal_secret", FactValue::Absent),
+                Fact::new("kwin_service", FactValue::Unreachable),
+                Fact::new("layer_shell", FactValue::NotProbed),
+            ],
+        }
+    }
+
+    fn paths() -> Paths {
+        Paths {
+            config_file: Some("/c/config.toml".into()),
+            config_error: Some("bad".into()),
+            captures_dir: None,
+        }
+    }
+
+    #[test]
+    fn json_keeps_the_state_of_each_fact_apart() {
+        let doc = document(&diagnosis(), &paths());
+        let states: Vec<_> = doc["facts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["state"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(
+            states,
+            [
+                "present",
+                "present",
+                "present",
+                "absent",
+                "unreachable",
+                "not_probed"
+            ]
+        );
+        assert_eq!(doc["facts"][1]["value"], 2);
+        assert_eq!(doc["fallbacks"][0], "capture_screen_instead");
+        assert_eq!(doc["paths"]["config_error"], "bad");
+        assert!(doc["paths"]["captures_dir"].is_null());
+        assert_eq!(
+            doc["not_available_yet"].as_array().unwrap().len(),
+            PENDING.len()
+        );
+    }
+
+    #[test]
+    fn human_report_has_every_section_in_both_languages() {
+        for (lang, title, available) in [
+            (Lang::En, "Kropa diagnostic", "available"),
+            (Lang::Fr, "Diagnostic de Kropa", "disponible"),
+        ] {
+            let loc = Localizer::new(lang).unwrap();
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            {
+                let mut io = Io {
+                    out: &mut out,
+                    err: &mut err,
+                    stdin_is_tty: false,
+                };
+                let mut session = Session::new(&mut io, false, false, 0, false);
+                render(&diagnosis(), &paths(), &loc, &mut session);
+            }
+            let text = String::from_utf8(out).unwrap();
+            assert!(text.starts_with(title), "{text}");
+            assert!(text.contains(available), "{text}");
+            assert!(text.contains("KDE"), "{text}");
+            assert!(text.contains("/c/config.toml"), "{text}");
+            assert!(text.contains("bad"), "{text}");
+            assert_eq!(err.len(), 0);
+            // A message id on screen would mean a missing translation.
+            assert!(!text.contains("doctor-"), "{text}");
+        }
+    }
+
+    #[test]
+    fn every_code_the_backend_can_emit_has_a_message_in_both_languages() {
+        let ids: Vec<String> = ALL_FACT_KEYS
+            .iter()
+            .map(|k| fluent_id("doctor-fact", k))
+            .chain(ALL_FEATURES.iter().map(|k| fluent_id("doctor-feature", k)))
+            .chain(ALL_REASONS.iter().map(|k| fluent_id("doctor-reason", k)))
+            .chain(
+                ALL_FALLBACKS
+                    .iter()
+                    .map(|k| fluent_id("doctor-fallback", k)),
+            )
+            .chain(
+                ["available", "degraded", "unavailable"]
+                    .iter()
+                    .map(|k| format!("doctor-status-{k}")),
+            )
+            .chain(PENDING.iter().map(|(_, _, id)| (*id).to_owned()))
+            .collect();
+        for lang in Lang::ALL {
+            let loc = Localizer::new(lang).unwrap();
+            for id in &ids {
+                assert_ne!(&loc.message(id), id, "{lang:?}: {id}");
+            }
+        }
+    }
 }

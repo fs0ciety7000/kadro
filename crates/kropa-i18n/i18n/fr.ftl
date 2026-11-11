@@ -241,6 +241,7 @@ doctor-value-yes = oui
 doctor-value-no = non
 doctor-value-absent = introuvable
 doctor-value-not-probed = pas encore vérifié
+doctor-value-unreachable = non vérifié : pas de bus de session
 doctor-fact-desktop = Bureau (à titre indicatif, jamais utilisé pour choisir un moteur)
 doctor-fact-session-type = Type de session
 doctor-fact-wayland-display = WAYLAND_DISPLAY défini

@@ -1,8 +1,8 @@
 bin.name = "kropa"
-args = ["--lang", "en", "doctor"]
+args = ["--lang", "en", "capture", "output", "DP-1", "--output", "."]
 status.code = 5
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"
 env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
-fs.cwd = "ctx/empty"
+fs.cwd = "../cmd/ctx/empty"
 fs.sandbox = true

@@ -1,0 +1,11 @@
+bin.name = "kropa"
+args = ["--lang", "en", "capture", "screen", "--output", "."]
+status.code = 10
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
+env.add.XDG_DATA_DIRS = "/nonexistent-kropa-data"
+# Never reach a real session bus, whatever machine runs the test.
+env.add.DBUS_SESSION_BUS_ADDRESS = "unix:path=/nonexistent-kropa-bus"
+fs.cwd = "../cmd/ctx/empty"
+fs.sandbox = true

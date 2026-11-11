@@ -4,5 +4,8 @@ status.code = 5
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"
 env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
-fs.cwd = "ctx/empty"
+env.add.XDG_DATA_DIRS = "/nonexistent-kropa-data"
+# Never reach a real session bus, whatever machine runs the test.
+env.add.DBUS_SESSION_BUS_ADDRESS = "unix:path=/nonexistent-kropa-bus"
+fs.cwd = "../cmd/ctx/empty"
 fs.sandbox = true

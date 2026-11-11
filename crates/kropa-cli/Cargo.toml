@@ -29,5 +29,10 @@ serde_json.workspace = true
 tempfile.workspace = true
 trycmd.workspace = true
 
+# The fake screenshot portal of `tests/portal.rs`: a D-Bus service on a private bus.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+kropa-capture = { workspace = true, features = ["test-support"] }
+zbus = { workspace = true, features = ["default-rt", "service", "proxy"] }
+
 [lints]
 workspace = true

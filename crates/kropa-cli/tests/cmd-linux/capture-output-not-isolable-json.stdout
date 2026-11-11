@@ -1,0 +1,1 @@
+{"schema":"kropa.capture/1","status":"error","exit_code":5,"error":{"code":"unsupported","reason":"output_not_isolable","message":"The screenshot portal returns all screens as one image and cannot isolate one screen. Use 'kropa capture screen' instead.","step":"capture"}}
