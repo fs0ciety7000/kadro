@@ -784,11 +784,8 @@ mod tests {
 
     #[test]
     fn presign_is_at_most_seven_days() {
-        assert_eq!(parse_presign("30m").unwrap(), Duration::from_secs(1800));
-        assert_eq!(
-            parse_presign("7d").unwrap(),
-            Duration::from_secs(7 * 86_400)
-        );
+        assert_eq!(parse_presign("30m").unwrap(), Duration::from_mins(30));
+        assert_eq!(parse_presign("7d").unwrap(), Duration::from_hours(168));
         for bad in ["8d", "169h", "0s", "d", "10", "1.5h", "-1h", ""] {
             assert!(parse_presign(bad).is_err(), "{bad}");
         }

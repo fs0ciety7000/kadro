@@ -195,7 +195,7 @@ mod tests {
         let cmd = build_command(&loc, ColorChoice::Never);
         let mut paths = Vec::new();
         walk(&cmd, &mut Vec::new(), &mut |_, path| {
-            paths.push(path.to_vec())
+            paths.push(path.to_vec());
         });
         assert!(paths.len() > 25, "{}", paths.len());
         for path in paths {

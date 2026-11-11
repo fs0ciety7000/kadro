@@ -235,7 +235,7 @@ mod tests {
     fn version_json_is_one_object() {
         let r = run(&["kropa", "version", "--json"], false);
         assert_eq!(r.code, ExitCode::Ok);
-        assert!(r.err.is_empty());
+        assert_eq!(r.err, "");
         let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
         assert_eq!(r.out.lines().count(), 1);
         assert_eq!(v["schema"], "kropa.version/1");
@@ -252,7 +252,7 @@ mod tests {
             false,
         );
         assert_eq!(r.code, ExitCode::Usage);
-        assert!(r.out.is_empty());
+        assert_eq!(r.out, "");
         assert!(r.err.contains("valeur invalide '99'"), "{}", r.err);
         assert!(r.err.contains("--help"), "{}", r.err);
         let r = run(&["kropa", "--lang", "fr", "capture", "--bogus"], false);
@@ -277,7 +277,7 @@ mod tests {
     fn unsupported_commands_say_so() {
         let r = run(&["kropa", "--lang", "en", "queue", "list"], false);
         assert_eq!(r.code, ExitCode::Unsupported);
-        assert!(r.out.is_empty());
+        assert_eq!(r.out, "");
         assert!(r.err.contains("lot 4.5"), "{}", r.err);
     }
 

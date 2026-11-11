@@ -279,8 +279,8 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. |
 | `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
-`deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux. `error.message`
-et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
+`deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
+`error.message` et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
 Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.queue.list/1`,
 `kropa.history.list/1`, `kropa.doctor/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
 `trycmd` du lot 1.3 et dans la référence CLI du lot 5.6.
