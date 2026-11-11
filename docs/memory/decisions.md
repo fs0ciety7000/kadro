@@ -11,3 +11,6 @@
   Cargo ne conditionne pas un binaire par OS ; deux binaires `kropa-app` dans le workspace entrent en collision.
 - **2026-11-11** — Langue : précédence `--lang` > `language` de la config > `LC_ALL`/`LC_MESSAGES`/`LANG` > `en`.
   Raison : un réglage explicite de l'utilisateur prime sur l'environnement (revue de code 1.1-1.3, point 7).
+- **2026-11-11** — Capture macOS via `objc2-screen-capture-kit` 0.3.2 (et crates `objc2-*`), pas la crate
+  `screencapturekit` préférée par `architecture.md` : son `build.rs` compile un pont Swift, exclu sans décision
+  validée. `unsafe` confiné à `kropa-capture/src/macos/`.
