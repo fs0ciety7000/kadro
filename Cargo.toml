@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.95"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/fs0ciety7000/kropa"
+
+[workspace.dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+kropa-core = { path = "crates/kropa-core", version = "0.0.1" }
+kropa-doc = { path = "crates/kropa-doc", version = "0.0.1" }
+kropa-render = { path = "crates/kropa-render", version = "0.0.1" }
+kropa-capture = { path = "crates/kropa-capture", version = "0.0.1" }
+kropa-upload = { path = "crates/kropa-upload", version = "0.0.1" }
+kropa-store = { path = "crates/kropa-store", version = "0.0.1" }
+kropa-i18n = { path = "crates/kropa-i18n", version = "0.0.1" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
