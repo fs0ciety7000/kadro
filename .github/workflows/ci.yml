@@ -77,7 +77,7 @@ jobs:
           KROPA_REQUIRE_KEYRING_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
           # Linux: sway, weston and wl-paste play the compositors of the clipboard tests (lot 1.10).
           KROPA_REQUIRE_WAYLAND_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
-        run: cargo nextest run --workspace --locked
+        run: cargo nextest run --profile ci --workspace --locked
       - name: Doctests
         run: cargo test --doc --workspace --locked
       # The memory-dump protection is wired in `main` for release builds only: run the release binary.
@@ -86,7 +86,7 @@ jobs:
         run: |
           cargo build --release -p kropa --locked
           KROPA_RELEASE_BIN="$PWD/target/release/kropa" \
-            cargo nextest run -p kropa --locked --test release_hardening --no-tests=fail
+            cargo nextest run --profile ci -p kropa --locked --test release_hardening --no-tests=fail
       # Kropa.app: the command line inside a bundle, universal, ad hoc signed (no certificate and no
       # Screen Recording permission on a runner: only the build and the layout are checked here).
       - name: Add the second macOS architecture

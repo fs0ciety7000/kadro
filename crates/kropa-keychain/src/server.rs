@@ -128,8 +128,13 @@ pub fn serve_admitted(
     drop(reply);
     stream.write_all(&bytes).map_err(|e| io_refusal(&e))?;
     stream.flush().map_err(|e| io_refusal(&e))?;
-    // Both directions are over: the client reads to the end of file.
-    let _ = stream.shutdown(std::net::Shutdown::Both);
+    // The reply is over: the client reads to the end of file, so the writing end is closed here and
+    // not left to the caller dropping `stream`. Only the writing end: the reading end is already at
+    // its end of file (the request was read to it), and macOS answers `ENOTCONN` to a `shutdown` of a
+    // direction that is already shut, *without* shutting the other one (`Both` then leaves the client
+    // waiting for an end of file that never comes). An error is of no use to anyone here: the client
+    // is gone, or it will see the end of file when the broker ends.
+    let _ = stream.shutdown(std::net::Shutdown::Write);
     Ok(())
 }
 
@@ -179,7 +184,12 @@ mod tests {
     use crate::item::{Failure, FailureKind, ItemStore};
     use crate::memory::MemoryItemStore;
     use crate::wire::{Envelope, Reply, Request, WriteMode, decode_reply, encode_request};
+    use std::time::Duration;
     use zeroize::Zeroizing;
+
+    /// A client that waits for the end of file longer than this has found a bug: the test fails
+    /// instead of hanging.
+    const READ_TIMEOUT: Duration = Duration::from_secs(20);
 
     /// Facts of a launch that passes; `parents` is what `getppid` says on each call.
     struct Facts {
@@ -245,6 +255,7 @@ mod tests {
         let bytes = request_bytes.to_vec();
         let thread = std::thread::spawn(move || {
             let mut client = client;
+            client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
             // The broker may stop reading a request it has already refused: a write that fails then
             // is the broker's business, not the test's.
             let _ = client.write_all(&bytes);
@@ -375,6 +386,7 @@ mod tests {
         // The server end is already closed: macOS answers ENOTCONN here, Linux does not.
         let _ = client.shutdown(std::net::Shutdown::Write);
         let mut client = client;
+        client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
         client.read_to_end(&mut reply).unwrap();
         assert!(reply.is_empty());
     }
@@ -438,6 +450,7 @@ mod tests {
     fn serve_admitted_answers_a_request_over_any_connected_pair() {
         let store = MemoryItemStore::new();
         let (mut client, mut server) = UnixStream::pair().unwrap();
+        client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
         client.write_all(&line(Request::Status)).unwrap();
         client.shutdown(std::net::Shutdown::Write).unwrap();
         serve_admitted(
@@ -447,8 +460,12 @@ mod tests {
             &store,
         )
         .unwrap();
+        // `server` is still open here, as for any caller that keeps its end: the end of file must
+        // come from `serve_admitted` itself.
         let mut reply = Vec::new();
-        client.read_to_end(&mut reply).unwrap();
+        client
+            .read_to_end(&mut reply)
+            .expect("the end of file of the reply never came (the writing end was not closed)");
         assert!(matches!(decode_reply(&reply).unwrap(), Reply::Names(_)));
     }
 }

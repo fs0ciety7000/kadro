@@ -1,0 +1,13 @@
+# cargo-nextest profiles. `default` is what `cargo nextest run` uses; the CI uses `ci`.
+#
+# A test that blocks (a socket that never reaches its end of file, a process that never ends) must
+# fail in minutes, not eat the 20 minutes of a job: a test slower than 60 s is terminated after
+# two periods, so after 2 minutes.
+
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[profile.ci]
+slow-timeout = { period = "60s", terminate-after = 2 }
+# Every failure of a run, not only the first one: a Mac is not at hand to run again.
+fail-fast = false

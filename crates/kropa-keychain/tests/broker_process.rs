@@ -124,23 +124,38 @@ fn folder_of_the_parent() -> PathBuf {
     ))
 }
 
-/// How this process was started, as `spawn_with_channel` promises.
+/// Variables the system itself puts in the environment of a process, whatever its parent passed:
+/// CoreFoundation (loaded with Security.framework) sets `__CF_USER_TEXT_ENCODING` when it starts.
+/// `spawn_with_channel` clears the environment; it cannot stop the child's own libraries.
+fn added_by_the_system(name: &std::ffi::OsStr) -> bool {
+    cfg!(target_os = "macos") && name == "__CF_USER_TEXT_ENCODING"
+}
+
+/// How this process was started, as `spawn_with_channel` promises. What is wrong is said with what
+/// was found (names of variables, never values).
 fn problems_with_the_start() -> Vec<String> {
     let mut problems = Vec::new();
-    if std::env::vars_os().count() != 0 {
-        problems.push("the environment is not empty".to_owned());
+    let names: Vec<String> = std::env::vars_os()
+        .map(|(name, _)| name)
+        .filter(|name| !added_by_the_system(name))
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect();
+    if !names.is_empty() {
+        problems.push(format!("the environment is not empty: {names:?}"));
     }
-    if std::env::current_dir().ok() != Some(PathBuf::from("/")) {
-        problems.push("the working directory is not /".to_owned());
+    let cwd = std::env::current_dir();
+    if cwd.as_deref().ok() != Some(std::path::Path::new("/")) {
+        problems.push(format!("the working directory is not /: {cwd:?}"));
     }
     let null = fs::metadata("/dev/null").unwrap().rdev();
     let stdin = std::io::stdin().as_fd().try_clone_to_owned().unwrap();
     let stdin_rdev = fs::File::from(stdin).metadata().unwrap().rdev();
     if stdin_rdev != null {
-        problems.push("fd 0 is not /dev/null".to_owned());
+        problems.push(format!("fd 0 is not /dev/null ({stdin_rdev} for {null})"));
     }
-    if SystemFacts.channel() != ChannelState::Connected {
-        problems.push("fd 3 is not a connected socket".to_owned());
+    let channel = SystemFacts.channel();
+    if channel != ChannelState::Connected {
+        problems.push(format!("fd 3 is not a connected socket: {channel:?}"));
     }
     problems
 }
@@ -199,6 +214,13 @@ impl Folder {
     }
 }
 
+impl Folder {
+    /// What the child said was wrong with its start (empty when nothing).
+    fn problems(&self) -> String {
+        fs::read_to_string(self.0.join("problems")).unwrap_or_default()
+    }
+}
+
 impl Drop for Folder {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
@@ -209,7 +231,14 @@ impl Drop for Folder {
 fn a_broker_started_by_the_client_is_started_as_the_specification_says_and_serves_a_round_trip() {
     let folder = Folder::new();
     let client = client_of("child_broker", Duration::from_secs(30));
-    client.create("zipline", "token", b"{\"v\":2}").unwrap();
+    client
+        .create("zipline", "token", b"{\"v\":2}")
+        .unwrap_or_else(|e| {
+            panic!(
+                "{e:?}\nthe broker found this wrong with its start: {:?}",
+                folder.problems()
+            )
+        });
     let items = client.read("zipline", None).unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(&**items[0].document, b"{\"v\":2}");
@@ -223,8 +252,7 @@ fn a_broker_started_by_the_client_is_started_as_the_specification_says_and_serve
         .unwrap();
     assert!(client.remove("zipline", "token").unwrap());
     assert!(client.list().unwrap().is_empty());
-    let problems = fs::read_to_string(folder.0.join("problems")).unwrap_or_default();
-    assert_eq!(problems, "", "the broker was started wrongly");
+    assert_eq!(folder.problems(), "", "the broker was started wrongly");
 }
 
 #[test]
