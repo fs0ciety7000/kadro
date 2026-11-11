@@ -14,7 +14,8 @@
 //! `tests/cmd/` holds the cases whose result is the same everywhere. What `capture screen|output`
 //! and `doctor` do depends on the platform: `tests/cmd-linux/` has the cases of the portal backend
 //! (they point `DBUS_SESSION_BUS_ADDRESS` at a missing socket so that no real session is ever
-//! reached), `tests/cmd-macos/` those of the platform without a backend yet (lot 1.5).
+//! reached), `tests/cmd-macos/` those of the ScreenCaptureKit backend that hold on a machine without the Screen Recording
+//! permission (the rest is `tests/macos.rs` and the manual check-list `docs/testing/manual-macos.md`).
 
 #[test]
 fn fixtures() {
