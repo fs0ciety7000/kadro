@@ -144,6 +144,16 @@ accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets �
   (aucune invite Keychain, phrase de passe à chaque session du résident). Le chemin direct de `kropa` (CLI) est
   inchangé : il lit l'élément lui-même.
 
+- Mitigations communes : un seul élément ; **modification en place** (le magasin Apple fait recherche puis
+  modification [4], jamais suppression/recréation qui réinitialise l'ACL) ; notes de version qui annoncent l'invite.
+  Jamais d'ajout de `unsigned:` ni de `apple-tool:` (partition de `security(1)` [11]), jamais de
+  `security set-generic-password-partition-list` par Kropa.
+- Invite refusée = `keychain_denied` (code 4), la tâche passe `waiting_unlock`, jamais de repli implicite.
+- **Vérification prévue en 1.6** (Mac de l'utilisateur, macOS 15 et plus si possible 26) : build N signé, secret
+  rangé et lu par `kropa` **et** `kropa-app` ; build N+1 signé du même certificat ; relever le nombre d'invites par
+  binaire, l'effet de « Toujours autoriser », la survie de TCC ; refaire avec le courtier (§ 2.2.1, point 7).
+  Résultat dans `decisions.md`.
+
 #### 2.2.1 Courtier : vérification du demandeur (N3)
 
 C'est le seul canal qui **rend** des valeurs à un autre processus (l'IPC du § 1.2 n'en rend aucune). Lancer
@@ -175,22 +185,15 @@ que le chemin direct impose à un binaire inconnu.
 5. **Ce qui tient la vérification** : `kropa-app` est signé avec le runtime renforcé, sans `get-task-allow` (§ 6) : un
    processus du même utilisateur ne peut ni s'y injecter (`DYLD_*`, `task_for_pid`) ni le déboguer. Sans cela,
    « le pair est `kropa-app` » ne prouverait rien.
-6. **Non vérifié, à prouver sur le Mac de l'utilisateur (1.6, puis test de 1.8)** : `LOCAL_PEERTOKEN` sur une paire
+6. **Mise en œuvre** : `SecCode` par `security-framework` (`os::macos::code_signing`, attribut de jeton d'audit) ;
+   `LOCAL_PEERTOKEN` n'a pas d'enveloppe sûre connue : seule exception à `unsafe_code = "deny"` (§ 6), un bloc
+   `#[allow(unsafe_code)]` local au module du courtier, revu par `security-reviewer`.
+7. **Non vérifié, à prouver sur le Mac de l'utilisateur (1.6, puis test de 1.8)** : `LOCAL_PEERTOKEN` sur une paire
    `socketpair` rend bien le jeton du créateur ; un `exec` après création de la paire fait échouer
-   `SecCodeCopyGuestWithAttributes` avec ce jeton (sinon : `kropa-app` crée la paire et lance le courtier dans le même
-   appel, et le courtier exige en plus `LOCAL_PEERPID == ppid` et un parent dont le binaire est celui du même
-   `Kropa.app`) ; l'exigence avec feuille auto-signée est acceptée par `SecCodeCheckValidity` ; l'invite Keychain
+   `SecCodeCopyGuestWithAttributes` avec ce jeton (sinon, le cas « un processus crée la paire, lance le courtier puis
+   fait `exec` de `kropa-app` » n'est plus couvert et relève du § 7) ; l'exigence avec feuille auto-signée est acceptée par `SecCodeCheckValidity` ; l'invite Keychain
    nomme `kropa` et ne revient qu'une fois par mise à jour ; `kropa __store-broker` lancé depuis Terminal (avec ou sans
    fd 3 forgé) → refus et **aucune** requête à `securityd` (`log stream --predicate 'subsystem == "com.apple.securityd"'`).
-- Mitigations communes : un seul élément ; **modification en place** (le magasin Apple fait recherche puis
-  modification [4], jamais suppression/recréation qui réinitialise l'ACL) ; notes de version qui annoncent l'invite.
-  Jamais d'ajout de `unsigned:` ni de `apple-tool:` (partition de `security(1)` [11]), jamais de
-  `security set-generic-password-partition-list` par Kropa.
-- Invite refusée = `keychain_denied` (code 4), la tâche passe `waiting_unlock`, jamais de repli implicite.
-- **Vérification prévue en 1.6** (Mac de l'utilisateur, macOS 15 et plus si possible 26) : build N signé, secret
-  rangé et lu par `kropa` **et** `kropa-app` ; build N+1 signé du même certificat ; relever le nombre d'invites par
-  binaire, l'effet de « Toujours autoriser », la survie de TCC ; refaire avec le courtier (§ 2.2.1, point 6).
-  Résultat dans `decisions.md`.
 
 ### 2.3 Document stocké (trousseau et coffre)
 
