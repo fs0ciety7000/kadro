@@ -5,14 +5,15 @@
 //! A core file written after a crash, or after Ctrl-\ while a token is being typed, would hand that
 //! token to `systemd-coredump` or `apport`. So at start-up, before any secret is read:
 //!
-//! - Linux: `setrlimit(RLIMIT_CORE, 0)` and `prctl(PR_SET_DUMPABLE, 0)`. The second one also refuses
-//!   `ptrace` and `/proc/<pid>/mem` to the same user without root.
-//! - macOS: `setrlimit(RLIMIT_CORE, 0)` only. There is no `PR_SET_DUMPABLE`; `PT_DENY_ATTACH` needs
-//!   a raw `ptrace` call (`unsafe`, outside the modules where `AGENTS.md` allows it), and the hardened
-//!   runtime of the signed `.app` already refuses debuggers (section 6).
+//! `setrlimit(RLIMIT_CORE, 0)` on Linux and macOS, soft and hard value, so the process cannot raise it
+//! back; children inherit it. It is a plain system call through `rustix`: no `unsafe` here.
 //!
-//! Both calls are plain system calls through `rustix`: no `unsafe` here. The limit is lowered for the
-//! soft and the hard value, so the process cannot raise it back.
+//! There is deliberately no `prctl(PR_SET_DUMPABLE, 0)` in the CLI: `xdg-desktop-portal` reads
+//! `/proc/<pid>/root` of its caller to identify it, and a non-dumpable process makes it unreadable
+//! (EACCES), which would break the capture through the portal. Protection against `ptrace` rests on
+//! the Yama `ptrace_scope` of the system. On macOS `PT_DENY_ATTACH` needs a raw `ptrace` call
+//! (`unsafe`, outside the modules where `AGENTS.md` allows it), and the hardened runtime of the
+//! signed `.app` already refuses debuggers (`docs/security/secrets.md` section 6).
 
 use std::io;
 
@@ -37,8 +38,7 @@ impl std::fmt::Display for HardeningError {
 /// Forbids core dumps for this process. Every step is tried; the first failure is returned.
 ///
 /// # Errors
-/// [`HardeningError`] when a system call is refused (a sandbox that filters `prctl` or
-/// `setrlimit`).
+/// [`HardeningError`] when a system call is refused (a sandbox that filters `setrlimit`).
 pub fn disable_core_dumps() -> Result<(), HardeningError> {
     let mut first: Option<HardeningError> = None;
     let mut record = |step: &'static str, result: io::Result<()>| {
@@ -58,12 +58,6 @@ pub fn disable_core_dumps() -> Result<(), HardeningError> {
         )
         .map_err(io::Error::from),
     );
-    #[cfg(target_os = "linux")]
-    record(
-        "PR_SET_DUMPABLE",
-        rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
-            .map_err(io::Error::from),
-    );
     #[cfg(not(unix))]
     record("core dumps", Ok(()));
     first.map_or(Ok(()), Err)
@@ -82,10 +76,11 @@ mod tests {
         let limit = getrlimit(Resource::Core);
         assert_eq!(limit.current, Some(0));
         assert_eq!(limit.maximum, Some(0));
+        // The process stays dumpable (see the module documentation): the portal must read it.
         #[cfg(target_os = "linux")]
         assert_eq!(
             rustix::process::dumpable_behavior().unwrap(),
-            rustix::process::DumpableBehavior::NotDumpable
+            rustix::process::DumpableBehavior::Dumpable
         );
         // Raising the soft limit above the hard one is refused.
         let raised = rustix::process::setrlimit(
@@ -95,12 +90,27 @@ mod tests {
                 maximum: Some(1 << 20),
             },
         );
-        if rustix::process::getuid().is_root() {
-            // Root may raise it: nothing to prove here.
+        if has_cap_sys_resource() {
+            // Raising a hard limit is allowed to root and to CAP_SYS_RESOURCE: nothing to prove here.
+            eprintln!("skipped: the process may raise a hard limit (root or CAP_SYS_RESOURCE)");
             return;
         }
         assert!(raised.is_err());
         assert_eq!(getrlimit(Resource::Core).maximum, Some(0));
+    }
+
+    /// Whether the process may raise a hard limit: root, or `CAP_SYS_RESOURCE` (bit 24 of `CapEff`).
+    fn has_cap_sys_resource() -> bool {
+        if rustix::process::geteuid().is_root() {
+            return true;
+        }
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                let line = status.lines().find_map(|l| l.strip_prefix("CapEff:"))?;
+                u64::from_str_radix(line.trim(), 16).ok()
+            })
+            .is_some_and(|caps| caps & (1 << 24) != 0)
     }
 
     #[test]

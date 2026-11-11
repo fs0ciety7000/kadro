@@ -23,6 +23,9 @@ pub struct CliError {
     pub lots: Vec<&'static str>,
     /// Machine sub-cause, `error.reason` in JSON (`docs/cli.md` section 4); `None` when there is none.
     pub reason: Option<String>,
+    /// Warnings that go with the failure (already localised), `error.warnings` in JSON when not
+    /// empty: what the command could not undo, for instance.
+    pub warnings: Vec<String>,
 }
 
 impl CliError {
@@ -35,6 +38,7 @@ impl CliError {
             step: None,
             lots: Vec::new(),
             reason: None,
+            warnings: Vec::new(),
         }
     }
 

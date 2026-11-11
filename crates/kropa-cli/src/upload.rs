@@ -130,6 +130,19 @@ pub fn cli_error(err: &UploadError, loc: &Localizer) -> CliError {
     error
 }
 
+/// Like [`cli_error`] for a command that changes the secret store: a keyring that did not answer
+/// may have done the change, which the message says (a read that times out changes nothing).
+#[must_use]
+pub fn cli_error_write(err: &UploadError, loc: &Localizer) -> CliError {
+    let mut error = cli_error(err, loc);
+    if error.reason.as_deref() == Some("keyring_timeout") {
+        let detail = err.to_string();
+        error.message =
+            loc.message_args("error-upload-keyring-timeout-write", &[("detail", &detail)]);
+    }
+    error
+}
+
 /// An upload that was tried: the profile, the name of the file, and what came of it.
 pub struct Delivery {
     /// Profile name.

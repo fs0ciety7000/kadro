@@ -34,7 +34,7 @@ Paths
 
 Secret store
   Store: keyring (unavailable)
-    the Secret Service could not be reached on the session bus
+    Technical detail (not translated): the Secret Service could not be reached on the session bus
   Profiles holding secrets: 0
 
 Not available yet

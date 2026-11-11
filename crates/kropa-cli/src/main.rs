@@ -11,8 +11,21 @@ fn main() -> ExitCode {
     // by an environment variable.
     #[cfg(not(debug_assertions))]
     if let Err(e) = kropa_cli::hardening::disable_core_dumps() {
-        eprintln!("kropa: {e}; refusing to run with memory dumps allowed");
-        return std::process::ExitCode::from(1);
+        // `--lang` is not parsed yet: the language comes from the standard locale variables.
+        let lookup = |name: &str| std::env::var(name).ok();
+        let lang = kropa_i18n::negotiate(None, None, &lookup);
+        let detail = e.source.to_string();
+        let text = kropa_i18n::Localizer::new(lang).map_or_else(
+            |_| format!("{e}; refusing to run with memory dumps allowed"),
+            |loc| {
+                loc.message_args(
+                    "error-hardening-failed",
+                    &[("step", e.step), ("detail", &detail)],
+                )
+            },
+        );
+        eprintln!("kropa: {text}");
+        return ExitCode::from(1);
     }
     let args: Vec<OsString> = std::env::args_os().collect();
     // macOS: `kropa __store-broker` is the Keychain broker that `kropa-app` starts on a socket pair

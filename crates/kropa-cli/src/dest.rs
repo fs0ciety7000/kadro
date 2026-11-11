@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
-use crate::upload::{cli_error, load_one};
+use crate::upload::{cli_error, cli_error_write, load_one};
 
 fn media_names(destination: &Destination) -> Vec<&'static str> {
     destination
@@ -462,18 +462,28 @@ pub fn import_command(
     let mut created: Vec<String> = Vec::new();
     // What cannot be removed is said, with the names (never a value): a silent rollback would leave
     // the entries that block the next import of this identifier without anyone knowing.
-    let rollback = |created: &[String], session: &mut Session<'_, '_>| {
+    let rollback = |created: &[String]| -> Option<String> {
         let left: Vec<String> = created
             .iter()
             .filter(|name| ctx.secrets.remove(&id, name).is_err())
             .cloned()
             .collect();
-        if !left.is_empty() {
-            session.note(&loc.message_args(
+        (!left.is_empty()).then(|| {
+            loc.message_args(
                 "note-import-rollback-left",
                 &[("id", &id), ("names", &left.join(", "))],
-            ));
+            )
+        })
+    };
+    // These warnings are needed to act (what may be stored, what was left): `--quiet` keeps them and
+    // `--json` carries them in `error.warnings`.
+    let fail = |mut error: CliError, warnings: Vec<String>, session: &mut Session<'_, '_>| {
+        for line in &warnings {
+            session.warn(line);
         }
+        error.step = Some("import");
+        error.warnings = warnings;
+        error
     };
     for secret in plan.secrets {
         let name = secret.name.clone();
@@ -483,25 +493,26 @@ pub fn import_command(
             placements: vec![secret.placement],
         };
         if let Err(e) = ctx.secrets.put(&id, &name, entry) {
+            let mut warnings = Vec::new();
             // A keyring that did not answer in time may still have created the entry.
             if matches!(&e, SecretError::Store { reason, .. } if *reason == "keyring_timeout") {
-                session.note(&loc.message_args(
+                warnings.push(loc.message_args(
                     "note-import-outcome-unknown",
                     &[("id", &id), ("name", &name)],
                 ));
             }
-            rollback(&created, session);
-            let mut error = cli_error(&UploadError::from(e), loc);
-            error.step = Some("import");
-            return Err(error);
+            warnings.extend(rollback(&created));
+            return Err(fail(
+                cli_error_write(&UploadError::from(e), loc),
+                warnings,
+                session,
+            ));
         }
         created.push(name);
     }
     if let Err(e) = append_destination(config_dir, &destination) {
-        rollback(&created, session);
-        let mut error = cli_error(&e, loc);
-        error.step = Some("import");
-        return Err(error);
+        let warnings: Vec<String> = rollback(&created).into_iter().collect();
+        return Err(fail(cli_error(&e, loc), warnings, session));
     }
     session.note(&loc.message_args("note-imported", &[("id", &id), ("origin", &origin)]));
     if session.json {

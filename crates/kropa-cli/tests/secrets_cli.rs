@@ -1116,6 +1116,76 @@ second = {}
 }
 
 #[test]
+fn import_warnings_survive_quiet_and_reach_the_json_error() {
+    let dir = config();
+    let c = cfg(dir.path());
+    let file = dir.path().join("two.toml");
+    std::fs::write(
+        &file,
+        r#"
+[[destination]]
+id = "two"
+type = "http"
+[destination.request]
+method = "POST"
+url = "https://two.example.org/upload"
+headers = { Authorization = "Bearer {secret:first}", X-Other = "{secret:second}" }
+body = "multipart"
+file_field = "file"
+[destination.response]
+url = "{json:$.url}"
+[destination.secrets]
+first = {}
+second = {}
+"#,
+    )
+    .unwrap();
+    let f = file.to_str().unwrap();
+    let store = CannotRollBack {
+        inner: MemorySecretSource::new(),
+        puts: Mutex::new(0),
+        put_reason: "keyring_timeout",
+    };
+    let r = run(
+        &[
+            "--lang",
+            "en",
+            "--quiet",
+            "--json",
+            "--config",
+            &c,
+            "dest",
+            "import",
+            f,
+            "--yes",
+            "--expect-host",
+            "two.example.org",
+        ],
+        &store,
+        &ScriptedInput::default(),
+        false,
+        false,
+    );
+    assert_eq!(r.code, 7, "{}", r.err);
+    // `--quiet` keeps what the user must act on.
+    assert!(r.err.contains("Could not remove"), "{}", r.err);
+    assert!(r.err.contains("may have been stored"), "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["error"]["reason"], "keyring_timeout");
+    let warnings = v["error"]["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 2, "{v}");
+    assert!(warnings[0].as_str().unwrap().contains("second"), "{v}");
+    assert!(warnings[1].as_str().unwrap().contains("first"), "{v}");
+    // A write that timed out may have been done; the message says so.
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("may or may not have been made")
+    );
+}
+
+#[test]
 fn no_command_prints_the_value() {
     let dir = config();
     let c = cfg(dir.path());

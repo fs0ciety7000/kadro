@@ -217,6 +217,10 @@ code 3.
 data-control, GlobalShortcuts, TCC « Enregistrement de l'écran »), replis actifs, écrans et leurs noms, magasin de
 secrets, socket et version de `kropa-app`, chemins de config, de données et de captures. Aucune requête réseau.
 Code 0 même si des capacités manquent (c'est un rapport) ; code 1 seulement si le diagnostic lui-même échoue.
+La section « Magasin de secrets » **interroge le trousseau** (jamais de lecture de valeur) : sous Linux, cela peut activer
+le service Secret Service par D-Bus, dans le délai maximal d'un appel du magasin (5 s) ; trousseau verrouillé, `doctor`
+ne demande jamais le déverrouillage. Le `detail` de l'état (texte de `secrets.status.detail` dans le JSON) vient du
+magasin, en anglais : en mode texte il est précédé de « Détail technique (non traduit) ».
 
 ### 2.9 `version` (lot 1.3 ; `--check` au lot 5)
 
@@ -282,6 +286,7 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `clipboard.status` | `copied`, `pending` (notification « Lien prêt, Copier » en attente d'un clic), `unavailable`, `failed`, `skipped`. |
 | `error` | `null` ou `{ "code": "security_refused", "reason": "origin_not_allowed", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
 | `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `keychain_broker_unavailable`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). La clé `reason` est toujours présente (`null` sans sous-cause). |
+| `error.warnings` | Absent sauf avertissement lié à l'échec (ajout sans changement de version) : liste de textes localisés, que `--quiet` ne masque pas. Aujourd'hui `dest import` : entrée du magasin qui a pu être créée malgré un délai dépassé (`keyring_timeout`) et entrées restées après un retour arrière raté (noms seulement). |
 | `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
 `deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.

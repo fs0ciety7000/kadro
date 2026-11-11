@@ -517,22 +517,30 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   refusé (code 11). **Pas en variable d'environnement** : aucune lecture de `KROPA_*`, `AWS_*`, `ZIPLINE_*`, ni des
   variables de proxy ; `object_store` sans `from_env`.
 - `doctor` et rapport de bug : config avec noms de secrets seulement, aucun contenu de magasin.
-- **Vidages mémoire** (Q8) : `prctl(PR_SET_DUMPABLE, 0)` et `RLIMIT_CORE = 0` (via `rustix`, `unsafe_code = "deny"`)
-  dans `kropa-app` en release et dans `kropa` dès qu'il tient un secret : interdit aussi `ptrace` et
-  `/proc/<pid>/mem` au même utilisateur non root [8]. Coût accepté : ni core dump ni gdb sans root (pas de rapport de
-  plantage de toute façon, zéro télémétrie). Désactivé sous `debug_assertions`, jamais par variable. macOS : runtime
-  renforcé (`codesign --options runtime`), sans `get-task-allow`.
+- **Vidages mémoire** (Q8) : `RLIMIT_CORE = 0` (via `rustix`, `unsafe_code = "deny"`) dans `kropa` et `kropa-app` en
+  release. Coût accepté : pas de core dump (pas de rapport de plantage de toute façon, zéro télémétrie). Désactivé sous
+  `debug_assertions`, jamais par variable. macOS : runtime renforcé (`codesign --options runtime`), sans
+  `get-task-allow`.
+  **Pas de `PR_SET_DUMPABLE(0)` dans la CLI** (décision du lot 1.8b, qui remplace la proposition initiale de Q8) :
+  `xdg-desktop-portal` identifie son appelant en lisant `/proc/<pid>/root` ; un processus non dumpable le rend
+  illisible (`EACCES`) et la capture par portail risque d'échouer. La protection contre `ptrace` et
+  `/proc/<pid>/mem` repose donc sur **Yama `ptrace_scope`** du système (1 par défaut sur Ubuntu et Fedora : seul un
+  ancêtre peut attacher), pas sur `kropa`. `RLIMIT_CORE = 0` est **hérité par les enfants** (le navigateur ou
+  l'éditeur lancé par `kropa`) : ils ne produisent pas non plus de core ; c'est voulu. À revoir pour `kropa-app`
+  (lot 2.1) : le même constat vaut pour tout processus qui appelle le portail.
   **Livré (lot 1.8b) pour `kropa`** : `kropa_cli::hardening` au début de `main`, en release : `setrlimit(RLIMIT_CORE, 0)`
-  (limites souple et dure) et, sous Linux, `prctl(PR_SET_DUMPABLE, 0)`, par `rustix` (aucun `unsafe`) ; un échec
-  refuse de continuer (code 1). Testé : limites relues, impossibles à relever sans root. **macOS** : seul
-  `RLIMIT_CORE` ; l'équivalent de `PR_SET_DUMPABLE` est `ptrace(PT_DENY_ATTACH)`, appel brut `unsafe` hors des modules
-  autorisés : non fait, le runtime renforcé de l'`.app` signée refuse les débogueurs, mais la CLI `kropa` nue reste
-  attachable par le même utilisateur. **Reste** : `kropa-app` (lot 2.1).
+  (limites souple et dure) par `rustix` (aucun `unsafe`) ; un échec refuse de continuer (code 1, message Fluent
+  FR/EN). Testé : limites relues et impossibles à relever sans root ni `CAP_SYS_RESOURCE` (test unitaire), et
+  branchement release vérifié par `crates/kropa-cli/tests/release_hardening.rs` (CI : build release, puis lecture de
+  `/proc/<pid>/limits` du binaire). **macOS** : seul `RLIMIT_CORE` ; l'équivalent de `PR_SET_DUMPABLE` est
+  `ptrace(PT_DENY_ATTACH)`, appel brut `unsafe` hors des modules autorisés : non fait, le runtime renforcé de l'`.app`
+  signée refuse les débogueurs, mais la CLI `kropa` nue reste attachable par le même utilisateur. **Reste** :
+  `kropa-app` (lot 2.1).
 
 ## 7. Modèle de menaces
 
 Hors périmètre, dit dans la doc : processus malveillant du **même utilisateur** (il lit la mémoire hors
-`PR_SET_DUMPABLE`, le bus de session, le trousseau déverrouillé, et **appelle l'IPC** : les confirmations d'origine et
+la mémoire du processus (`ptrace` et `/proc/<pid>/mem`, que seul Yama `ptrace_scope` limite), le bus de session, le trousseau déverrouillé, et **appelle l'IPC** : les confirmations d'origine et
 d'emplacement ne l'arrêtent pas), root, machine compromise, serveur de destination malveillant pour son propre jeton.
 À documenter aussi : sous **X11**, la frappe dans un dialogue est lisible par tout client X ; le jeton **collé** dans
 un dialogue reste dans le presse-papiers — le dialogue propose de le vider s'il contient la valeur saisie.
@@ -578,8 +586,8 @@ Toutes les questions de S.1 ont reçu une réponse (§ 0.1) et U1–U4 sont tran
 invites Keychain réelles (15, 26), points du § 2.2.1 (7) sur le courtier, `LockedHint` par bureau, échec d'un service
 sans DH (faux service zbus à écrire), KeePassXC, ksecretd et oo7 (seul gnome-keyring est testé pour de vrai), fermeture
 du prompt au départ du client, prompt réel de GNOME et de KDE (1.12), audit RustSec des crates de stockage (trois
-avis « non maintenu » acceptés, `deny.toml`). **Réglé** : `unlock_all` (évité, § 2.1) ; `PR_SET_DUMPABLE` et
-`RLIMIT_CORE` de `kropa` (§ 6). **Restent** : verrou sous Linux (§ 3.4), descripteurs (§ 3.7), vidage de `kropa-app`
+avis « non maintenu » acceptés, `deny.toml`). **Réglé** : `unlock_all` (évité, § 2.1) ; `RLIMIT_CORE` de `kropa` (§ 6 ; pas de
+`PR_SET_DUMPABLE`). **Restent** : verrou sous Linux (§ 3.4), descripteurs (§ 3.7), vidage de `kropa-app`
 (2.1), mémoire non effaçable des bibliothèques (§ 3.5).
 
 ## 9. Changements de `cli.md` (acceptés, U4 ; reportés en S.4)

@@ -239,7 +239,8 @@ impl Monitor {
             let _ = raw_items();
             std::thread::sleep(Duration::from_millis(100));
         }
-        std::thread::sleep(Duration::from_millis(300));
+        // Whatever the polling above sent is in the log before the baseline is taken.
+        monitor.sync();
         monitor.seen = monitor.calls().len();
         monitor
     }
@@ -248,11 +249,47 @@ impl Monitor {
         std::fs::read_to_string(&self.log).unwrap_or_default()
     }
 
+    /// Sends a marker call with an identifier of its own and reads the log until it shows up: the bus
+    /// delivers to the monitor in order, so everything sent before the marker is in the log. No
+    /// guessed delay.
+    fn sync(&self) {
+        let marker = format!(
+            "kropa.test.marker.{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        // The call itself fails (nobody owns that name); the bus still carries it.
+        let status = Command::new("dbus-send")
+            .args([
+                "--session",
+                "--print-reply",
+                "--dest=org.freedesktop.DBus",
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus.GetNameOwner",
+            ])
+            .arg(format!("string:{marker}"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        // An error answer is expected; only a `dbus-send` that did not run to its end is a problem.
+        assert!(status.code().is_some(), "dbus-send was killed");
+        let started = Instant::now();
+        while !self.calls().contains(&marker) {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the monitor never saw the marker call: its log is incomplete"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     /// Stops it and returns the calls seen since `start` returned (never a value: it is encrypted
-    /// on the bus).
+    /// on the bus), once the marker call proves the log is complete.
     fn stop(mut self) -> String {
-        // Calls still in flight reach the log before the monitor is killed.
-        std::thread::sleep(Duration::from_millis(300));
+        self.sync();
         self.child.kill().unwrap();
         self.child.wait().unwrap();
         self.calls().split_off(self.seen)
@@ -551,9 +588,8 @@ fn inner_locked_not_interactive() {
     store.set_interactive(false);
     let monitor = Monitor::start();
 
-    // Every call answers `keyring_locked` at once. The call deadline is 5 s: a prompt would have
-    // shown as a timeout (nobody answers it here) and as a slow call.
-    let started = Instant::now();
+    // Every call answers `keyring_locked`. The call deadline is 5 s: a prompt nobody answers would
+    // have shown as `keyring_timeout`; the monitor below is the direct proof.
     let errors = [
         store.load("p", "n").err().unwrap(),
         store.inspect("p", "n").err().unwrap(),
@@ -593,11 +629,6 @@ fn inner_locked_not_interactive() {
     assert!(
         !asks_the_user(&calls),
         "a locked keyring was asked to unlock without anyone to answer:\n{calls}"
-    );
-    assert!(
-        started.elapsed() < Duration::from_secs(4),
-        "{:?}: a call waited for something",
-        started.elapsed()
     );
     // Looking is allowed: the keyring says what it is, and the collection is still locked.
     let status = store.status();

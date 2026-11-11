@@ -29,7 +29,7 @@ use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
 use crate::secret_input::{InputError, InputFrom};
-use crate::upload::{cli_error, load_one};
+use crate::upload::{cli_error, cli_error_write, load_one};
 
 /// JSON schema of `kropa secrets status`.
 pub const STATUS_SCHEMA: &str = "kropa.secrets.status/1";
@@ -37,6 +37,11 @@ pub const STATUS_SCHEMA: &str = "kropa.secrets.status/1";
 /// The error of a store call, with the exit code and `error.reason` of `docs/cli.md`.
 fn store_error(error: SecretError, loc: &Localizer) -> CliError {
     cli_error(&UploadError::from(error), loc).at_step("secrets")
+}
+
+/// Like [`store_error`] for a call that changes the store.
+fn store_write_error(error: SecretError, loc: &Localizer) -> CliError {
+    cli_error_write(&UploadError::from(error), loc).at_step("secrets")
 }
 
 fn cancelled(loc: &Localizer) -> CliError {
@@ -301,7 +306,7 @@ pub fn set(
     }
     ctx.secrets
         .set(profile, name, value, authorization)
-        .map_err(|e| store_error(e, loc))?;
+        .map_err(|e| store_write_error(e, loc))?;
     session.note(&loc.message_args("note-secret-set", &[("profile", profile), ("name", name)]));
     Ok(ExitCode::Ok)
 }
@@ -334,7 +339,7 @@ pub fn remove(
     let removed = ctx
         .secrets
         .remove(profile, name)
-        .map_err(|e| store_error(e, loc))?;
+        .map_err(|e| store_write_error(e, loc))?;
     let id = if removed {
         "note-secret-removed"
     } else {
@@ -461,7 +466,7 @@ pub fn allow(
     }
     ctx.secrets
         .authorize(profile, name, new_origin.as_deref(), new_placement)
-        .map_err(|e| store_error(e, loc))?;
+        .map_err(|e| store_write_error(e, loc))?;
     session.note(&loc.message_args(
         "note-secret-allowed",
         &[("profile", profile), ("name", name)],

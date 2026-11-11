@@ -301,6 +301,7 @@ fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut I
             step: None,
             lots: Vec::new(),
             reason: None,
+            warnings: Vec::new(),
         };
         session.document(&error_document(ERROR_SCHEMA, &error));
     }
@@ -464,6 +465,39 @@ mod tests {
         assert!(!told(&["--no-input"], true, &wayland), "--no-input");
         assert!(!told(&["--no-input"], true, &x11), "--no-input");
         assert!(!told(&["--no-input"], false, &[]));
+    }
+
+    #[test]
+    fn empty_display_variables_count_as_no_display() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(k, _)| *k == name)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        assert!(!super::store_may_prompt(
+            true,
+            &env(&[("DISPLAY", "")]),
+            false
+        ));
+        assert!(!super::store_may_prompt(
+            true,
+            &env(&[("DISPLAY", ""), ("WAYLAND_DISPLAY", "")]),
+            false
+        ));
+        assert!(super::store_may_prompt(
+            true,
+            &env(&[("DISPLAY", ""), ("WAYLAND_DISPLAY", "wayland-0")]),
+            false
+        ));
+        // An empty SSH_CONNECTION is not a SSH session.
+        assert!(super::store_may_prompt(
+            true,
+            &env(&[("DISPLAY", ":0"), ("SSH_CONNECTION", "")]),
+            false
+        ));
     }
 
     #[test]

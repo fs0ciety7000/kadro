@@ -290,7 +290,9 @@ fn render(
     );
     session.result(&format!("  {head}"));
     if let Some(detail) = &secrets.status.detail {
-        session.result(&format!("    {detail}"));
+        // The detail comes from the store backend and stays in English: say so.
+        let line = loc.message_args("doctor-secrets-detail", &[("detail", detail)]);
+        session.result(&format!("    {line}"));
     }
     let count = secrets.status.profiles.len().to_string();
     let profiles = loc.message_args("doctor-secrets-profiles", &[("count", &count)]);

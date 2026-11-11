@@ -72,6 +72,11 @@ impl<'a, 'b> Session<'a, 'b> {
         }
     }
 
+    /// A warning on stderr that `--quiet` does not hide: the user must act on it.
+    pub fn warn(&mut self, line: &str) {
+        let _ = writeln!(self.io.err, "{line}");
+    }
+
     /// A message shown from `-v` (`level` 1) or `-vv` (`level` 2) on.
     pub fn debug(&mut self, level: u8, line: &str) {
         if self.verbose >= level {
@@ -124,6 +129,9 @@ pub fn error_document(schema: &str, error: &CliError) -> Value {
     if !error.lots.is_empty() {
         detail["lots"] = json!(error.lots);
     }
+    if !error.warnings.is_empty() {
+        detail["warnings"] = json!(error.warnings);
+    }
     json!({
         "schema": schema,
         "status": "error",
@@ -146,6 +154,7 @@ mod tests {
             step: None,
             lots: vec!["1.7"],
             reason: None,
+            warnings: Vec::new(),
         }
     }
 
