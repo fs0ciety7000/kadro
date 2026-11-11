@@ -45,8 +45,13 @@ version = 2
 # RUSTSEC-2026-0370, -0371 and -0372 (zvariant, zbus_names, zvariant_derive 5.x/4.x): "unmaintained",
 # not vulnerabilities; the crates were merged into zbus 6. They come only from `secret-service` 5.2.0
 # (zbus 5), the Linux keyring client of `kropa-store` (lot 1.8). The next major, secret-service 6
-# (zbus 6), is a release candidate at the time of writing (6.0.0-rc.1, 2026-11-06): take the stable
-# release when it is out and remove these three lines. Reviewed by: security-reviewer (to do).
+# (zbus 6), is a release candidate at the time of writing (6.0.0-rc.1, 2026-11-06).
+# Removal: as soon as secret-service 6.0.0 is stable, drop the three lines below and move to it; review
+# at the latest on 2027-02-28, and if there is still no stable release then, write a direct client on
+# zbus 6 (OpenSession DH, SearchItems, Unlock, Prompt, GetSecret, CreateItem, SetSecret, Delete).
+# Immediate removal if a vulnerability is published for zbus 5, zvariant 5 or zbus_names 4 (no 5.x fix
+# to wait for).
+# Reviewed by: security-reviewer, docs/reviews/2026-11-11-security-1.8.md (section "Exceptions RUSTSEC").
 ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names 4 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },

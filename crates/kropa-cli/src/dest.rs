@@ -460,9 +460,19 @@ pub fn import_command(
     // The entries and the profile go together: when one step fails, what was stored is removed, so
     // that no orphan entry is left to block the next import of the same identifier (N2).
     let mut created: Vec<String> = Vec::new();
-    let rollback = |created: &[String]| {
-        for name in created {
-            let _ = ctx.secrets.remove(&id, name);
+    // What cannot be removed is said, with the names (never a value): a silent rollback would leave
+    // the entries that block the next import of this identifier without anyone knowing.
+    let rollback = |created: &[String], session: &mut Session<'_, '_>| {
+        let left: Vec<String> = created
+            .iter()
+            .filter(|name| ctx.secrets.remove(&id, name).is_err())
+            .cloned()
+            .collect();
+        if !left.is_empty() {
+            session.note(&loc.message_args(
+                "note-import-rollback-left",
+                &[("id", &id), ("names", &left.join(", "))],
+            ));
         }
     };
     for secret in plan.secrets {
@@ -473,7 +483,14 @@ pub fn import_command(
             placements: vec![secret.placement],
         };
         if let Err(e) = ctx.secrets.put(&id, &name, entry) {
-            rollback(&created);
+            // A keyring that did not answer in time may still have created the entry.
+            if matches!(&e, SecretError::Store { reason, .. } if *reason == "keyring_timeout") {
+                session.note(&loc.message_args(
+                    "note-import-outcome-unknown",
+                    &[("id", &id), ("name", &name)],
+                ));
+            }
+            rollback(&created, session);
             let mut error = cli_error(&UploadError::from(e), loc);
             error.step = Some("import");
             return Err(error);
@@ -481,7 +498,7 @@ pub fn import_command(
         created.push(name);
     }
     if let Err(e) = append_destination(config_dir, &destination) {
-        rollback(&created);
+        rollback(&created, session);
         let mut error = cli_error(&e, loc);
         error.step = Some("import");
         return Err(error);

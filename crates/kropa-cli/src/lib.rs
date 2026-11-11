@@ -15,6 +15,7 @@ pub mod dest;
 pub mod doctor;
 pub mod errors;
 pub mod exec;
+pub mod hardening;
 pub mod output;
 pub mod secret_args;
 pub mod secret_input;

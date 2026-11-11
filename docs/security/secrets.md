@@ -95,36 +95,63 @@ notification, stdout, sortie `--json`, URL (hôte, chemin) — y compris par éc
 
 ## 2. Stockage principal : trousseau système
 
-Crate **`keyring` 4.2.0** sur **`keyring-core` 1.0.1**, magasins choisis à la compilation :
-`zbus-secret-service-keyring-store` 1.0.1 (Linux, fonction `rt-tokio-crypto-rust`, sans OpenSSL) et
-`apple-native-keyring-store` 1.0.2 (macOS, module `keychain`) [1][2][3][4]. Autres magasins : **non retenus**.
+**Linux** : crate **`secret-service` 5.2.0** (fonction `rt-async-io-crypto-rust`, sans OpenSSL ni bibliothèque C),
+appelée en mode bloquant par `kropa-store` [3]. **macOS** : `security-framework` 3.7.0, module `os::macos` (Keychain à
+fichier), derrière la crate `kropa-keychain` [4]. Autres magasins : **non retenus**. Le plan initial (`keyring` 4.2.0
+sur `keyring-core` 1.0.1 et les magasins `zbus-secret-service-keyring-store` et `apple-native-keyring-store`) a été
+abandonné au lot 1.8 : le magasin Secret Service de `keyring` appelle `unlock_all` sans moyen de l'éviter (§ 2.1) ;
+`secret-service` est la crate qu'il enveloppait, l'arbre de dépendances est donc le même.
 
-**Un seul élément** sur les deux systèmes (Q5) : service `kropa`, compte `store`, valeur = le document du § 2.3, le
-même que le clair du coffre. Un modèle, un verrou (§ 3.4), une invite macOS par mise à jour et par binaire. Coût
-accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets », pas une par jeton.
+**Linux : un élément par secret** ; **macOS : un seul élément** pour tous les secrets (§ 2.2). Raison de la différence :
+sous Linux, le Secret Service n'a pas d'ACL par application, un élément par secret évite toute lecture-modification-
+écriture d'un document commun et une lecture ne déchiffre qu'un secret ; sous macOS, l'ACL et la partition `cdhash:`
+sont **par élément** (§ 2.2) : N éléments coûteraient N invites à chaque mise à jour. L'interface `SecretStore` est la
+même, par entrée `<profil>/<nom>`. Coût sous Linux : Seahorse et KWalletManager montrent une entrée « Kropa:
+<profil>/<nom> » par secret ; sous macOS, une seule entrée.
 
 ### 2.1 Linux : Secret Service (gnome-keyring, oo7, ksecretd de Plasma 6, KeePassXC)
 
-- **Attributs** : `service`, `username` ; libellé « Kropa — secrets » ; `target` **non utilisé** (collection séparée) [3].
-- **Collection** : alias `default` (« login »).
-- **Session de transport** : le magasin 1.0.1 impose `EncryptionType::Dh` [3] ; pas de repli `plain` ; un service
-  sans DH = échec explicite (non vérifié, test en 1.8). Gain faible (bus du même utilisateur, DH 1024 bits), coût nul.
-- **Verrouillé, sans interaction possible** (pas de TTY, `--no-input`, ou pas de session graphique pour le prompt,
-  SSH compris) : Kropa lit la propriété `Locked` de la collection et de l'élément **avant** toute lecture et échoue
-  `keyring_locked` (code 7) **sans prompt**. Le magasin 1.0.1 appelle `unlock_all` puis attend [3] : si son API ne
-  permet pas de l'éviter, Kropa interroge `Locked` directement par zbus avant l'appel (à confirmer en 1.8).
-- **Verrouillé, interaction possible** : prompt du service (`Unlock` + `Prompt`) ; refus ou fermeture =
+- **Attributs** : `service` = `io.github.fs0ciety7000.Kropa`, `profile`, `name` (le service peut ajouter les siens :
+  GNOME Keyring met `xdg:schema`) ; **libellé** `Kropa: <profil>/<nom>` ; type de contenu `application/json`. Le
+  libellé et les attributs ne contiennent que des noms, jamais une valeur. Le document stocké (§ 2.3) porte la clé
+  `<profil>/<nom>` et le magasin la **compare aux attributs** : un élément dont les attributs ont été modifiés pour
+  viser un autre nom est refusé, jamais écrasé.
+- **Collection** : lecture dans toutes les collections (`search_items`) ; écriture dans l'alias `default` (« login »).
+- **Session de transport** : `EncryptionType::Dh` seulement, jamais `plain` [3] ; un service sans DH = échec explicite
+  (code 7), sans repli. Gain faible (bus du même utilisateur, DH 1024 bits), coût nul. Le test d'un service sans DH
+  manque encore (§ 8) ; aujourd'hui l'échec est rendu « injoignable », à distinguer.
+- **`unlock_all` évité** : le magasin `keyring` l'appelait ; `kropa-store` cherche d'abord les éléments
+  (`search_items` n'ouvre ni ne déverrouille rien) et lit leur propriété `Locked`.
+- **Verrouillé, sans interaction possible** (pas de TTY, `--no-input`, pas de session graphique pour le prompt ; SSH
+  compris, `SSH_CONNECTION` valant « pas d'écran » même si `DISPLAY` est transféré) : échec `keyring_locked` (code 7,
+  « no way to ask… ») **sans** appel `Unlock` ni `Prompt`. Le branchement (TTY, `--no-input`, affichage, SSH) est testé
+  dans `kropa-cli` ; l'absence d'appel est **prouvée** par un `dbus-monitor` sur le bus privé d'un vrai gnome-keyring
+  (§ 7).
+- **Verrouillé, interaction possible** : `Unlock` seulement après cette décision, puis `Prompt` ; refus ou fermeture =
   `keyring_locked`. Jamais de repli implicite vers le coffre.
-- **Délais** : tout appel au magasin en `tokio::task::spawn_blocking` avec délai (5 s par appel, 120 s pour un prompt
-  affiché) ; dépassement = `keyring_timeout` (code 7). Aucun script n'attend un humain.
-- **Doublons** : `search_items` parcourt toutes les collections ; deux éléments `kropa`/`store` = `Ambiguous` → code 7
-  `keyring_ambiguous`, jamais de choix arbitraire ; `doctor` dit combien et dans quelles collections (aucune valeur).
+- **Délais** : chaque appel s'exécute dans un thread de travail avec sa propre connexion, délai de 5 s par appel, 120 s
+  une fois un prompt affiché ; dépassement = `keyring_timeout` (code 7). **Le résultat est alors inconnu** : le thread
+  abandonné peut finir son `CreateItem` ou son `Delete` après le rapport. Le message le dit (« résultat inconnu,
+  vérifiez avec `kropa secrets status` »), l'import le répète pour l'entrée en cours et **nomme** les entrées qu'il n'a
+  pas pu retirer. Acceptable pour une commande qui sort aussitôt ; **pas pour le résident** (2.1, 4.7) sans annulation
+  réelle (fermeture de la connexion, `Prompt.Dismiss`).
+- **Doublons** : la recherche couvre toutes les collections ; deux éléments de mêmes `profile` et `name` =
+  `Ambiguous` → `keyring_ambiguous` (code 7), jamais de choix arbitraire ; `doctor` le signale (état « ambiguë »), sans
+  valeur ni nom de secret. Les profils du magasin qu'aucune destination ne déclare (orphelins, N2) y sont aussi
+  listés, par nom de profil.
+- **Pas de verrou** (§ 3.4) : deux `set` ou `allow` simultanés du même secret perdent une mise à jour ; deux créations
+  simultanées font un doublon (côté sûr : `keyring_ambiguous`).
+- **Limites connues** : « dont N encore vides » vaut toujours 0 sous Linux (le contenu n'est pas lu pour compter) ;
+  sur KeePassXC ou ksecretd verrouillés, les éléments peuvent ne pas apparaître à la recherche (non vérifié) ; le
+  magasin ne revalide pas les identifiants (`/`, contrôles), la CLI le fait avant.
 - **Absence de démon** (wlroots, X11 minimal, SSH) : pas de `org.freedesktop.secrets` ni d'activation →
   `keyring_unavailable`. Kropa ne lance pas de démon et propose le coffre (§ 3) par un message explicite.
 - Flatpak : hors distribution v1 (`decisions.md`).
 
 ### 2.2 macOS : Keychain à fichier (login)
 
+- **Un seul élément pour tous les secrets** (document v2 à plusieurs entrées, lot 1.8m) : c'est le contrat de macOS,
+  différent de celui de Linux (§ 2). Il tient l'engagement de U1 : une invite par mise à jour, non une par secret.
 - Module `keychain` = trousseau « legacy » à fichier [4]. Module `protected` : réservé aux apps sandboxées avec
   entitlements de provisionnement [4][5], **non utilisable** sans compte Developer.
 - **Contrôle d'accès, établi par la revue** sur la source Apple `securityd/src/clientid.cpp`
@@ -240,7 +267,11 @@ Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
   "created":"2026-11-11T14:00:00+01:00", "value":"…"}}}
 ```
 
-- Clé d'entrée `<profil>/<nom>` ; `/` interdit dans un nom de profil ou de secret (code 6).
+- Clé d'entrée `<profil>/<nom>` ; `/` interdit dans un nom de profil ou de secret (code 6), et le magasin le refuse
+  aussi (défense en profondeur).
+- **Une entrée par élément sous Linux** (la clé doit correspondre aux attributs, sinon refus, § 2.1) ; **plusieurs
+  entrées** dans l'élément unique de macOS (§ 2.2) et dans le coffre (2.8) ; `document::decode` refuse plus d'une
+  entrée sous Linux.
 - **`origins`** (§ 4.1) et **`placements`** (§ 4.3) font partie de la valeur protégée : modifier le TOML en clair ne
   les change pas. Pour S3, l'origine est un triplet (§ 4.6).
 - Version 1 (une entrée par élément, sans `placements`) : jamais livrée, aucune migration.
@@ -273,8 +304,10 @@ Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
 ### 3.4 Écriture atomique et concurrence (I2, M6)
 
 - Verrou consultatif `flock` (via `rustix`) sur un fichier **stable** `store.lock` du même dossier, jamais sur
-  `secrets.age` (le `rename` changerait l'inode). Le même verrou protège l'élément du trousseau (lecture-modification-
-  écriture du document unique).
+  `secrets.age` (le `rename` changerait l'inode). Le même verrou protège l'élément unique du Keychain macOS (lecture-
+  modification-écriture, sous `flock` de `store.lock`, § 2.2). **Sous Linux, aucun verrou** : un élément par secret,
+  sans document commun ; deux écritures simultanées du même secret se perdent l'une l'autre et deux créations font un
+  doublon, refusé ensuite (`keyring_ambiguous`). Limite acceptée, à reprendre avec le résident (4.7).
 - Sous verrou : **relecture** du coffre, modification, temporaire `secrets.age.<aléa>.tmp` créé
   `O_CREAT|O_EXCL|O_NOFOLLOW` en `0600` dans le même dossier, écriture, `sync_all`, `rename`, `sync_all` du dossier.
   **Jamais d'écriture depuis un cache** : le résident relit toujours sous verrou.
@@ -284,9 +317,12 @@ Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
 ### 3.5 Mémoire (I8)
 
 - Phrase de passe, clair et valeurs dans `zeroize::Zeroizing` (`zeroize` 1.9.1) ou `secrecy::SecretString`, **au
-  mieux** : des copies restent hors de notre contrôle — croissance de `Vec` dans `serde_json`, `Vec<u8>` de `keyring`,
+  mieux** : des copies restent hors de notre contrôle — croissance de `Vec` dans `serde_json` et tampon d'une chaîne échappée,
+  `Vec<u8>` rendu par `secret-service` (`get_secret`, recopié aussitôt en `Zeroizing`) et `CFData` de
+  `security-framework` (macOS), qu'on ne peut pas effacer,
   `String` de `rpassword`, `Bytes` de `HeaderValue`, tampons de rustls. Réduction : tampons pré-alloués à la taille
   maximale, désérialisation **empruntée** (`&str` dans le tampon `Zeroizing`) puis copie immédiate en `SecretString`.
+- Sur le bus, la valeur transite chiffrée (DH, § 2.1) ; au repos dans le démon, elle relève du trousseau.
 - **Pas de `mlock`** (promesse non tenable). La doc conseille un swap chiffré et dit que vidage mémoire et
   hibernation peuvent contenir des secrets.
 
@@ -312,8 +348,12 @@ Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
 
 ### 3.7 Descripteurs (`--password-fd`, `--secret-fd`) (M7)
 
-Lecture jusqu'à EOF ou `\n` ; **4 Kio max** (au-delà : refus) ; un seul `\n` final retiré ; descripteur passé
-`CLOEXEC` puis fermé. Refus de 1 et 2, et d'un descripteur à double usage (même fd pour phrase et secret, ou 0 quand
+Lecture jusqu'à EOF ou `\n` ; **4 Kio max** (au-delà : refus) ; un seul `\n` final retiré.
+**Limite actuelle** : le descripteur est rouvert par `/dev/fd/N`, il n'est ni passé `CLOEXEC` ni fermé après la
+lecture (et un fichier est relu depuis 0, un socket échoue). Inoffensif tant que `kropa` ne lance aucun processus ; à
+régler avant le résident (2.1), soit par un `unsafe` justifié (règle 12 d'`AGENTS.md`), soit par cette limite écrite.
+Un secret lu sur un TTY par `--secret-stdin` s'affiche (pas d'écho coupé) ; un Ctrl-C pendant la saisie masquée laisse
+l'écho coupé (restes de la revue 1.8). Refus de 1 et 2, et d'un descripteur à double usage (même fd pour phrase et secret, ou 0 quand
 stdin porte un fichier). Pas de `--password`, pas de `KROPA_PASSWORD`.
 
 ### 3.8 Choix du magasin, bascule jamais silencieuse
@@ -482,6 +522,12 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   `/proc/<pid>/mem` au même utilisateur non root [8]. Coût accepté : ni core dump ni gdb sans root (pas de rapport de
   plantage de toute façon, zéro télémétrie). Désactivé sous `debug_assertions`, jamais par variable. macOS : runtime
   renforcé (`codesign --options runtime`), sans `get-task-allow`.
+  **Livré (lot 1.8b) pour `kropa`** : `kropa_cli::hardening` au début de `main`, en release : `setrlimit(RLIMIT_CORE, 0)`
+  (limites souple et dure) et, sous Linux, `prctl(PR_SET_DUMPABLE, 0)`, par `rustix` (aucun `unsafe`) ; un échec
+  refuse de continuer (code 1). Testé : limites relues, impossibles à relever sans root. **macOS** : seul
+  `RLIMIT_CORE` ; l'équivalent de `PR_SET_DUMPABLE` est `ptrace(PT_DENY_ATTACH)`, appel brut `unsafe` hors des modules
+  autorisés : non fait, le runtime renforcé de l'`.app` signée refuse les débogueurs, mais la CLI `kropa` nue reste
+  attachable par le même utilisateur. **Reste** : `kropa-app` (lot 2.1).
 
 ## 7. Modèle de menaces
 
@@ -506,7 +552,7 @@ si le point 7 du § 2.2.1 n'est pas confirmé, l'enchaînement « créer la pair
 | Attaque hors ligne du coffre | Phrase robuste + scrypt 18 | phrase « kropa2026 » refusée ; facteur lu = réglage ; < 16 → avertissement |
 | Fichier `age` piégé | `set_max_work_factor(20)` ; stanza unique | fixtures `log2 N` = 21 et 30 → refus < 1 s ; scrypt mêlé à un autre stanza → refus |
 | Bascule silencieuse | `secrets.store` explicite | `dbus-run-session` sans Secret Service + `store = keyring` → erreur, coffre non créé |
-| Trousseau qui bloque un script | `Locked` lu, pas de prompt, délais | service simulé verrouillé, sans TTY → code 7 en < 6 s, aucun `Prompt` appelé |
+| Trousseau qui bloque un script | `Locked` lu, pas de prompt, délais | **vrai gnome-keyring** sous `dbus-run-session`, collection verrouillée, mode non interactif → code 7 en < 4 s, texte « no way to ask », et un `dbus-monitor` sur le bus privé ne relève **aucun** appel `Unlock` ni `Prompt` ; en mode interactif le même moniteur les voit (contrôle). Branchement TTY × `--no-input` × affichage × SSH testé dans `kropa-cli` |
 | TOML/`.sxcu` qui vise un jeton existant | Références au profil courant, import en entrées neuves | import visant `autre/token` ou `id` existant → refus ; `wiremock` : 0 requête |
 | Secret déplacé (query, champ affiché) | Emplacements protégés | `wiremock` : `Authorization` déplacé en `query:key` ou `form:title` → code 11, 0 requête |
 | Redirection vers un autre hôte | `same-origin`, 5 sauts | 302 vers autre port/hôte → échec, second serveur sans requête |
@@ -520,7 +566,7 @@ si le point 7 du § 2.2.1 n'est pas confirmé, l'enchaînement « créer la pair
 | Fuite par `Debug`/panique | `Debug` masqué | `format!("{:?}")` d'un profil chargé ; panique provoquée pendant un envoi → stderr sans valeur |
 | IPC usurpée (client ou serveur) | Contrôle d'UID des deux côtés, dossier `0700`, pas de `/tmp` | identifiants de pair injectés + CI `sudo -u nobody`, dans les deux sens → refus, rien envoyé |
 | Coffre laissé ouvert | 15 min sans action humaine, 8 h, `LockedHint`, veille | horloge injectable ; envois périodiques sans TTY ne prolongent pas ; signaux logind simulés sur bus privé ; compteur de `Drop` des tampons |
-| Invites Keychain à chaque mise à jour | Un élément, modification en place, courtier (U1) | manuel 1.6 : deux binaires × deux builds, invites relevées |
+| Invites Keychain à chaque mise à jour | Un élément (macOS), modification en place, courtier (U1) | manuel 1.6 : deux binaires × deux builds, invites relevées |
 | Courtier appelé par un autre que `kropa-app` | § 2.2.1 : pair = parent, jeton d'audit, exigence de signature, réponse limitée au profil | `kropa __store-broker` depuis un shell, avec fd 3 forgé, ou parent signé autrement → refus, zéro requête à `securityd` |
 | Secret coupé par l'extrait | `MaskedText` : détection sur le corps entier, masque étendu, coupe ensuite | jeton aux positions 495–530, toutes formes → aucun fragment ≥ 4 caractères |
 | Usurpation d'hôte SFTP | `known_hosts` strict | clé changée → refus |
@@ -530,7 +576,11 @@ si le point 7 du § 2.2.1 n'est pas confirmé, l'enchaînement « créer la pair
 
 Toutes les questions de S.1 ont reçu une réponse (§ 0.1) et U1–U4 sont tranchées (§ 0.2). Reste le **non vérifié** :
 invites Keychain réelles (15, 26), points du § 2.2.1 (7) sur le courtier, `LockedHint` par bureau, échec d'un service
-sans DH, possibilité d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSec des crates de stockage (à leur ajout).
+sans DH (faux service zbus à écrire), KeePassXC, ksecretd et oo7 (seul gnome-keyring est testé pour de vrai), fermeture
+du prompt au départ du client, prompt réel de GNOME et de KDE (1.12), audit RustSec des crates de stockage (trois
+avis « non maintenu » acceptés, `deny.toml`). **Réglé** : `unlock_all` (évité, § 2.1) ; `PR_SET_DUMPABLE` et
+`RLIMIT_CORE` de `kropa` (§ 6). **Restent** : verrou sous Linux (§ 3.4), descripteurs (§ 3.7), vidage de `kropa-app`
+(2.1), mémoire non effaçable des bibliothèques (§ 3.5).
 
 ## 9. Changements de `cli.md` (acceptés, U4 ; reportés en S.4)
 
@@ -566,8 +616,9 @@ sans DH, possibilité d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSe
 
 [1] https://crates.io/crates/keyring (4.2.0) et https://docs.rs/keyring/4.2.0/keyring/ — magasins disponibles.
 [2] https://crates.io/crates/keyring-core (1.0.1).
-[3] https://docs.rs/zbus-secret-service-keyring-store/1.0.1/ et `src/service.rs` (`connect(EncryptionType::Dh)`,
-    `unlock_all`) — attributs, collection par défaut, `target`, fonctions.
+[3] https://crates.io/crates/secret-service (5.2.0) et https://docs.rs/secret-service/5.2.0/ — `blocking::SecretService`,
+    `connect(EncryptionType::Dh)`, `search_items`, `Item::unlock`, `Collection::create_item`. Magasin `keyring` écarté :
+    https://docs.rs/zbus-secret-service-keyring-store/1.0.1/ (`unlock_all` sans moyen de l'éviter).
 [4] https://docs.rs/apple-native-keyring-store/1.0.2/ et `src/keychain.rs` (recherche puis modification) ;
     `security-framework` 3.7.0 `src/os/macos/passwords.rs`.
 [5] https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains

@@ -32,6 +32,11 @@ Paths
   Configuration file: /nonexistent-kropa-home/.config/kropa/config.toml
   Captures folder: /nonexistent-kropa-home/Images/Kropa
 
+Secret store
+  Store: keyring (unavailable)
+    the Secret Service could not be reached on the session bus
+  Profiles holding secrets: 0
+
 Not available yet
   kropa-app socket and version: lot 2.1
   Clipboard: lot 1.10

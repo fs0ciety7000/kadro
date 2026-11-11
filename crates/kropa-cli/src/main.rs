@@ -6,6 +6,14 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    // Before anything is read: no core file may keep a secret (`docs/security/secrets.md` section 6).
+    // Off in debug builds, so that a debugger and core dumps stay usable while developing; never off
+    // by an environment variable.
+    #[cfg(not(debug_assertions))]
+    if let Err(e) = kropa_cli::hardening::disable_core_dumps() {
+        eprintln!("kropa: {e}; refusing to run with memory dumps allowed");
+        return std::process::ExitCode::from(1);
+    }
     let args: Vec<OsString> = std::env::args_os().collect();
     // macOS: `kropa __store-broker` is the Keychain broker that `kropa-app` starts on a socket pair
     // (`docs/security/secrets.md` section 2.2.1). It is not a command: it takes nothing from the

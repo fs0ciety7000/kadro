@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use kropa_capture::{CaptureBackend, Diagnosis, Fact, FactValue};
 use kropa_core::{CONFIG_FILE, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
+use kropa_upload::profiles::load_destinations;
+use kropa_upload::secret::{StoreState, StoreStatus};
 use serde_json::{Value, json};
 
 use crate::exec::Context;
@@ -38,6 +40,61 @@ fn pending(
     PENDING
         .into_iter()
         .filter(move |(item, _, _)| !(lists_screens && *item == "outputs"))
+}
+
+/// The secret store as the report shows it: its state and the profiles it holds, by name and count.
+/// Never a value, never the name of a secret.
+struct Secrets {
+    status: StoreStatus,
+    /// Profiles of the store that no destination of the configuration declares (N2: leftovers of a
+    /// removed profile, which would block the next import of the same identifier). `None` when the
+    /// destinations file could not be read, so that nothing can be said.
+    orphans: Option<Vec<String>>,
+}
+
+impl Secrets {
+    fn duplicates(&self) -> bool {
+        self.status.state == StoreState::Ambiguous
+    }
+}
+
+/// Reads the state of the store (it never prompts) and compares its profiles with the destinations.
+fn secrets(config_dir_arg: Option<&Path>, ctx: &Context<'_>) -> Secrets {
+    secrets_of(ctx.secrets.status(), config_dir_arg)
+}
+
+fn secrets_of(status: StoreStatus, config_dir_arg: Option<&Path>) -> Secrets {
+    let dir = match config_dir_arg {
+        Some(d) => Some(d.to_owned()),
+        None => config_dir().ok(),
+    };
+    let declared = dir.and_then(|d| load_destinations(&d).ok());
+    let orphans = declared.map(|destinations| {
+        status
+            .profiles
+            .keys()
+            .filter(|profile| !destinations.iter().any(|d| &d.id == *profile))
+            .cloned()
+            .collect()
+    });
+    Secrets { status, orphans }
+}
+
+fn secrets_json(secrets: &Secrets) -> Value {
+    let profiles: Vec<Value> = secrets
+        .status
+        .profiles
+        .iter()
+        .map(|(profile, count)| json!({"profile": profile, "entries": count.entries}))
+        .collect();
+    json!({
+        "store": secrets.status.store,
+        "state": secrets.status.state.as_str(),
+        "detail": secrets.status.detail,
+        "profiles": profiles,
+        "duplicates": secrets.duplicates(),
+        "orphans": secrets.orphans,
+    })
 }
 
 /// Where things are, and whether the configuration reads.
@@ -88,7 +145,7 @@ fn fact_json(fact: &Fact) -> Value {
     json!({ "key": fact.key, "state": state, "value": value })
 }
 
-fn document(diagnosis: &Diagnosis, paths: &Paths) -> Value {
+fn document(diagnosis: &Diagnosis, paths: &Paths, secrets: &Secrets) -> Value {
     let capabilities: Vec<Value> = [
         &diagnosis.capabilities.screen,
         &diagnosis.capabilities.output,
@@ -124,6 +181,7 @@ fn document(diagnosis: &Diagnosis, paths: &Paths) -> Value {
             "config_error": paths.config_error,
             "captures_dir": paths.captures_dir.as_ref().map(|p| p.display().to_string()),
         },
+        "secrets": secrets_json(secrets),
         "not_available_yet": pending,
     })
 }
@@ -148,7 +206,13 @@ fn labelled(loc: &Localizer, label: &str, value: &str) -> String {
     )
 }
 
-fn render(diagnosis: &Diagnosis, paths: &Paths, loc: &Localizer, session: &mut Session<'_, '_>) {
+fn render(
+    diagnosis: &Diagnosis,
+    paths: &Paths,
+    secrets: &Secrets,
+    loc: &Localizer,
+    session: &mut Session<'_, '_>,
+) {
     let section = |session: &mut Session<'_, '_>, id: &str| {
         session.result("");
         session.result(&loc.message(id));
@@ -215,6 +279,38 @@ fn render(diagnosis: &Diagnosis, paths: &Paths, loc: &Localizer, session: &mut S
         &shown(paths.captures_dir.as_ref()),
     ));
 
+    section(session, "doctor-section-secrets");
+    let state = loc.message(&format!(
+        "out-secrets-state-{}",
+        secrets.status.state.as_str()
+    ));
+    let head = loc.message_args(
+        "doctor-secrets-store",
+        &[("store", secrets.status.store), ("state", &state)],
+    );
+    session.result(&format!("  {head}"));
+    if let Some(detail) = &secrets.status.detail {
+        session.result(&format!("    {detail}"));
+    }
+    let count = secrets.status.profiles.len().to_string();
+    let profiles = loc.message_args("doctor-secrets-profiles", &[("count", &count)]);
+    session.result(&format!("  {profiles}"));
+    if secrets.duplicates() {
+        session.result(&format!("  {}", loc.message("doctor-secrets-duplicates")));
+    }
+    match &secrets.orphans {
+        Some(orphans) if !orphans.is_empty() => {
+            let names = orphans.join(", ");
+            let text = loc.message_args("doctor-secrets-orphans", &[("names", &names)]);
+            session.result(&format!("  {text}"));
+        }
+        Some(_) => {}
+        None => session.result(&format!(
+            "  {}",
+            loc.message("doctor-secrets-orphans-unknown")
+        )),
+    }
+
     section(session, "doctor-section-pending");
     for (_, _, id) in pending(diagnosis) {
         session.result(&format!("  {}", loc.message(id)));
@@ -230,10 +326,11 @@ pub fn run(
 ) -> ExitCode {
     let diagnosis = backend.diagnose();
     let paths = paths(config_dir_arg);
+    let secrets = secrets(config_dir_arg, ctx);
     if session.json {
-        session.document(&document(&diagnosis, &paths));
+        session.document(&document(&diagnosis, &paths, &secrets));
     } else {
-        render(&diagnosis, &paths, ctx.loc, session);
+        render(&diagnosis, &paths, &secrets, ctx.loc, session);
     }
     ExitCode::Ok
 }
@@ -246,7 +343,11 @@ mod tests {
     };
     use kropa_i18n::{Lang, Localizer};
 
-    use super::{PENDING, Paths, document, fluent_id, pending, render};
+    use std::collections::BTreeMap;
+
+    use kropa_upload::secret::{ProfileCount, StoreState, StoreStatus};
+
+    use super::{PENDING, Paths, Secrets, document, fluent_id, pending, render, secrets_of};
     use crate::output::{Io, Session};
 
     fn diagnosis() -> Diagnosis {
@@ -278,6 +379,25 @@ mod tests {
         }
     }
 
+    fn secrets(state: StoreState, orphans: Option<&[&str]>) -> Secrets {
+        let count = ProfileCount {
+            entries: 2,
+            empty: 0,
+        };
+        Secrets {
+            status: StoreStatus {
+                store: "keyring",
+                state,
+                detail: None,
+                profiles: BTreeMap::from([
+                    ("zipline".to_owned(), count),
+                    ("old".to_owned(), count),
+                ]),
+            },
+            orphans: orphans.map(|o| o.iter().map(|n| (*n).to_owned()).collect()),
+        }
+    }
+
     fn paths() -> Paths {
         Paths {
             config_file: Some("/c/config.toml".into()),
@@ -288,7 +408,11 @@ mod tests {
 
     #[test]
     fn json_keeps_the_state_of_each_fact_apart() {
-        let doc = document(&diagnosis(), &paths());
+        let doc = document(
+            &diagnosis(),
+            &paths(),
+            &secrets(StoreState::Ambiguous, Some(&["old"])),
+        );
         let states: Vec<_> = doc["facts"]
             .as_array()
             .unwrap()
@@ -310,6 +434,10 @@ mod tests {
         assert_eq!(doc["fallbacks"][0], "capture_screen_instead");
         assert_eq!(doc["paths"]["config_error"], "bad");
         assert!(doc["paths"]["captures_dir"].is_null());
+        assert_eq!(doc["secrets"]["state"], "ambiguous");
+        assert_eq!(doc["secrets"]["duplicates"], true);
+        assert_eq!(doc["secrets"]["orphans"][0], "old");
+        assert_eq!(doc["secrets"]["profiles"][0]["entries"], 2);
         assert_eq!(
             doc["not_available_yet"].as_array().unwrap().len(),
             PENDING.len()
@@ -341,7 +469,13 @@ mod tests {
                     stdin_is_tty: false,
                 };
                 let mut session = Session::new(&mut io, false, false, 0, false);
-                render(&diagnosis(), &paths(), &loc, &mut session);
+                render(
+                    &diagnosis(),
+                    &paths(),
+                    &secrets(StoreState::Locked, Some(&["old"])),
+                    &loc,
+                    &mut session,
+                );
             }
             let text = String::from_utf8(out).unwrap();
             assert!(text.starts_with(title), "{text}");
@@ -349,9 +483,66 @@ mod tests {
             assert!(text.contains("KDE"), "{text}");
             assert!(text.contains("/c/config.toml"), "{text}");
             assert!(text.contains("bad"), "{text}");
+            assert!(text.contains("keyring"), "{text}");
+            assert!(text.contains("old"), "{text}");
             assert_eq!(err.len(), 0);
             // A message id on screen would mean a missing translation.
             assert!(!text.contains("doctor-"), "{text}");
+        }
+    }
+
+    #[test]
+    fn orphans_are_store_profiles_no_destination_declares() {
+        let dir = tempfile::tempdir().unwrap();
+        let status = || secrets(StoreState::Available, None).status;
+        // No destinations file: every profile of the store is an orphan.
+        let none = secrets_of(status(), Some(dir.path()));
+        assert_eq!(none.orphans.unwrap(), ["old", "zipline"]);
+        std::fs::write(
+            dir.path().join("destinations.toml"),
+            "[[destination]]\nid = \"zipline\"\ntype = \"zipline\"\nurl = \"https://z.example.org/\"\n[destination.secrets]\ntoken = {}\n",
+        )
+        .unwrap();
+        let some = secrets_of(status(), Some(dir.path()));
+        assert_eq!(some.orphans.unwrap(), ["old"]);
+        // A destinations file that does not parse: nothing is said, and it is said so.
+        std::fs::write(dir.path().join("destinations.toml"), "not [ toml").unwrap();
+        assert!(secrets_of(status(), Some(dir.path())).orphans.is_none());
+    }
+
+    #[test]
+    fn the_secret_block_says_duplicates_and_unknown_orphans_and_nothing_else() {
+        for lang in Lang::ALL {
+            let loc = Localizer::new(lang).unwrap();
+            let report = |secrets: &Secrets| {
+                let (mut out, mut err) = (Vec::new(), Vec::new());
+                {
+                    let mut io = Io {
+                        out: &mut out,
+                        err: &mut err,
+                        stdin_is_tty: false,
+                    };
+                    let mut session = Session::new(&mut io, false, false, 0, false);
+                    render(&diagnosis(), &paths(), secrets, &loc, &mut session);
+                }
+                String::from_utf8(out).unwrap()
+            };
+            let clean = report(&secrets(StoreState::Available, Some(&[])));
+            assert!(!clean.contains("doctor-"), "{clean}");
+            assert!(!clean.contains(&loc.message("doctor-secrets-duplicates")));
+            assert!(
+                !clean.contains("old,") && !clean.contains(": old"),
+                "{clean}"
+            );
+            let dup = report(&secrets(StoreState::Ambiguous, None));
+            assert!(
+                dup.contains(&loc.message("doctor-secrets-duplicates")),
+                "{dup}"
+            );
+            assert!(
+                dup.contains(&loc.message("doctor-secrets-orphans-unknown")),
+                "{dup}"
+            );
         }
     }
 
@@ -373,6 +564,14 @@ mod tests {
                     .map(|k| format!("doctor-status-{k}")),
             )
             .chain(PENDING.iter().map(|(_, _, id)| (*id).to_owned()))
+            .chain(
+                [
+                    "doctor-section-secrets",
+                    "doctor-secrets-duplicates",
+                    "doctor-secrets-orphans-unknown",
+                ]
+                .map(str::to_owned),
+            )
             .collect();
         for lang in Lang::ALL {
             let loc = Localizer::new(lang).unwrap();

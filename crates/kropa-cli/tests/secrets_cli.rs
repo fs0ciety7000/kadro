@@ -989,6 +989,132 @@ second = {}
     }
 }
 
+/// A store whose second `put` fails with `put_reason` and whose `remove` always fails.
+struct CannotRollBack {
+    inner: MemorySecretSource,
+    puts: Mutex<u32>,
+    put_reason: &'static str,
+}
+
+impl SecretSource for CannotRollBack {
+    fn load(&self, p: &str, n: &str) -> Result<Option<SecretEntry>, SecretError> {
+        self.inner.load(p, n)
+    }
+    fn profile_exists(&self, p: &str) -> Result<bool, SecretError> {
+        self.inner.profile_exists(p)
+    }
+    fn put(&self, p: &str, n: &str, e: NewSecret) -> Result<(), SecretError> {
+        let mut puts = self.puts.lock().unwrap();
+        *puts += 1;
+        if *puts == 2 {
+            return Err(SecretError::Store {
+                reason: self.put_reason,
+                detail: "fixed text".into(),
+            });
+        }
+        self.inner.put(p, n, e)
+    }
+}
+
+impl SecretStore for CannotRollBack {
+    fn status(&self) -> StoreStatus {
+        self.inner.status()
+    }
+    fn inspect(&self, p: &str, n: &str) -> Result<Option<EntryInfo>, SecretError> {
+        self.inner.inspect(p, n)
+    }
+    fn set(&self, p: &str, n: &str, v: SecretValue, a: Authorization) -> Result<(), SecretError> {
+        self.inner.set(p, n, v, a)
+    }
+    fn remove(&self, _: &str, _: &str) -> Result<bool, SecretError> {
+        Err(SecretError::Store {
+            reason: "keyring_locked",
+            detail: "fixed text".into(),
+        })
+    }
+    fn authorize(
+        &self,
+        p: &str,
+        n: &str,
+        o: Option<&str>,
+        pl: Option<Placement>,
+    ) -> Result<(), SecretError> {
+        self.inner.authorize(p, n, o, pl)
+    }
+}
+
+#[test]
+fn a_rollback_that_fails_and_a_timeout_are_said_not_hushed() {
+    let dir = config();
+    let c = cfg(dir.path());
+    let file = dir.path().join("two.toml");
+    std::fs::write(
+        &file,
+        r#"
+[[destination]]
+id = "two"
+type = "http"
+[destination.request]
+method = "POST"
+url = "https://two.example.org/upload"
+headers = { Authorization = "Bearer {secret:first}", X-Other = "{secret:second}" }
+body = "multipart"
+file_field = "file"
+[destination.response]
+url = "{json:$.url}"
+[destination.secrets]
+first = {}
+second = {}
+"#,
+    )
+    .unwrap();
+    let f = file.to_str().unwrap();
+    for (lang, reason, left, unknown) in [
+        ("en", "secret_store_error", "Could not remove", false),
+        ("en", "keyring_timeout", "Could not remove", true),
+        ("fr", "keyring_timeout", "Impossible de retirer", true),
+    ] {
+        let store = CannotRollBack {
+            inner: MemorySecretSource::new(),
+            puts: Mutex::new(0),
+            put_reason: reason,
+        };
+        let r = run(
+            &[
+                "--lang",
+                lang,
+                "--config",
+                &c,
+                "dest",
+                "import",
+                f,
+                "--yes",
+                "--expect-host",
+                "two.example.org",
+            ],
+            &store,
+            &ScriptedInput::default(),
+            false,
+            false,
+        );
+        assert_eq!(r.code, 7, "{}", r.err);
+        // The entry that stayed is named, with what to do about it.
+        assert!(r.err.contains(left), "{lang}: {}", r.err);
+        assert!(r.err.contains("first"), "{}", r.err);
+        assert!(store.profile_exists("two").unwrap());
+        // A timeout says that the outcome is unknown, twice: on the error and on the entry.
+        let said = |words: &[&str]| words.iter().any(|w| r.err.contains(w));
+        assert_eq!(
+            said(&["may have been stored", "a pu être enregistré"]),
+            unknown
+        );
+        assert_eq!(
+            said(&["result is unknown", "résultat est inconnu"]),
+            unknown
+        );
+    }
+}
+
 #[test]
 fn no_command_prints_the_value() {
     let dir = config();
