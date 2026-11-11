@@ -302,7 +302,12 @@ mod tests {
         );
         assert_eq!(r.code, ExitCode::Usage);
         assert_eq!(r.out, "");
-        assert!(r.err.contains("valeur invalide '99'"), "{}", r.err);
+        assert!(
+            r.err.contains("valeur invalide pour '--delay <SEC>'"),
+            "{}",
+            r.err
+        );
+        assert!(!r.err.contains("99"), "{}", r.err);
         assert!(r.err.contains("--help"), "{}", r.err);
         let r = run(&["kropa", "--lang", "fr", "capture", "--bogus"], false);
         assert!(r.err.contains("argument inattendu '--bogus'"), "{}", r.err);

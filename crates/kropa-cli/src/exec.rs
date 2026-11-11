@@ -54,7 +54,7 @@ pub struct Context<'a> {
     pub clock: &'a dyn Clock,
     /// Host name for `{host}`.
     pub host: Option<String>,
-    /// How this system takes screenshots; `None` where no backend exists yet (macOS before 1.5).
+    /// How this system takes screenshots; `None` on a platform without one.
     pub backend: Option<&'a dyn CaptureBackend>,
     /// Waits for `--delay`; replaced by a recorder in tests.
     pub sleep: &'a dyn Fn(Duration),
@@ -122,7 +122,7 @@ pub fn schema_of(cmd: &Command) -> String {
 
 /// The lot that brings the capture backend of this platform, `None` when it is delivered.
 fn platform_capture_lot() -> Option<&'static str> {
-    if cfg!(target_os = "linux") {
+    if cfg!(any(target_os = "linux", target_os = "macos")) {
         None
     } else {
         Some("1.5")

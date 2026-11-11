@@ -82,23 +82,28 @@ fn percent_decode(text: &str) -> String {
 }
 
 /// The lower-case words of a name, split on anything that is not a letter or a digit and on
-/// `camelCase` boundaries: `AWSAccessKeyId` gives `aws`, `access`, `key`, `id`.
+/// `camelCase` boundaries (also after an acronym): `AWSAccessKeyId` gives `aws`, `access`, `key`, `id`.
 fn words(name: &str) -> Vec<String> {
+    let chars: Vec<char> = name.chars().collect();
     let mut words = Vec::new();
     let mut current = String::new();
-    let mut previous_lower = false;
-    for c in name.chars() {
+    for (i, &c) in chars.iter().enumerate() {
         if !c.is_alphanumeric() {
             if !current.is_empty() {
                 words.push(std::mem::take(&mut current));
             }
-            previous_lower = false;
             continue;
         }
-        if c.is_uppercase() && previous_lower && !current.is_empty() {
+        let previous = i.checked_sub(1).map(|p| chars[p]);
+        let next = chars.get(i + 1).copied();
+        // `accessKey`: lower then upper. `AWSAccess`: the last capital of a run that starts a word.
+        let boundary = c.is_uppercase()
+            && previous.is_some_and(|p| {
+                p.is_lowercase() || (p.is_uppercase() && next.is_some_and(char::is_lowercase))
+            });
+        if boundary && !current.is_empty() {
             words.push(std::mem::take(&mut current));
         }
-        previous_lower = c.is_lowercase();
         current.extend(c.to_lowercase());
     }
     if !current.is_empty() {

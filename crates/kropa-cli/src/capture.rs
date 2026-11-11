@@ -3,8 +3,9 @@
 //! `kropa capture screen|output`: ask the backend, write the file, report.
 //!
 //! The order is chosen so that the user is never asked for something that cannot work: what the
-//! backend can never do (one screen, a format it does not produce) fails first; only then comes the
-//! delay, the portal dialog, the picture and the file. Nothing is written when the capture failed,
+//! backend can never do (one screen, a format it does not produce) fails first; then the permission
+//! the platform asks for up front; only then comes the delay, the portal dialog, the picture and the
+//! file. Nothing is written when the capture failed,
 //! and the success message is only printed once the file is on disk.
 
 use std::io::Write;
@@ -252,6 +253,11 @@ pub fn run(
     };
     backend
         .check(&request)
+        .map_err(|e| capture_cli_error(&e, loc, None))?;
+    // A permission the platform asks for up front (macOS Screen Recording) is settled before the
+    // delay, so that a refusal does not come after the wait.
+    backend
+        .authorize(&request)
         .map_err(|e| capture_cli_error(&e, loc, None))?;
     if let Some(seconds) = opts.delay.filter(|s| *s > 0.0) {
         session.debug(
