@@ -46,7 +46,6 @@ pub const ALL_REASONS: &[&str] = &[
     "secret_in_path",
     "import_host_mismatch",
     "io",
-    "tls_cpu_unsupported",
 ];
 
 /// Whether a failed upload is worth retrying (queue, lot 4.5): `408`, `429`, `5xx` and network
@@ -128,9 +127,6 @@ pub enum UploadError {
         /// What is wrong; never a secret.
         detail: String,
     },
-    /// The system cannot run the TLS provider (exit 5).
-    #[error("this processor lacks features the TLS provider needs")]
-    TlsUnsupported,
     /// A local file could not be read or written (exit 15).
     #[error("{path}: {source}")]
     Io {
@@ -177,7 +173,7 @@ impl UploadError {
             Self::Config { .. } => ExitCode::Config,
             Self::Variable { .. } => ExitCode::Usage,
             Self::SecretMissing { .. } | Self::SecretStore(_) => ExitCode::SecretUnavailable,
-            Self::SecretStoreNotDelivered | Self::TlsUnsupported => ExitCode::Unsupported,
+            Self::SecretStoreNotDelivered => ExitCode::Unsupported,
             Self::Network { .. } => ExitCode::Network,
             Self::Server { .. } | Self::Failed { .. } => ExitCode::UploadFailed,
             Self::Security { .. } => ExitCode::SecurityRefused,
@@ -198,7 +194,6 @@ impl UploadError {
             Self::SecretStore(_) => "secret_store_error",
             Self::SecretStoreNotDelivered => "secret_store_not_delivered",
             Self::Server { .. } => "http_status",
-            Self::TlsUnsupported => "tls_cpu_unsupported",
             Self::Io { .. } => "io",
         }
     }

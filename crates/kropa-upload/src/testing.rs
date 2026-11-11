@@ -4,20 +4,18 @@
 //! section 4.5, decision U3: no `http://` exception for a secret, not even on the loopback).
 //!
 //! [`Front`] starts a `wiremock` server and puts a TLS listener in front of it. The certificate is
-//! made for `127.0.0.1` by a CA generated for the test (`rcgen`). The client of the test trusts that
+//! made for `127.0.0.1` by a CA generated for the test (`rcgen`, `aws-lc-rs` backend). The client of the test trusts that
 //! CA through [`HttpClient::with_extra_root`], which exists in test builds of this crate only.
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use rcgen::{
-    BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyUsagePurpose, PublicKeyData,
-    SanType, SerialNumber, SigningKey,
+    BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType,
 };
 use rustls::ServerConfig;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
@@ -39,7 +37,7 @@ pub(crate) struct Front {
 impl Front {
     pub(crate) async fn start() -> Self {
         let (ca, chain, key) = certificates();
-        let provider = Arc::new(rustls_graviola::default_provider());
+        let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
         let config = ServerConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
             .expect("protocol versions")
@@ -101,88 +99,34 @@ impl Drop for Front {
     }
 }
 
-/// An ECDSA P-256 key made by Graviola (the provider of the product, pure Rust: no C compiler, so the
-/// tests build for every target), which `rcgen` uses to sign through [`SigningKey`].
-struct TestKey {
-    pair: graviola::signing::ecdsa::SigningKey<graviola::signing::ecdsa::P256>,
-    /// The public point, X9.62 uncompressed (what `rcgen` puts in the certificate).
-    point: Vec<u8>,
-}
-
-impl TestKey {
-    fn generate() -> Self {
-        let pair = graviola::signing::ecdsa::SigningKey::generate().expect("P-256 key");
-        let mut buffer = [0u8; 128];
-        let spki = pair.to_spki_der(&mut buffer).expect("SPKI");
-        // The point closes the SPKI of a P-256 key: 65 bytes (0x04 || X || Y).
-        let point = spki[spki.len() - 65..].to_vec();
-        assert_eq!(point[0], 4);
-        Self { pair, point }
-    }
-
-    fn pkcs8(&self) -> PrivateKeyDer<'static> {
-        let mut buffer = [0u8; 256];
-        let der = self.pair.to_pkcs8_der(&mut buffer).expect("PKCS#8");
-        PrivateKeyDer::try_from(der.to_vec()).expect("PKCS#8 form")
-    }
-}
-
-impl PublicKeyData for TestKey {
-    fn der_bytes(&self) -> &[u8] {
-        &self.point
-    }
-
-    fn algorithm(&self) -> &'static rcgen::SignatureAlgorithm {
-        &rcgen::PKCS_ECDSA_P256_SHA256
-    }
-}
-
-impl SigningKey for TestKey {
-    fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, rcgen::Error> {
-        let mut buffer = [0u8; 80];
-        self.pair
-            .sign_asn1::<graviola::hashing::Sha256>(&[msg], &mut buffer)
-            .map(<[u8]>::to_vec)
-            .map_err(|_| rcgen::Error::RemoteKeyError)
-    }
-}
-
-/// A serial number that no other certificate of the process has (`rcgen` makes none without its
-/// crypto backend, which these tests do not build).
-fn serial() -> SerialNumber {
-    static NEXT: AtomicU64 = AtomicU64::new(1);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(0));
-    SerialNumber::from(nanos.wrapping_add(NEXT.fetch_add(1, Ordering::Relaxed)) >> 1)
-}
-
 /// A CA and a leaf certificate for `127.0.0.1`, both made now.
 fn certificates() -> (
     CertificateDer<'static>,
     Vec<CertificateDer<'static>>,
     PrivateKeyDer<'static>,
 ) {
-    let ca_key = TestKey::generate();
+    let ca_key = KeyPair::generate().expect("CA key");
     let mut ca_params = CertificateParams::new(Vec::new()).expect("CA parameters");
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
     ca_params
         .distinguished_name
         .push(DnType::CommonName, "Kropa test CA");
-    ca_params.serial_number = Some(serial());
     let ca = ca_params.self_signed(&ca_key).expect("CA certificate");
     let issuer = Issuer::new(ca_params, ca_key);
 
-    let leaf_key = TestKey::generate();
+    let leaf_key = KeyPair::generate().expect("leaf key");
     let mut leaf_params = CertificateParams::new(Vec::new()).expect("leaf parameters");
     leaf_params.subject_alt_names = vec![SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST))];
     leaf_params
         .distinguished_name
         .push(DnType::CommonName, "127.0.0.1");
-    leaf_params.serial_number = Some(serial());
     let leaf = leaf_params
         .signed_by(&leaf_key, &issuer)
         .expect("leaf certificate");
-    (ca.der().clone(), vec![leaf.der().clone()], leaf_key.pkcs8())
+    (
+        ca.der().clone(),
+        vec![leaf.der().clone()],
+        PrivateKeyDer::from(PrivatePkcs8KeyDer::from(leaf_key.serialize_der())),
+    )
 }

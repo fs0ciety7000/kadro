@@ -4,7 +4,7 @@
 //!
 //! - `reqwest` with rustls, certificates checked by the system verifier (`rustls-platform-verifier`:
 //!   a private CA is added to the system store, there is no "ignore TLS" option);
-//! - the cryptography of `rustls` comes from Graviola, which needs no C compiler and no OpenSSL;
+//! - the cryptography of `rustls` comes from `aws-lc-rs`, the default provider of `rustls`;
 //! - no proxy: neither `HTTP(S)_PROXY` nor the system settings are read (`.no_proxy()`);
 //! - redirections are followed by the engine itself, never by the client;
 //! - `User-Agent: kropa/<version>`, nothing else is sent that the destination did not ask for;
@@ -44,10 +44,7 @@ fn tls_error<E>(_: E) -> UploadError {
 type TlsBuilder = rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>;
 
 fn tls_builder() -> Result<(Arc<rustls::crypto::CryptoProvider>, TlsBuilder), UploadError> {
-    if !graviola::util::is_cpu_supported() {
-        return Err(UploadError::TlsUnsupported);
-    }
-    let provider = Arc::new(rustls_graviola::default_provider());
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
     let builder = ClientConfig::builder_with_provider(Arc::clone(&provider))
         .with_safe_default_protocol_versions()
         .map_err(tls_error)?;
@@ -58,8 +55,8 @@ impl HttpClient {
     /// Builds the client.
     ///
     /// # Errors
-    /// [`UploadError::TlsUnsupported`] when the processor lacks the instructions of the TLS
-    /// provider, [`UploadError::Network`] (`tls`) if the system verifier cannot start.
+    /// [`UploadError::Network`] (`tls`) if the TLS configuration or the system verifier cannot be
+    /// built.
     pub fn new() -> Result<Self, UploadError> {
         let (_, builder) = tls_builder()?;
         let config = builder

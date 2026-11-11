@@ -17,7 +17,6 @@ clap = { version = "4.6.7", features = ["derive", "string"] }
 directories = "6.0.0"
 fluent-bundle = "0.16.0"
 gethostname = "1.1.0"
-graviola = "0.4.5"
 insta = { version = "1.49.0", features = ["json"] }
 jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
 objc2 = "0.6.5"
@@ -28,11 +27,10 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 objc2-image-io = { version = "0.3.2", default-features = false, features = ["std"] }
 objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std"] }
 proptest = "1.12.0"
-rcgen = { version = "0.14.10", default-features = false }
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs"] }
 regex = "1.13.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "multipart"] }
-rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12"] }
-rustls-graviola = "0.4.0"
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
 rustls-platform-verifier = "0.7.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
@@ -41,7 +39,7 @@ sha2 = "0.11.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", default-features = false }
-tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12", "aws_lc_rs"] }
 toml = "1.2.1"
 trycmd = "1.2.1"
 unic-langid = "0.9.6"

@@ -335,7 +335,6 @@ error-upload-secret-too-short = Refusé : un secret fait au moins 4 octets.
 error-upload-secret-in-path = Refusé : { $detail }
 error-upload-import-host-mismatch = Refusé : le fichier vise { $detail }, pas l'hôte attendu. Rien n'a été importé.
 error-upload-io = { $detail }
-error-upload-tls-cpu-unsupported = Ce processeur n'a pas les fonctions dont le fournisseur TLS a besoin (AES, PCLMUL et AVX2 sur x86-64 ; AES, SHA-2 et PMULL sur ARM) : l'envoi n'y est pas disponible.
 
 warn-secret-short = Le secret '{ $detail }' est court : il peut être masqué à plus d'endroits que nécessaire.
 warn-secret-echoed = Le serveur a répété un secret dans sa réponse : le texte a été masqué.

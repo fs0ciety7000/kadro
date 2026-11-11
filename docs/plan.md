@@ -79,7 +79,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [x] 1.5 (compilé pour macOS, CI macos-15 ; essai réel sur le Mac en 1.12) Capture macOS : `SCScreenshotManager`, TCC, `.app` minimal. Agent : `macos-desktop-dev`. Fin : `.app` construit en CI ; capture réussie sur le Mac.
 - [ ] 1.6 **[Utilisateur]** Certificat auto-signé (20 ans, sauvegarde `age` hors ligne) ; vérifier que la permission survit à deux builds. Fin : résultat dans `decisions.md`.
 - [x] 1.7 `kropa-upload` : client HTTP unique, destinations TOML (gabarits, JSONPath, redirections même origine, HTTPS obligatoire avec secret, réponse ≤ 1 Mio), préréglage Zipline, import `.sxcu`. Agent : `backend-dev`. Fin : tests `wiremock` + `insta` verts.
-- [x] 1.7b Corrections de la revue de sécurité 1.7 (`docs/reviews/2026-11-11-security-1.7.md` : 2 bloquants, 3 importants). Agent : `backend-dev`. Fait sauf I3 : le fournisseur TLS attend la décision de l'utilisateur (aws-lc-rs recommandé).
+- [x] 1.7b Corrections de la revue de sécurité 1.7 (`docs/reviews/2026-11-11-security-1.7.md` : 2 bloquants, 3 importants). Agent : `backend-dev`. I3 fait : fournisseur aws-lc-rs (décision du 11/11).
 - [ ] 1.8 `kropa-store` + secrets au trousseau (origines liées), `kropa secrets status`. Dépend de S.3. Agent : `backend-dev`. Fin : tests gnome-keyring (CI) et trousseau temporaire macOS ; `security-reviewer` sans bloquant.
 - [ ] 1.9 Liens URL/Markdown/HTML échappés ; journaux expurgés. Agent : `backend-dev`. Fin : un test prouve qu'aucun secret n'apparaît dans les journaux.
 - [ ] 1.10 Presse-papiers : `NSPasteboard`, data-control (KDE, wlroots), message honnête sur GNOME. Agents : plateformes. Fin : statut = effet réel.

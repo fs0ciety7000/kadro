@@ -15,7 +15,7 @@
     283 tests verts, CI verte sauf GitGuardian (faux positifs, voir ci-dessous).
 - **En cours** (tâche, branche, PR) : rien en cours. Branche `claude/adoring-pascal-u36glt`, PR brouillon
   [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1) vers `main` (surveillée par la session).
-- **Prochaine action exacte** : si l'utilisateur choisit `aws-lc-rs`, confier à `backend-dev` le remplacement de
+- **Prochaine action exacte** : tâche **1.8** (`kropa-store`, secrets au trousseau, courtier Keychain macOS unique) selon `docs/security/secrets.md` (fournisseur TLS aws-lc-rs fait).
   Graviola dans `crates/kropa-upload` (`http.rs`, clés de test de `testing.rs`), retirer la vérification
   `cargo check --target aarch64-apple-darwin` depuis Linux si elle casse (la CI macOS compile nativement) ; puis tâche
   **1.8** (`kropa-store`, secrets au trousseau, courtier Keychain macOS unique) selon `docs/security/secrets.md`.

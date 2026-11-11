@@ -335,7 +335,6 @@ error-upload-secret-too-short = Refused: a secret must have at least 4 bytes.
 error-upload-secret-in-path = Refused: { $detail }
 error-upload-import-host-mismatch = Refused: the file targets { $detail }, not the host you expected. Nothing was imported.
 error-upload-io = { $detail }
-error-upload-tls-cpu-unsupported = This processor lacks features the TLS provider needs (AES, PCLMUL and AVX2 on x86-64; AES, SHA-2 and PMULL on ARM): uploads are not available on it.
 
 warn-secret-short = The secret '{ $detail }' is short: it may be masked in more places than needed.
 warn-secret-echoed = The server repeated a secret in its answer: the text was masked.
