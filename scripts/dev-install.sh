@@ -97,8 +97,11 @@ case "$bin" in
 esac
 
 mkdir -p -- "$apps_dir"
-tmp=$(mktemp "$apps_dir/.$APP_ID.XXXXXX")
-trap 'rm -f -- "$tmp"' EXIT HUP INT TERM
+# A private folder next to the destination (same file system, so the final mv is atomic), and a
+# file named *.desktop inside it: desktop-file-validate refuses any other extension.
+tmpdir=$(mktemp -d "$apps_dir/.$APP_ID.XXXXXX")
+trap 'rm -rf -- "$tmpdir"' EXIT HUP INT TERM
+tmp="$tmpdir/$APP_ID.desktop"
 # `|` separates the sed expression below: a path holding it is refused rather than escaped.
 case "$bin" in
     *'|'*) echo "dev-install: unsupported character '|' in $bin" >&2; exit 1 ;;

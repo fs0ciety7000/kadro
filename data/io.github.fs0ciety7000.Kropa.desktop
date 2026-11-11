@@ -13,6 +13,6 @@ TryExec=kropa
 Exec=kropa capture screen
 Terminal=false
 NoDisplay=true
-Categories=Utility;Graphics;
+Categories=Graphics;
 Keywords=screenshot;capture;screen;annotate;upload;
 StartupNotify=false
