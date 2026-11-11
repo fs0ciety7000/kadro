@@ -1,3 +1,5 @@
 bin.name = "kropa"
 args = ["--lang", "en", "capture", "--help"]
 env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"

@@ -2,5 +2,7 @@ bin.name = "kropa"
 args = ["--lang", "en", "edit", "shot.png", "--no-upload", "--upload=x"]
 status.code = 2
 env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
 fs.cwd = "ctx/with-file"
 fs.sandbox = true

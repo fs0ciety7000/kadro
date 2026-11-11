@@ -2,5 +2,7 @@ bin.name = "kropa"
 args = ["--lang", "en", "-v", "capture", "screen", "--output", ".", "--name", "{w}x{h}", "--config", "."]
 status.code = 5
 env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
 fs.cwd = "ctx/empty"
 fs.sandbox = true

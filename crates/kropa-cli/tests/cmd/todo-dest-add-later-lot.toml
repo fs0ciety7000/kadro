@@ -2,5 +2,7 @@ bin.name = "kropa"
 args = ["--lang", "en", "dest", "add", "z", "--type", "zipline", "--url", "https://z.example.org", "--secret-stdin"]
 status.code = 5
 env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
 fs.cwd = "ctx/empty"
 fs.sandbox = true

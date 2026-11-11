@@ -1,4 +1,6 @@
 bin.name = "kropa"
 args = ["--help"]
 env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
 env.add.LANG = "en_US.UTF-8"
