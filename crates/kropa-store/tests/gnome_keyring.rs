@@ -8,15 +8,17 @@
 //! So nothing touches the session of the person who runs the tests, and the bus and the daemon die
 //! with the test.
 //!
-//! The tools are `dbus-run-session` and `gnome-keyring-daemon` (Ubuntu: packages `dbus` and
-//! `gnome-keyring`). Without them the outer tests say so and pass, unless the variable
+//! The tools are `dbus-run-session`, `dbus-send`, `dbus-monitor` and `gnome-keyring-daemon` (Ubuntu:
+//! packages `dbus`, which brings `dbus-bin`, and `gnome-keyring`). Without them the outer tests say so and pass, unless the variable
 //! `KROPA_REQUIRE_KEYRING_TESTS` is set (CI sets it), in which case they fail.
 
 #![cfg(target_os = "linux")]
 #![allow(clippy::too_many_lines)]
 
 use std::collections::HashMap;
-use std::process::Command;
+use std::fs::File;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -65,7 +67,11 @@ fn have(tool: &str) -> bool {
 
 /// Runs the `inner_*` test `name` inside a private session bus with an unlocked keyring.
 fn in_private_session(name: &str) {
-    if !(have("dbus-run-session") && have("gnome-keyring-daemon") && have("dbus-send")) {
+    if !(have("dbus-run-session")
+        && have("gnome-keyring-daemon")
+        && have("dbus-send")
+        && have("dbus-monitor"))
+    {
         assert!(
             !required(),
             "dbus-run-session and gnome-keyring-daemon are required (KROPA_REQUIRE_KEYRING_TESTS is set)"
@@ -195,6 +201,72 @@ fn raw_delete_all() {
     for item in found.unlocked {
         item.delete().unwrap();
     }
+}
+
+/// A `dbus-monitor` on the private bus, writing every method call to a file in the private runtime
+/// directory. It is how the tests see what the store sends: a refusal that is quick proves little, a
+/// bus that never carried an `Unlock` or a `Prompt` call proves that nobody was asked.
+struct Monitor {
+    child: Child,
+    log: PathBuf,
+    /// Size of the log once the monitor was ready: what comes before is the test's own traffic.
+    seen: usize,
+}
+
+impl Monitor {
+    /// Starts it and waits until it sees a call, so that nothing after this point is missed.
+    fn start() -> Self {
+        let dir = std::env::var("XDG_RUNTIME_DIR").expect("run inside the private session");
+        let log = PathBuf::from(dir).join("monitor.log");
+        let child = Command::new("dbus-monitor")
+            .args(["--session", "type='method_call'"])
+            .stdout(File::create(&log).unwrap())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut monitor = Self {
+            child,
+            log,
+            seen: 0,
+        };
+        let started = Instant::now();
+        while !monitor.calls().contains("member=SearchItems") {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the monitor sees nothing"
+            );
+            // A harmless call, repeated until the monitor has joined the bus.
+            let _ = raw_items();
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        monitor.seen = monitor.calls().len();
+        monitor
+    }
+
+    fn calls(&self) -> String {
+        std::fs::read_to_string(&self.log).unwrap_or_default()
+    }
+
+    /// Stops it and returns the calls seen since `start` returned (never a value: it is encrypted
+    /// on the bus).
+    fn stop(mut self) -> String {
+        // Calls still in flight reach the log before the monitor is killed.
+        std::thread::sleep(Duration::from_millis(300));
+        self.child.kill().unwrap();
+        self.child.wait().unwrap();
+        self.calls().split_off(self.seen)
+    }
+}
+
+/// Calls that ask the user for something: unlocking, or any step of a prompt.
+fn asks_the_user(calls: &str) -> bool {
+    calls.lines().any(|line| {
+        line.starts_with("method call")
+            && (line.contains("member=Unlock")
+                || line.contains("interface=org.freedesktop.Secret.Prompt")
+                || line.contains("member=Prompt"))
+    })
 }
 
 /// The daemon registers on the bus a moment before its default collection exists.
@@ -477,6 +549,7 @@ fn inner_locked_not_interactive() {
         .unwrap();
     lock_default_collection();
     store.set_interactive(false);
+    let monitor = Monitor::start();
 
     // Every call answers `keyring_locked` at once. The call deadline is 5 s: a prompt would have
     // shown as a timeout (nobody answers it here) and as a slow call.
@@ -508,10 +581,19 @@ fn inner_locked_not_interactive() {
             .authorize("p", "n", Some("https://b.example.org:443"), None)
             .unwrap_err(),
     ];
+    let calls = monitor.stop();
     for error in &errors {
         assert_eq!(reason(error), "keyring_locked", "{error}");
+        assert!(error.to_string().contains("no way to ask"), "{error}");
         assert!(!error.to_string().contains(&secret));
     }
+    // The proof: the calls did reach the Secret Service (a search at least), and none of them asked
+    // it to unlock anything or opened a prompt.
+    assert!(calls.contains("member=SearchItems"), "{calls}");
+    assert!(
+        !asks_the_user(&calls),
+        "a locked keyring was asked to unlock without anyone to answer:\n{calls}"
+    );
     assert!(
         started.elapsed() < Duration::from_secs(4),
         "{:?}: a call waited for something",
@@ -552,8 +634,15 @@ fn inner_locked_prompt_unanswered() {
         .unwrap();
     lock_default_collection();
     store.set_interactive(true);
+    let monitor = Monitor::start();
     let started = Instant::now();
     let error = store.load("p", "n").err().unwrap();
+    // Control of the monitor of the test above: here the store does ask, and the monitor sees it.
+    let calls = monitor.stop();
+    assert!(
+        asks_the_user(&calls),
+        "the monitor did not see the unlock call:\n{calls}"
+    );
     // GNOME Keyring has no prompter in this session and dismisses the prompt: the call ends at once,
     // with the reason of a keyring that stayed locked, and nothing else is tried.
     assert_eq!(reason(&error), "keyring_locked", "{error}");
