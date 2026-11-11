@@ -1,0 +1,5 @@
+error: the following required arguments were not provided: <ID|--none>
+
+Usage: kropa dest set-default <ID|--none>
+
+For more information, try '--help'.

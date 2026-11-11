@@ -1,0 +1,5 @@
+error: unexpected argument 'zipline'
+
+Usage: kropa capture screen [OPTIONS]
+
+For more information, try '--help'.

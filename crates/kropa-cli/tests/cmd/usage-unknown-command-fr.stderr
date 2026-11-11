@@ -1,0 +1,5 @@
+erreur : sous-commande inconnue 'frobnicate'
+
+Utilisation : kropa [OPTIONS] <COMMANDE>
+
+Pour plus d'informations, essayez '--help'.

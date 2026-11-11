@@ -1,0 +1,5 @@
+error: unrecognized subcommand 'frobnicate'
+
+Usage: kropa [OPTIONS] <COMMAND>
+
+For more information, try '--help'.

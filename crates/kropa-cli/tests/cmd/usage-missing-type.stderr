@@ -1,0 +1,5 @@
+error: the following required arguments were not provided: --type <TYPE>
+
+Usage: kropa dest add --type <TYPE> <ID>
+
+For more information, try '--help'.

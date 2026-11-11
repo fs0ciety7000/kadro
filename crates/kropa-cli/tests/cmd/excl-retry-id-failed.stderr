@@ -1,0 +1,5 @@
+error: the argument '[ID]' cannot be used with '--failed'
+
+Usage: kropa queue retry <ID|--failed>
+
+For more information, try '--help'.

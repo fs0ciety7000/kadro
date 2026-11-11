@@ -1,0 +1,5 @@
+kropa 0.0.1
+commit: 133d9008707f
+target: x86_64-unknown-linux-gnu
+IPC protocol: not available yet (lot 2.1)
+JSON schemas: kropa.capture/1, kropa.upload/1, kropa.dest.list/1, kropa.queue.list/1, kropa.history.list/1, kropa.doctor/1, kropa.secrets.status/1, kropa.version/1, kropa.error/1, kropa.edit/1

@@ -1,0 +1,4 @@
+erreur : valeur invalide 'clipboard' pour '--copy <CIBLE>'
+  valeurs possibles : url, markdown, html, image, none
+
+Pour plus d'informations, essayez '--help'.

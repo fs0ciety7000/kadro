@@ -1,0 +1,26 @@
+Capturer, annoter et envoyer des captures d'écran.
+
+Utilisation : kropa [OPTIONS] <COMMANDE>
+
+Commandes :
+  capture  Prendre une capture d'écran
+  upload   Envoyer un fichier existant
+  dest     Gérer les destinations d'envoi
+  secrets  Gérer les secrets stockés
+  queue    Gérer la file d'envoi
+  history  Parcourir les captures et les envois
+  edit     Ouvrir l'éditeur sur une image
+  doctor   Rapporter le système, ses capacités et les replis actifs
+  version  Afficher les informations de version
+
+Options :
+      --json              Sortie lisible par une machine : un objet JSON sur stdout
+      --lang <LANGUE>     Langue des messages (fr ou en)
+  -q, --quiet             Moins de messages sur stderr (les erreurs restent)
+  -v, --verbose...        Plus de messages sur stderr (-vv : journal de débogage)
+      --no-input          Ne jamais poser de question, même sur un terminal
+      --color <COULEUR>   Couleur de la sortie stderr : auto (par défaut), always ou never
+      --config <DOSSIER>  Dossier de configuration
+      --password-fd <N>   Lire la phrase de passe du coffre sur ce descripteur de fichier
+  -h, --help              Afficher l'aide
+  -V, --version           Afficher la version

@@ -1,0 +1,3 @@
+error: invalid value '0' for '--limit <N>': expected a whole number, 1 or more
+
+For more information, try '--help'.

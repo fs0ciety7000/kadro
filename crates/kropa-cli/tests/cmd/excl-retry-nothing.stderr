@@ -1,0 +1,5 @@
+error: the following required arguments were not provided: <ID|--failed>
+
+Usage: kropa queue retry <ID|--failed>
+
+For more information, try '--help'.
