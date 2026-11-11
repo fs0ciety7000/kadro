@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The Keychain as Kropa uses it: **one item per secret**, whatever holds the items (the real
-//! Keychain, the broker that speaks for it, or the memory of a test).
+//! The Keychain as Kropa uses it, seen **per secret** (`<profile>/<name>`), whatever holds the
+//! secrets (the real Keychain, the broker that speaks for it, or the memory of a test).
 //!
-//! An item is a generic password (`kSecClassGenericPassword`) of service [`SERVICE`] and account
-//! `<profile>/<name>`; its secret is the version 2 document of `kropa-store` (`docs/security/secrets.md`
-//! section 2.3). This crate treats the document as opaque bytes: it never looks inside.
+//! Seen from outside, a secret is a version 2 document with one entry (`kropa-store`,
+//! `docs/security/secrets.md` section 2.3). Inside the real Keychain ([`crate::FileKeychain`]) there
+//! is **one single item**, a generic password of service [`SERVICE`] and account [`STORE_ACCOUNT`],
+//! whose secret is the version 2 document with *all* the entries: the access control list of a
+//! Keychain item is tied to the binary (its `cdhash`), so one item per secret would show one prompt
+//! per secret after every update, where decision U1 promises one prompt ([`crate::store_doc`]).
 
 use std::fmt;
 
@@ -14,13 +17,19 @@ use zeroize::Zeroizing;
 /// The service attribute of every item of Kropa (the application ID of the project).
 pub const SERVICE: &str = "io.github.fs0ciety7000.Kropa";
 
+/// The account of the single Keychain item that holds every entry.
+pub const STORE_ACCOUNT: &str = "store";
+
+/// Largest whole store document, in bytes.
+pub const MAX_STORE_LEN: usize = 1024 * 1024;
+
 /// Longest profile or secret name, in bytes.
 pub const MAX_PART_LEN: usize = 128;
 
 /// Largest document accepted, in bytes (the same limit as `kropa-store`'s documents).
 pub const MAX_DOCUMENT_LEN: usize = 64 * 1024;
 
-/// A stored secret: its name in the profile, and its document.
+/// A stored secret: its name in the profile, and its document (one entry).
 pub struct Item {
     /// The secret name (the part of the account after `<profile>/`).
     pub name: String,
@@ -57,13 +66,14 @@ pub enum FailureKind {
     Locked,
     /// The Keychain did not answer in time (`keyring_timeout`).
     Timeout,
-    /// More than one item answers to the same profile and name (`keyring_ambiguous`).
+    /// More than one Keychain item answers to the store (`keyring_ambiguous`), as two keychains of the
+    /// search list would give.
     Ambiguous,
     /// No usable keychain (`keyring_unavailable`).
     Unavailable,
-    /// The item to create exists already.
+    /// The entry to create exists already.
     Exists,
-    /// The item to modify does not exist (`secret_missing`).
+    /// The entry to modify does not exist (`secret_missing`).
     Missing,
     /// Any other failure of the store (`secret_store_error`).
     StoreError,
