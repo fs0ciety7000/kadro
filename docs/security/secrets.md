@@ -1,10 +1,10 @@
 # Modèle de sécurité des secrets — Kropa
 
 > S.1 rédigée par `architect` le 11/11/2026, revue par `security-reviewer` (S.2, `secrets-review.md` : 2 bloquants,
-> 10 importants, 12 mineurs), **corrigée en S.3** le 11/11/2026. **À valider par l'utilisateur**, avec les décisions
-> du § 0.2 et les changements de `cli.md` du § 9. Prime sur `uploads.md` § 4 et § 7 (Argon2id/XChaCha remplacé par
-> `age`, vidéo retirée). Aucun code de stockage (1.8, 2.8, 4.7) avant validation. « Doit » = exigence testable ;
-> « non vérifié » = à tester.
+> 10 importants, 12 mineurs), corrigée en S.3, contre-revue sans bloquant (N1 à N6), **décisions U1–U4 tranchées le
+> 11/11/2026** (`decisions.md`) et N1, N3 précisés en S.4. Prime sur `uploads.md` § 4 et § 7 (Argon2id/XChaCha remplacé
+> par `age`, vidéo retirée). Ajouts du § 9 reportés dans `cli.md`. « Doit » = exigence testable ; « non vérifié » = à
+> tester.
 
 ## 0. Changements après revue (S.3)
 
@@ -39,18 +39,26 @@
 | Q1–Q8 | Intégrées : Q2, Q3, Q4, Q5, Q6, Q7, Q8 adoptées ; Q1 = **décision U1**. | 2–5 |
 | Tests jugés irréalistes | Remplacés (UID injecté + `sudo -u nobody`, compteur de `Drop`, TLS `rcgen`, deux binaires × deux builds). | 8 |
 
-### 0.2 Décisions à soumettre à l'utilisateur (non tranchées ici)
+### 0.2 Décisions tranchées (11/11/2026, `decisions.md`)
 
-- **U1. Magasin macOS sans compte Developer.** Fait établi par la revue (source Apple) : chaque mise à jour provoque une
-  invite Keychain, **une par binaire** qui lit le trousseau. Options : (a) Keychain, `kropa` et `kropa-app` lisent
-  chacun l'élément → 2 invites par mise à jour ; (b) Keychain via **un seul binaire courtier** (§ 2.2) → 1 invite ;
-  (c) coffre `age` par défaut sur macOS → aucune invite Keychain, mais phrase de passe à chaque session. Recommandation
-  de l'architecte : **(b)**, avec (c) proposé en repli dans `doctor` et au premier lancement ; à confirmer par 1.6.
-- **U2. Secret dans le chemin de l'URL** (webhooks du type `/api/<jeton>`) : (a) refusé en v1 (recommandé, modèle plus
-  simple) ; (b) autorisé comme emplacement `path:<n>` sous le contrôle de sortie B1.
-- **U3. HTTP en bouclage avec secret** (serveur Zipline local) : (a) jamais hors builds de test (recommandé) ;
-  (b) option par profil `insecure_loopback = true`, IP littérales seules, avertissement à chaque envoi.
-- **U4. Changements de `cli.md`** (§ 9) : la spécification est validée, ses ajouts doivent l'être aussi.
+- **U1. Magasin macOS sans compte Developer : (b) courtier unique.** Seul `kropa` lit le Keychain et sert `kropa-app`
+  par un canal anonyme hérité (§ 2.2) → **une invite par mise à jour**. Le coffre `age` reste disponible en option
+  (`kropa secrets use vault`), proposé par `doctor` et au premier lancement. Le nombre d'invites reste à mesurer en 1.6.
+- **U2. Secret dans le chemin de l'URL : (a) refusé en v1** ; emplacements limités à en-tête, query, champ et corps
+  (§ 4.3, § 5).
+- **U3. HTTP en bouclage avec secret : (a) builds de test seulement** ; aucune option par profil (§ 4.5).
+- **U4. Ajouts à `cli.md` (§ 9) : acceptés**, reportés dans `cli.md` en S.4, sans nouveau code de sortie.
+
+### 0.3 Contre-revue S.3 → précisions S.4
+
+| Constat | Traitement | Où |
+|---|---|---|
+| **N1** masquage : ordre et étendue | Type `MaskedText` : détection sur le texte entier, masque étendu à la suite de l'alphabet, coupe ensuite | § 4.4, § 6 |
+| **N3** courtier macOS | Méthode de vérification du pair, refus, zéro accès Keychain avant contrôle, réponse limitée au profil ; ce que (b) retire à (a) | § 2.2, § 7 |
+| **N2** orphelins (1.7, 1.8) | Exigence d'implémentation : « `id` pris » = profil de la config **ou** entrée `<id>/*` du magasin ; `doctor` liste les entrées orphelines | § 5 |
+| **N4** détecteur (1.7) | Exigence d'implémentation : normaliser percent (deux passes), HTML et JSON (deux passes, `+` compris), ignorer les blancs dans le base64, ajouter l'hex ; secret < 4 octets refusé à la saisie | § 4.4 |
+| **N5** portée de l'expurgation (1.7, 1.8) | Exigence d'implémentation : « secret résolu » = **tout secret chargé dans le processus** depuis son démarrage, pas seulement ceux de la requête en cours | § 4.4, § 6 |
+| **N6** entrée vide d'import (1.8) | Exigence d'implémentation : `secrets set` sur une entrée « manquante » créée par import remontre origines et emplacements et les fait confirmer | § 4.3, § 5 |
 
 ## 1. Inventaire et transit
 
