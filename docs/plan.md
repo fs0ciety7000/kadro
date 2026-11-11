@@ -73,7 +73,7 @@ Dépend de : D1 pour le logo. En parallèle : lot 1. Bloque : 2.3, 2.4, 3.5, 3.6
 Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [x] 1.1 `kropa-core` : config TOML, chemins, modèles de nom (`proptest` : aucune sortie hors du dossier), erreurs et codes de sortie, horloge injectable. Agent : `backend-dev`.
 - [x] 1.2 `kropa-i18n` : Fluent branché sur la CLI. Agent : `backend-dev`. Fin : `LANG=fr` / `LANG=en` distincts.
-- [ ] 1.3 CLI clap conforme à `docs/cli.md`. Agent : `backend-dev`. Fin : fixtures `trycmd` vertes.
+- [x] 1.3 CLI clap conforme à `docs/cli.md`. Agent : `backend-dev`. Fin : fixtures `trycmd` vertes.
 - [ ] 1.4 Capture Linux : trait de capacités, portail Screenshot (`screen`, `output`), `kropa doctor`, `.desktop` + Registry (`scripts/dev-install.sh`). Agent : `linux-desktop-dev`. Fin : test sur portail factice en CI ; refus du portail = code d'erreur dédié.
 - [ ] 1.5 Capture macOS : `SCScreenshotManager`, TCC, `.app` minimal. Agent : `macos-desktop-dev`. Fin : `.app` construit en CI ; capture réussie sur le Mac.
 - [ ] 1.6 **[Utilisateur]** Certificat auto-signé (20 ans, sauvegarde `age` hors ligne) ; vérifier que la permission survit à deux builds. Fin : résultat dans `decisions.md`.
