@@ -18,3 +18,8 @@
   l'utilisateur, réversible) à la place de Graviola. Raison : mûr, audité, FIPS, repli selon le processeur (Graviola
   exclut les CPU sans ADX/BMI2/AVX2 et le Raspberry Pi 4). Conséquence : la vérification de compilation macOS depuis
   Linux peut ne plus passer (C compilé) ; la CI `macos-15` compile nativement.
+- **2026-11-11** — Magasin de secrets : un élément par secret sous Linux (Secret Service, crate `secret-service`, pas
+  `keyring` qui force `unlock_all`) ; **un seul élément** Keychain sous macOS (document v2 complet) pour tenir la
+  décision U1 « une seule invite par mise à jour » (ACL liée au `cdhash`, une invite par élément sinon).
+- **2026-11-11** — Exceptions `deny.toml` RUSTSEC-2026-0370/-0371/-0372 (« unmaintained », zbus 5 via
+  `secret-service` 5.2.0) : à retirer à la sortie de `secret-service` 6.0.0 stable, revue au plus tard le 2027-02-28.
