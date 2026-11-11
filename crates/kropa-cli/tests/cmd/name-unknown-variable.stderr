@@ -1,3 +1,3 @@
-error: invalid value '{nope}' for '--name <TEMPLATE>': unknown variable {nope} in name template
+error: invalid value for '--name <TEMPLATE>': unknown variable (available: date, time, n, w, h, kind, mode, output, host)
 
 For more information, try '--help'.

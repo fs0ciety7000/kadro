@@ -1,0 +1,5 @@
+erreur : argument inattendu '--bogus'
+
+Utilisation : kropa capture screen [OPTIONS]
+
+Pour plus d'informations, essayez '--help'.

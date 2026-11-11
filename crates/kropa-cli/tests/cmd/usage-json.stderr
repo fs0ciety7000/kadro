@@ -1,4 +1,4 @@
-error: unrecognized subcommand 'frobnicate'
+error: unrecognized subcommand
 
 Usage: kropa [OPTIONS] <COMMAND>
 

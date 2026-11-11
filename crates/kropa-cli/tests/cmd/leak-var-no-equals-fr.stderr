@@ -1,0 +1,3 @@
+erreur : valeur invalide pour '--var <NOM=VALEUR>' : NOM=VALEUR attendu, où NOM commence par une lettre ou '_' et ne contient que des lettres, chiffres et '_'
+
+Pour plus d'informations, essayez '--help'.

@@ -1,4 +1,4 @@
-error: invalid value 'clipboard' for '--copy <WHAT>'
+error: invalid value for '--copy <WHAT>'
   possible values: url, markdown, html, image, none
 
 For more information, try '--help'.

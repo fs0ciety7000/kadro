@@ -1,3 +1,3 @@
-erreur : valeur invalide '61' pour '--delay <SEC>' : un nombre de secondes de 0 à 60 est attendu
+erreur : valeur invalide pour '--delay <SEC>' : un nombre de secondes de 0 à 60 est attendu
 
 Pour plus d'informations, essayez '--help'.

@@ -1,3 +1,3 @@
-error: invalid value 'ftp://x' for '--url <URL>': expected an http:// or https:// URL with a host
+error: invalid value for '--url <URL>': expected an http:// or https:// URL with a host
 
 For more information, try '--help'.

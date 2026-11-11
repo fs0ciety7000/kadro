@@ -1,4 +1,4 @@
-error: unexpected argument 'zipline'
+error: unexpected extra argument
 
 Usage: kropa capture screen [OPTIONS]
 

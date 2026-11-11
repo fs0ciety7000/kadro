@@ -1,0 +1,3 @@
+erreur : valeur invalide pour '--name <MODÈLE>' : variable inconnue (disponibles : date, time, n, w, h, kind, mode, output, host)
+
+Pour plus d'informations, essayez '--help'.

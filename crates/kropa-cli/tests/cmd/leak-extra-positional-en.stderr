@@ -1,0 +1,5 @@
+error: unexpected extra argument
+
+Usage: kropa version [OPTIONS]
+
+For more information, try '--help'.

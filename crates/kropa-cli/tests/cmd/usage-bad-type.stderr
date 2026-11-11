@@ -1,4 +1,4 @@
-error: invalid value 'ftp' for '--type <TYPE>'
+error: invalid value for '--type <TYPE>'
   possible values: zipline, s3, sftp, http
 
 For more information, try '--help'.

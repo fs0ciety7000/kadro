@@ -1,5 +1,5 @@
 bin.name = "kropa"
-args = ["--lang", "en", "--lang", "sk-live-SENTINEL123", "version"]
+args = ["--lang", "sk-live-SENTINEL123", "version"]
 status.code = 2
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"

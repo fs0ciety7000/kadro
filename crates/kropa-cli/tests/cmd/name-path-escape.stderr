@@ -1,3 +1,3 @@
-error: invalid value '../x' for '--name <TEMPLATE>': unsafe file name: path separator or reserved character
+error: invalid value for '--name <TEMPLATE>': unsafe file name: path separator or reserved character
 
 For more information, try '--help'.

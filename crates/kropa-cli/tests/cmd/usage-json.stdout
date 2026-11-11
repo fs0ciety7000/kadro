@@ -1,1 +1,1 @@
-{"schema":"kropa.error/1","status":"error","exit_code":2,"error":{"code":"usage","reason":null,"message":"unrecognized subcommand 'frobnicate'","step":null}}
+{"schema":"kropa.error/1","status":"error","exit_code":2,"error":{"code":"usage","reason":null,"message":"unrecognized subcommand","step":null}}
