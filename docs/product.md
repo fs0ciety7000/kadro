@@ -1,4 +1,6 @@
-# Kadro — proposition de l'équipe Produit
+# Kropa — proposition de l'équipe Produit
+
+> Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
 
 > Statut : proposition, à valider. Source : `docs/brief.md`. Aucune décision technique n'est prise ici ;
 > les points qui dépendent des équipes Plateformes, Architecture ou Envoi sont marqués et listés en fin de document.
@@ -29,7 +31,7 @@ devoir être déclaré dans les réglages du bureau et appeler la CLI (voir §6)
 4. Outils à une touche : `A` flèche, `R` cadre, `O` ellipse, `L` ligne, `T` texte, `P` crayon, `B` flou, `X` pixellisation, `M` masque plein, `N` compteur, `H` surligneur. `Ctrl+Z`/`Ctrl+Maj+Z`. `Tab` passe d'une annotation à l'autre, `Suppr` efface.
 5. `Ctrl+U` : enregistrement local (toujours) puis envoi vers le profil par défaut ; `Ctrl+Maj+U` ouvre le choix du profil.
 6. Notification « Lien copié (Markdown) » ; le format (URL/Markdown/HTML) suit le profil. L'éditeur se ferme.
-7. Échec réseau : le fichier local est conservé, la notification le dit, la capture part en file d'attente (reprise plus tard ou `kadro queue retry`). Jamais de « lien copié » sans lien réel.
+7. Échec réseau : le fichier local est conservé, la notification le dit, la capture part en file d'attente (reprise plus tard ou `kropa queue retry`). Jamais de « lien copié » sans lien réel.
 
 ### P2. Capture rapide sans éditeur (Karim)
 
@@ -48,15 +50,15 @@ devoir être déclaré dans les réglages du bureau et appeler la CLI (voir §6)
 ### P4. Ligne de commande dans un script (Marc)
 
 ```sh
-url=$(kadro capture screen --output ~/rapports/ --name '{date}-{host}' --upload s3-prod --link-format url --no-clipboard)
-kadro capture region --last --delay 3 --upload default    # reprise de la dernière zone
-kadro upload ./schema.png --profile zipline               # envoi d'un fichier existant
-kadro history list --search grafana --json
+url=$(kropa capture screen --output ~/rapports/ --name '{date}-{host}' --upload s3-prod --link-format url --no-clipboard)
+kropa capture region --last --delay 3 --upload default    # reprise de la dernière zone
+kropa upload ./schema.png --profile zipline               # envoi d'un fichier existant
+kropa history list --search grafana --json
 ```
 
 Exigences : sortie standard = résultat seul (chemin ou URL), messages sur la sortie d'erreur, `--json` partout,
 codes de sortie documentés (0 succès, distincts pour annulation utilisateur, échec capture, échec envoi, config).
-Toute action de l'interface a son équivalent CLI (principe du brief), y compris `kadro edit <fichier>`.
+Toute action de l'interface a son équivalent CLI (principe du brief), y compris `kropa edit <fichier>`.
 Limite à dire clairement : sous Wayland, une capture exige une session graphique et peut afficher une
 autorisation du portail la première fois [SRP] ; pas de capture « sans écran » sur serveur.
 
@@ -66,7 +68,7 @@ autorisation du portail la première fois [SRP] ; pas de capture « sans écran 
 2. Réglages → Destinations → `Ajouter` : choix du type (Zipline, S3, SFTP, Imgur, HTTP personnalisé, importer `.sxcu`).
 3. Formulaire minimal (Zipline : URL + jeton). Le jeton va au trousseau ; s'il n'y en a pas, création ou saisie du mot de passe maître du fichier chiffré, avec explication.
 4. `Tester` : envoi d'une image témoin de 1 px **après confirmation**, affichage de l'URL obtenue et du lien formaté ; suppression proposée si l'API le permet.
-5. `Définir par défaut`, choix du format de lien. Équivalent CLI : `kadro dest add zipline --url … ` (jeton demandé sur l'entrée, jamais en argument), `kadro dest test`, `kadro dest import fichier.sxcu`.
+5. `Définir par défaut`, choix du format de lien. Équivalent CLI : `kropa dest add zipline --url … ` (jeton demandé sur l'entrée, jamais en argument), `kropa dest test`, `kropa dest import fichier.sxcu`.
 
 ## 3. Priorisation (MoSCoW) de toutes les fonctionnalités du brief
 
@@ -156,7 +158,7 @@ CLI, raccourcis, FR/EN, sur GNOME Wayland, KDE Wayland et macOS récent. **Pas d
 | Risques plateforme levés tôt | Capture oui, trousseau/presse-papiers/réseau tard | Tous, mais mêlés au chantier GUI | Capture, trousseau, presse-papiers, réseau, sans GUI |
 | Coût de reprise | Fort : l'envoi impose ensuite file, secrets, notifications dans une GUI déjà figée | Moyen | Faible : la GUI appelle un cœur déjà testé |
 | Usage réel par le développeur (dogfooding) | Oui, local seul | Oui | Oui, via raccourci du bureau → CLI |
-| Faiblesse | Retarde ce qui distingue Kadro | Grosse marche initiale pour un développeur seul | Pas d'annotation avant v0.3 ; peu montrable au début |
+| Faiblesse | Retarde ce qui distingue Kropa | Grosse marche initiale pour un développeur seul | Pas d'annotation avant v0.3 ; peu montrable au début |
 
 Référence : ShareX bâtit tout sur l'enchaînement « tâches après capture → tâches après envoi » et des envoyeurs
 personnalisés décrits par fichier ([guide ShareX](https://getsharex.com/blog/how-to-upload-screenshots-automatically/)) ;
@@ -174,10 +176,10 @@ toute façon et rend chaque étape testable ; (4) un développeur seul garde un 
 
 | Jalon | Contenu | Critère de fin |
 |---|---|---|
-| **v0.1 Cœur scriptable** | `kadro capture screen` et `kadro capture output`, enregistrement local, modèles de nom, envoi HTTP perso + `.sxcu` + préréglage Zipline, lien URL/MD/HTML copié, secrets au trousseau, FR/EN posés, journal sans données sensibles | Sur GNOME Wayland, KDE Wayland et macOS : `kadro capture screen --upload` donne un lien valide dans le presse-papiers ; un test prouve zéro requête réseau sans destination configurée |
-| **v0.2 Sélection** | Superposition de sélection de zone avec loupe et dimensions, sélection au clavier, délai, dernière zone, copie d'image, profils, S3, repli fichier chiffré, `kadro dest add/test/import` | P4 et P5 (version CLI) réalisables de bout en bout ; P1 sans annotation réalisable |
+| **v0.1 Cœur scriptable** | `kropa capture screen` et `kropa capture output`, enregistrement local, modèles de nom, envoi HTTP perso + `.sxcu` + préréglage Zipline, lien URL/MD/HTML copié, secrets au trousseau, FR/EN posés, journal sans données sensibles | Sur GNOME Wayland, KDE Wayland et macOS : `kropa capture screen --upload` donne un lien valide dans le presse-papiers ; un test prouve zéro requête réseau sans destination configurée |
+| **v0.2 Sélection** | Superposition de sélection de zone avec loupe et dimensions, sélection au clavier, délai, dernière zone, copie d'image, profils, S3, repli fichier chiffré, `kropa dest add/test/import` | P4 et P5 (version CLI) réalisables de bout en bout ; P1 sans annotation réalisable |
 | **v0.3 Éditeur** | Outils essentiels (formes, texte, crayon, flou, pixellisation, masque, compteurs, surligneur), annuler/rétablir, tout au clavier ; format d'annotation rééditable **décidé** et documenté | P1 complet réalisable sans souris sur les trois plateformes |
-| **v0.4 Flux quotidien** | Résident (barre système / menu), raccourcis globaux ou repli documenté, réglages graphiques (destinations, raccourcis, chaîne d'actions simple), notifications avec actions, suppression des métadonnées, file d'attente avec reprise manuelle, SFTP | Le développeur utilise Kadro deux semaines comme seul outil de capture |
+| **v0.4 Flux quotidien** | Résident (barre système / menu), raccourcis globaux ou repli documenté, réglages graphiques (destinations, raccourcis, chaîne d'actions simple), notifications avec actions, suppression des métadonnées, file d'attente avec reprise manuelle, SFTP | Le développeur utilise Kropa deux semaines comme seul outil de capture |
 | **v1.0 Stable** | Paquets (dmg ad hoc + Homebrew tap, Flatpak et/ou deb/rpm/AppImage, PKGBUILD dans le dépôt faute d'AUR), docs dont page « signature ad hoc et ses conséquences », matrice de compatibilité honnête, Should restants si prêts (miniature, historique, rééditer, Imgur) | Tous les Must validés sur la matrice de référence ; aucun bogue bloquant ouvert ; chaque fonction dégradée a son repli documenté |
 | **v1.1 Vidéo** | MP4 et GIF zone/écran, pause/reprise, coupe, micro, envoi par morceaux | P3 sans audio système réalisable sur les trois plateformes |
 | **v1.2 Rendu soigné** | Fenêtre propre, habillage et préréglages, projecteur, historique avec recherche graphique, rééditer | Un guide de Sophie réalisable avec rendu homogène |
@@ -188,7 +190,7 @@ toute façon et rend chaque étape testable ; (4) un développeur seul garde un 
 
 | Risque | Effet | Repli / mesure |
 |---|---|---|
-| **Raccourcis globaux sous Wayland** [SRP] | Portail GlobalShortcuts inégal selon GNOME/KDE/wlroots ; Flameshot classe encore GNOME et Plasma Wayland « expérimental » ([aide Wayland Flameshot](https://flameshot.org/docs/guide/wayland-help/)) | Raccourci du bureau qui appelle `kadro capture …`, documenté par bureau ; assistant qui le propose |
+| **Raccourcis globaux sous Wayland** [SRP] | Portail GlobalShortcuts inégal selon GNOME/KDE/wlroots ; Flameshot classe encore GNOME et Plasma Wayland « expérimental » ([aide Wayland Flameshot](https://flameshot.org/docs/guide/wayland-help/)) | Raccourci du bureau qui appelle `kropa capture …`, documenté par bureau ; assistant qui le propose |
 | **Capture via portail** [SRP] | Dialogue d'autorisation, pas de gel d'écran natif, multi-écrans à vérifier | Capturer d'abord l'écran entier puis sélectionner sur l'image figée ; matrice publiée |
 | **Presse-papiers Wayland** [SRP] | Le contenu disparaît si le processus se termine | Résident (v0.4) ou processus détaché qui sert le presse-papiers ; à trancher avec Architecture |
 | **macOS sans signature Apple** | Avertissement Gatekeeper ; l'autorisation « Enregistrement de l'écran » risque d'être redemandée à chaque mise à jour, la signature ad hoc changeant à chaque build [SRP] | Page de doc honnête ; installation Homebrew ; tester tôt (v0.1) |
@@ -215,7 +217,7 @@ ce qui conforte son report après v1.
 1. Matrice de faisabilité par bureau (GNOME, KDE, Sway/Hyprland, X11, macOS 13/14/15) pour : capture d'écran et de zone, fenêtre isolée avec transparence, raccourcis globaux, presse-papiers persistant, fenêtre au premier plan (épinglage, miniature), audio système, lecture des entrées.
 2. Versions minimales visées (GNOME, Plasma, macOS) : elles fixent la promesse de la v1.
 3. Conséquence exacte de la signature ad hoc sur l'autorisation d'enregistrement d'écran macOS à chaque mise à jour.
-4. Sélection de zone : superposition propre à Kadro sur image figée, ou sélecteur du portail ? Impact direct sur la loupe et la sélection au clavier.
+4. Sélection de zone : superposition propre à Kropa sur image figée, ou sélecteur du portail ? Impact direct sur la loupe et la sélection au clavier.
 
 **Architecture**
 5. Un processus résident est-il requis (presse-papiers Wayland, raccourcis, file d'attente) ? Si oui, la CLI lui parle-t-elle ou fonctionne-t-elle seule ?

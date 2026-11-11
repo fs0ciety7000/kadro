@@ -1,4 +1,6 @@
-# Kadro : architecture et stack
+# Kropa : architecture et stack
+
+> Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
 
 > Équipe Architecture et stack. Proposition à valider, aucun code écrit.
 > Versions et activité relevées le **11 novembre 2026** : API crates.io (`/api/v1/crates/<nom>`), dernier commit de la
@@ -12,14 +14,14 @@
 | Interface | **Natif par plateforme** : GTK4 + libadwaita (gtk4-rs) sous Linux, AppKit (objc2) sous macOS, sur un cœur et un canevas communs | Seule option qui tient le glisser-déposer sortant, les fenêtres flottantes et l'accessibilité sur les deux systèmes |
 | Capture | **Couche maison mince** sur des crates spécialisées : ashpd + pipewire (portails), libwayshot (wlroots), xcap (X11), screencapturekit (macOS) | Aucune crate unique ne couvre bien GNOME/KDE Wayland et macOS 15+ |
 | Rendu | **tiny-skia** + cosmic-text, CPU, identique sur les deux plateformes | Pur Rust, mûr, sans GPU, rendu d'export identique au pixel près |
-| Document | `.kadro` = ZIP (`document.json` versionné + `original.png`) | Rééditable, l'original non caviardé reste local |
-| Vidéo | **GStreamer** sous Linux, **ScreenCaptureKit + AVFoundation** sous macOS, GIF en Rust (`gif` + `imagequant`) | Aucun encodeur H.264 embarqué : on utilise celui du système |
-| Licence | **GPL-3.0-or-later** | Compatible avec FFmpeg GPL ou LGPL, x264, imagequant, et avec les dépendances Apache-2.0 |
-| Processus | Démon résident (l'application graphique) + CLI `kadro` cliente, IPC JSON sur socket Unix | Raccourcis, presse-papiers Wayland, file d'envoi et miniatures exigent un processus vivant |
+| Document | `.kropa` = ZIP (`document.json` versionné + `original.png`) | Rééditable, l'original non caviardé reste local |
+| Vidéo | ~~GStreamer sous Linux, ScreenCaptureKit + AVFoundation sous macOS, GIF en Rust (`gif` + `imagequant`)~~ **Retirée (décision du 11/11/2026)** | Vidéo et GIF sont hors périmètre du produit |
+| Licence | **GPL-3.0-or-later** (choix de l'utilisateur) | Compatible avec les dépendances Apache-2.0 ; ~~compatible avec FFmpeg GPL ou LGPL, x264, imagequant~~ (justification vidéo caduque) |
+| Processus | Démon résident (l'application graphique) + CLI `kropa` cliente, IPC JSON sur socket Unix | Raccourcis, presse-papiers Wayland, file d'envoi et miniatures exigent un processus vivant |
 
 ## 1. Interface graphique
 
-### Ce que Kadro exige d'un toolkit
+### Ce que Kropa exige d'un toolkit
 
 Overlay de sélection plein écran sur image figée (multi-écrans, HiDPI) ; fenêtres sans bordure (miniature, épingle,
 contrôles d'enregistrement) ; **glisser-déposer sortant d'un fichier** depuis la miniature ; zone d'icône (barre de
@@ -35,7 +37,7 @@ layer-shell. Ces limites s'appliquent à **tous** les toolkits ; les équipes Pl
 | Option | Avantages | Maintenance (seul) | Risque principal |
 | --- | --- | --- | --- |
 | **A. egui/eframe 0.37.0** (2026-10-15, MIT/Apache) | Un seul code, très actif, AccessKit intégré, prototypage rapide | Faible | Rendu non natif ; winit **n'a pas de glisser-déposer sortant** (PR winit #4571 encore ouverte en mai 2026) ; pas de layer-shell ; mode immédiat peu adapté aux longs formulaires |
-| **A'. Slint 1.18.1** (2026-09-21, GPL-3.0 ou licences Slint) | Déclaratif, AccessKit, `@tr` gettext, GPL compatible avec Kadro | Moyen | Glisser-déposer limité à l'application (notes 1.17), dépend de la même PR winit ; style imité, pas natif |
+| **A'. Slint 1.18.1** (2026-09-21, GPL-3.0 ou licences Slint) | Déclaratif, AccessKit, `@tr` gettext, GPL compatible avec Kropa | Moyen | Glisser-déposer limité à l'application (notes 1.17), dépend de la même PR winit ; style imité, pas natif |
 | **A''. iced 0.14.0** (2025-12-07, MIT) | Architecture Elm propre, `iced_layershell` 0.19.1 pour KDE/wlroots | Moyen | **Pas d'accessibilité en amont** (fork `a11y-accesskit` seulement) ; pas de release depuis 11 mois malgré un dépôt actif ; mêmes limites winit |
 | **A'''. Tauri 2.12.5** (2026-10-21) | Interface web, écosystème de plugins | Moyen | WebView (WebKitGTK sous Linux) lourd, contraire au principe « natif et léger » ; overlay et canevas lents |
 | **B. GTK4 partout** (gtk4-rs 0.11.5, 2026-09-20) | Un seul code d'interface, natif sous Linux, a11y via AccessKit sous macOS depuis GTK 4.18 | Moyen | Sous macOS : aspect étranger, empaquetage des dylibs GTK à la main, pas d'`NSPanel`/agent de barre de menus, bogues de focus et de dépôt signalés en 2026 |
@@ -78,8 +80,8 @@ layer-shell. Ces limites s'appliquent à **tous** les toolkits ; les équipes Pl
   on affiche une fenêtre plein écran par moniteur avec cette image, la loupe, les dimensions et la pipette. Sur KDE
   et wlroots, `gtk4-layer-shell` 0.8.1 donne un overlay plus propre (calque `overlay`, clavier exclusif).
 - **macOS** : on préfère screencapturekit-rs (très actif, 11.x) aux liaisons brutes `objc2-screen-capture-kit`, qui
-  restent disponibles pour un manque ponctuel. Version minimale proposée : **macOS 14** (captures SCK) ; à confirmer.
-- La fenêtre « propre » (ombre, fond) se fait par composition dans `kadro-render` à partir d'une capture de fenêtre ;
+  restent disponibles pour un manque ponctuel. Version minimale proposée : ~~macOS 14~~ **macOS 15 Sequoia** (décision du 11/11/2026).
+- La fenêtre « propre » (ombre, fond) se fait par composition dans `kropa-render` à partir d'une capture de fenêtre ;
   sous GNOME Wayland, la sélection de fenêtre passe forcément par la boîte du portail.
 
 ## 3. Rendu des annotations et format de document
@@ -104,15 +106,19 @@ avant d'envisager vello.
 
 Options : (a) JSON dans un bloc `iTXt` du PNG exporté : un seul fichier, mais l'original nécessaire pour annuler un
 flou y serait embarqué, et la suppression des métadonnées le perdrait ; (b) fichier annexe JSON à côté du PNG :
-simple, mais deux fichiers à garder ensemble ; (c) **conteneur `.kadro`**.
+simple, mais deux fichiers à garder ensemble ; (c) **conteneur `.kropa`**.
 
-**Choix (c)** : `.kadro` = ZIP (crate zip 9.5.1) contenant `document.json` (schéma versionné : `version`, taille,
+**Choix (c)** : `.kropa` = ZIP (crate zip 9.5.1) contenant `document.json` (schéma versionné : `version`, taille,
 échelle, liste d'objets typés avec style, ordre, verrou), `original.png` et `preview.png`. Le PNG exporté dans le
-dossier de l'utilisateur reste un PNG ordinaire, **aplati** : flou et masque y sont irréversibles. Le `.kadro`, qui
+dossier de l'utilisateur reste un PNG ordinaire, **aplati** : flou et masque y sont irréversibles. Le `.kropa`, qui
 contient l'original non caviardé, reste dans le dossier de données local et n'est jamais envoyé. Migrations de schéma
 testées par des fichiers d'exemple de chaque version.
 
-## 4. Vidéo et GIF
+## 4. Vidéo et GIF (retirés, décision du 11/11/2026)
+
+> Cette section est **retirée** : vidéo et GIF sortent du produit (voir `docs/decisions.md`). Elle est conservée
+> comme historique ; ne rien en implémenter. Ne restent valables que les repères de licence plus bas, à lire sans
+> la partie FFmpeg.
 
 ### Options comparées
 
@@ -145,11 +151,15 @@ testées par des fichiers d'exemple de chaque version.
   binaire OpenH264 de Cisco, qui couvre les redevances ; certains dérivés (Bazzite) le désactivent ; le serveur de
   Cisco est injoignable dans certains pays. Le Freedesktop SDK a **retiré OpenH264** (25.08) au profit de l'extension
   Flatpak `codecs-extra` (x264/x265 compilés depuis les sources).
-- Conséquence pour Kadro : **ne livrer aucun encodeur H.264** dans ses binaires. Sous Linux, l'encodeur vient du
+- Conséquence pour Kropa : **ne livrer aucun encodeur H.264** dans ses binaires. Sous Linux, l'encodeur vient du
   système (la distribution en porte la licence et le risque de brevet) ; sous macOS, d'Apple. Un Flatpak éventuel
   déclarera `codecs-extra`.
 
-### Licence recommandée : GPL-3.0-or-later
+### Licence retenue : GPL-3.0-or-later
+
+> La licence reste **GPL-3.0-or-later**, choix de l'utilisateur (aligné sur ShareX et Flameshot). La justification
+> par FFmpeg, x264 et imagequant ci-dessous est caduque avec la vidéo ; seule la compatibilité avec les
+> dépendances Apache-2.0 reste un argument technique.
 
 | Licence | Pour | Contre |
 | --- | --- | --- |
@@ -187,35 +197,35 @@ plus lourd). Choix : rqrr, commun aux deux plateformes ; rxing si les codes-barr
   deviennent impossibles ou fragiles.
 - **Avec démon** (choix) : l'application graphique *est* le démon (`GtkApplication` à instance unique sous Linux,
   agent `LSUIElement` avec `NSStatusItem` sous macOS). Elle possède raccourcis, presse-papiers, file d'envoi,
-  fenêtres. La CLI `kadro` est un client léger ; sans démon, les actions sans interface (`upload`, `history`,
+  fenêtres. La CLI `kropa` est un client léger ; sans démon, les actions sans interface (`upload`, `history`,
   `config`) tournent en processus, les autres démarrent le démon (activation D-Bus ou `open -a`).
-- Deux binaires : `kadro` (CLI, **sans dépendance GTK**, utilisable sur un serveur pour envoyer des fichiers) et
-  `kadro-app` (coquille graphique).
+- Deux binaires : `kropa` (CLI, **sans dépendance GTK**, utilisable sur un serveur pour envoyer des fichiers) et
+  `kropa-app` (coquille graphique).
 
 ### IPC
 
 Options : D-Bus (zbus 6.2.1) — natif Linux, absent de macOS ; gRPC — trop lourd ; **socket Unix + JSON-RPC 2.0
 ligne par ligne** (serde_json, tokio `UnixStream`) — identique sur les deux systèmes. **Choix : socket Unix**, dans
-`$XDG_RUNTIME_DIR/kadro/` (Linux) et `~/Library/Caches/Kadro/` (macOS, chemin < 104 octets), droits 0600,
+`$XDG_RUNTIME_DIR/kropa/` (Linux) et `~/Library/Caches/Kropa/` (macOS, chemin < 104 octets), droits 0600,
 protocole versionné (`hello` avec version). D-Bus reste utilisé côté Linux pour l'activation et les portails.
 
 ### Crates du workspace
 
 | Crate | Rôle |
 | --- | --- |
-| `kadro-core` | Types, configuration, modèles de nom, chaîne d'actions, erreurs, types du protocole IPC |
-| `kadro-doc` | Modèle de document, outils, annuler/rétablir, format `.kadro` |
-| `kadro-render` | tiny-skia + cosmic-text : canevas, effets, habillage (fond, marge, ombre), export PNG/JPEG |
-| `kadro-capture` | Trait `Capturer` ; modules `linux/` (portail, wlroots, X11) et `macos/` sous `cfg` |
-| `kadro-video` | Enregistrement (GStreamer / AVFoundation), GIF, coupe |
-| `kadro-vision` | OCR, QR, détection de secrets |
-| `kadro-upload` | Destinations, import `.sxcu`, file persistante, reprise, envoi par morceaux |
-| `kadro-store` | Historique SQLite, fichiers, secrets (trousseau + repli chiffré) |
-| `kadro-i18n` | Ressources Fluent FR/EN partagées |
-| `kadro-cli` | Binaire `kadro` (clap 4.6.7) |
-| `kadro-gtk` / `kadro-macos` | Coquilles graphiques (binaire `kadro-app`) |
+| `kropa-core` | Types, configuration, modèles de nom, chaîne d'actions, erreurs, types du protocole IPC |
+| `kropa-doc` | Modèle de document, outils, annuler/rétablir, format `.kropa` |
+| `kropa-render` | tiny-skia + cosmic-text : canevas, effets, habillage (fond, marge, ombre), export PNG/JPEG |
+| `kropa-capture` | Trait `Capturer` ; modules `linux/` (portail, wlroots, X11) et `macos/` sous `cfg` |
+| ~~`kropa-video`~~ | ~~Enregistrement (GStreamer / AVFoundation), GIF, coupe~~ **Retirée (décision du 11/11/2026)** |
+| `kropa-vision` | OCR, QR, détection de secrets |
+| `kropa-upload` | Destinations, import `.sxcu`, file persistante, reprise, envoi par morceaux |
+| `kropa-store` | Historique SQLite, fichiers, secrets (trousseau + repli chiffré) |
+| `kropa-i18n` | Ressources Fluent FR/EN partagées |
+| `kropa-cli` | Binaire `kropa` (clap 4.6.7) |
+| `kropa-gtk` / `kropa-macos` | Coquilles graphiques (binaire `kropa-app`) |
 
-Onze crates au départ, pas plus : capture Linux et macOS restent deux modules d'une même crate tant qu'ils
+Dix crates au départ (onze avant le retrait de la vidéo), pas plus : capture Linux et macOS restent deux modules d'une même crate tant qu'ils
 compilent séparément sans gêne. Le cœur ne dépend d'aucune bibliothèque graphique et se teste sans écran.
 
 ### Autres choix transverses
@@ -228,7 +238,7 @@ compilent séparément sans gêne. Le cœur ne dépend d'aucune bibliothèque gr
 | Secrets | **keyring 4.2.0** (Secret Service, Keychain) ; secret-service 5.2.0 seul | keyring ; repli **age 0.12.1** (fichier chiffré par phrase de passe, scrypt) plutôt qu'un assemblage maison argon2 + chacha20poly1305 |
 | HTTP et envoi | reqwest 0.13.5 (rustls) ; aws-sdk-s3 1.159.0 (très lourd) ; rust-s3 0.38.0 ; opendal 0.59.5 | reqwest pour Zipline, Imgur, HTTP générique ; S3 par reqwest + **aws-sigv4** 1.6.5 (multipart maison, compatible MinIO/R2) ; SFTP par **russh 0.65.1 + russh-sftp 3.0.1** (pur Rust) |
 | i18n | **Fluent** (fluent 0.17.0, i18n-embed 0.16.0) ; gettext-rs 0.8.0 | Fluent : mêmes fichiers `.ftl` pour CLI, GTK et AppKit, pluriels corrects ; chaînes posées depuis Rust, pas dans les `.ui` |
-| Raccourcis globaux | **portail GlobalShortcuts** (ashpd) ; **global-hotkey** 0.10.0 ; raccourci du bureau → CLI | Portail sous Wayland (KDE ; GNOME 48+, fiabilité à vérifier) ; global-hotkey sous X11 et macOS ; repli documenté partout : raccourci personnalisé du bureau lançant `kadro capture area` |
+| Raccourcis globaux | **portail GlobalShortcuts** (ashpd) ; **global-hotkey** 0.10.0 ; raccourci du bureau → CLI | Portail sous Wayland (KDE ; GNOME 48+, fiabilité à vérifier) ; global-hotkey sous X11 et macOS ; repli documenté partout : raccourci personnalisé du bureau lançant `kropa capture area` |
 | Presse-papiers | arboard 3.7.0 ; wl-clipboard-rs 0.9.5 ; API du toolkit | `GdkClipboard` (démon propriétaire de la sélection) et `NSPasteboard` (fichier + image + URL en même temps) ; wl-clipboard-rs pour la CLI sans démon là où data-control existe |
 | Zone d'icône | ksni 0.3.7 (StatusNotifierItem) ; tray-icon 0.26.1 | ksni sous Linux (KDE natif ; GNOME seulement avec l'extension AppIndicator) ; `NSStatusItem` sous macOS |
 | Métadonnées | img-parts 0.4.2, kamadak-exif 0.6.2 | Nos exports n'écrivent aucune métadonnée ; img-parts retire EXIF/XMP des fichiers importés avant envoi |
@@ -266,10 +276,10 @@ compilent séparément sans gêne. Le cœur ne dépend d'aucune bibliothèque gr
 | screencapturekit | 11.1.2 | 2026-11-02 | MIT/Apache | 2026-11-02 | Capture macOS |
 | tiny-skia | 0.12.0 | 2026-02-02 | BSD-3 | 2026-08-20 | Rendu 2D |
 | cosmic-text | 0.19.0 | 2026-04-22 | MIT/Apache | version | Texte des annotations |
-| zip | 9.5.1 | 2026-11-10 | MIT | version | Conteneur `.kadro` |
-| gstreamer (+ -app, -video) | 0.25.4 | 2026-09-21 | MIT/Apache | (GitLab) version | Vidéo Linux |
-| gif | 0.14.2 | 2026-04-09 | MIT/Apache | version | Écriture GIF |
-| imagequant | 4.4.1 | 2025-07-13 | GPL-3.0+ | version | Palette GIF |
+| zip | 9.5.1 | 2026-11-10 | MIT | version | Conteneur `.kropa` |
+| ~~gstreamer (+ -app, -video)~~ | 0.25.4 | 2026-09-21 | MIT/Apache | (GitLab) version | ~~Vidéo Linux~~ retirée |
+| ~~gif~~ | 0.14.2 | 2026-04-09 | MIT/Apache | version | ~~Écriture GIF~~ retirée |
+| ~~imagequant~~ | 4.4.1 | 2025-07-13 | GPL-3.0+ | version | ~~Palette GIF~~ retirée |
 | rqrr | 0.11.0 | 2026-09-02 | MIT/Apache + ISC | 2026-09-02 | QR |
 | ocrs (réserve) | 0.14.0 | 2026-11-08 | MIT/Apache | 2026-11-08 | OCR pur Rust, à réévaluer |
 | rusqlite | 0.42.0 | 2026-11-11 | MIT | version | Historique |
@@ -308,7 +318,7 @@ leptess 0.14.0, rxing 0.9.4, aws-sdk-s3 1.159.0.
 6. Affichage des clics et touches pendant l'enregistrement : pas d'écoute globale des entrées pour un client
    Wayland. Probablement **impossible sous GNOME/KDE** sans droits sur `/dev/input` ; à confirmer et documenter.
 7. Capture défilante : pas d'injection de défilement sous Wayland sans portail RemoteDesktop ; mode « l'utilisateur
-   fait défiler, Kadro assemble » acceptable ?
+   fait défiler, Kropa assemble » acceptable ?
 8. Greffons GStreamer présents par défaut (Fedora, Ubuntu, Debian, openSUSE, Arch) : `pipewiresrc`, `mp4mux`,
    au moins un encodeur H.264 ; sinon repli WebM VP9.
 9. Canaux de distribution sans AUR : Flatpak (avec `codecs-extra`), AppImage, paquets .deb/.rpm ? Impact du bac à
@@ -331,11 +341,11 @@ leptess 0.14.0, rxing 0.9.4, aws-sdk-s3 1.159.0.
    Linux d'un lot, ou viser la parité à chaque lot ? (Le brief dit « qualité égale autant que possible ».)
 2. Ordre de développement proposé : cœur + CLI, puis Linux GNOME, puis macOS, puis KDE/wlroots/X11. À valider.
 3. OCR Linux : Tesseract externe suffit-il pour la v1, ou faut-il un moteur intégré (ocrs) malgré son statut ?
-4. Vidéo : MP4 obligatoire, ou WebM accepté comme repli quand aucun encodeur H.264 n'est installé ?
-5. Faut-il un back-end FFmpeg externe optionnel dès la v1 (conversion, formats), ou le reporter ?
-6. La licence GPL-3.0-or-later convient-elle au porteur du projet (pas de double licence, pas de fork fermé) ?
-7. Stockage des `.kadro` : dossier de données seulement, ou option « garder le projet à côté du PNG » ?
-8. Désaccord possible avec l'équipe Plateformes Linux sur GStreamer vs PipeWire + FFmpeg : à signaler s'il existe.
+4. ~~Vidéo : MP4 obligatoire, ou WebM accepté comme repli ?~~ Sans objet : vidéo retirée.
+5. ~~Back-end FFmpeg externe optionnel dès la v1 ?~~ Sans objet : vidéo retirée.
+6. ~~La licence GPL-3.0-or-later convient-elle au porteur du projet ?~~ Tranché : oui.
+7. Stockage des `.kropa` : dossier de données seulement, ou option « garder le projet à côté du PNG » ?
+8. ~~Désaccord possible avec l'équipe Plateformes Linux sur GStreamer vs PipeWire + FFmpeg.~~ Sans objet : vidéo retirée.
 
 ## Sources (consultées le 2026-11-11)
 

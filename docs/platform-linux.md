@@ -1,4 +1,6 @@
-# Kadro — Plateforme Linux
+# Kropa — Plateforme Linux
+
+> Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
 
 > Équipe Plateforme Linux · état vérifié en ligne le 11 novembre 2026 · priorité GNOME et KDE sous Wayland.
 > Références entre crochets `[n]` : liste des sources en fin de document. « Non vérifié » : je n'ai pas trouvé de source.
@@ -74,7 +76,7 @@ notre propre overlay.
 
 1. **Fenêtre propre sur GNOME (et KDE en Flatpak)** : pas de survol des fenêtres. On ouvre le dialogue du portail
    (ScreenCast `WINDOW`, une image, ou Screenshot `target`=fenêtre si le backend l'accepte, non vérifié). L'ombre et le
-   fond sont ajoutés par Kadro sur l'image obtenue. Sur KDE natif : `ScreenShot2.CaptureActiveWindow` /
+   fond sont ajoutés par Kropa sur l'image obtenue. Sur KDE natif : `ScreenShot2.CaptureActiveWindow` /
    `CaptureInteractive`. On l'écrit dans l'interface : « Sur GNOME, choisissez la fenêtre dans la fenêtre du système. »
 2. **Écran actif** : on affiche l'overlay sur tous les écrans pendant quelques millisecondes ; l'écran qui reçoit
    `wl_pointer.enter` est l'écran actif. Si le pointeur ne bouge pas, l'événement peut manquer (non vérifié) : repli
@@ -100,8 +102,8 @@ notre propre overlay.
    d'ancrage ; à défaut, documenter une règle KWin « Garder au-dessus » ciblant notre App ID (ou notre étiquette
    `xdg-toplevel-tag`). Même sur KDE, « garder au-dessus » n'est pas une garantie absolue [27].
 8. **Raccourcis globaux hors portail** (Sway, river, autres wlroots ; ou refus de l'utilisateur sur GNOME/KDE) :
-   l'utilisateur ajoute dans les réglages du bureau un raccourci qui exécute `kadro capture area` (ou `bindsym Print
-   exec kadro capture area`). La CLI doit donc tout couvrir et répondre vite (daemon déjà lancé, § 3.4).
+   l'utilisateur ajoute dans les réglages du bureau un raccourci qui exécute `kropa capture area` (ou `bindsym Print
+   exec kropa capture area`). La CLI doit donc tout couvrir et répondre vite (daemon déjà lancé, § 3.4).
 9. **Presse-papiers sur GNOME** : la copie Wayland exige le focus et un processus vivant qui sert les données. On
    copie l'image pendant que l'overlay a encore le focus. Pour le lien obtenu **après** l'envoi : notification
    « Lien prêt — Copier » (le clic donne un jeton d'activation donc le focus) ou petite surface éphémère, l'astuce de
@@ -150,12 +152,12 @@ ou par l'environnement de lancement (`XDG_ACTIVATION_TOKEN`).
 
 **Choix : B, avec A seulement pour les messages d'aide** (« sur GNOME, faites… »). Ordre de préférence par
 capacité : 1) API native autorisée (ScreenShot2, screencopy) ; 2) portail ; 3) X11 si `DISPLAY` sans `WAYLAND_DISPLAY`.
-`kadro doctor` affiche les capacités détectées et les replis actifs.
+`kropa doctor` affiche les capacités détectées et les replis actifs.
 
 ### 3.4 Processus résident (daemon) ou CLI autonome ?
 
 Un processus résident est **nécessaire** : servir le presse-papiers après la capture, garder la session
-GlobalShortcuts, conserver les jetons de restauration, répondre vite à `kadro capture area` lancé par un raccourci du
+GlobalShortcuts, conserver les jetons de restauration, répondre vite à `kropa capture area` lancé par un raccourci du
 bureau. Choix : daemon démarré à la session (autostart du portail Background en Flatpak, `.desktop` d'autostart en
 natif) ; la CLI lui parle (D-Bus de session conseillé) et démarre en mode autonome s'il est absent.
 
@@ -163,12 +165,12 @@ natif) ; la CLI lui parle (D-Bus de session conseillé) et démarre en mode auto
 
 | Bureau | Ce que voit l'utilisateur |
 |---|---|
-| GNOME | 1) « Autoriser Kadro à faire des captures d'écran ? » une fois (permission store `screenshot`) ; un refus est mémorisé et doit être annulé à la main, piège connu de Flameshot [30]. 2) Dialogue GlobalShortcuts : l'utilisateur confirme ou modifie les raccourcis. 3) Première vidéo : choix écran/fenêtre, case « Mémoriser ce choix » (jeton de restauration, GNOME ≥ 42 [31]). |
+| GNOME | 1) « Autoriser Kropa à faire des captures d'écran ? » une fois (permission store `screenshot`) ; un refus est mémorisé et doit être annulé à la main, piège connu de Flameshot [30]. 2) Dialogue GlobalShortcuts : l'utilisateur confirme ou modifie les raccourcis. 3) Première vidéo : choix écran/fenêtre, case « Mémoriser ce choix » (jeton de restauration, GNOME ≥ 42 [31]). |
 | KDE | Dialogue GlobalShortcuts (réglages Plasma) ; dialogue ScreenCast avec « autoriser la restauration ». Des bogues de restauration ont été corrigés jusqu'en mai 2026 [32]. En natif, ScreenShot2 n'affiche aucun dialogue. |
 | wlroots | Pas de dialogue pour screencopy (tout client non sandboxé peut capturer). Portail wlr : choix de la source par un sélecteur configurable (`man 5 xdg-desktop-portal-wlr`). Restauration depuis 0.7 [33]. |
 | X11 | Aucun dialogue. |
 
-Règles pour Kadro :
+Règles pour Kropa :
 - **Jeton ScreenCast/RemoteDesktop** : demander `persist_mode=2`, stocker le jeton renvoyé par `Start()` et le
   **remplacer à chaque session** (usage unique) [34][35]. S'il est refusé (écran débranché, fenêtre fermée), le
   dialogue revient : prévoir ce cas.
@@ -195,7 +197,7 @@ Règles pour Kadro :
 
 **Recommandation** : Flatpak (Flathub) comme canal principal pour GNOME ; un paquet natif pour KDE et wlroots
 complets (ScreenShot2, layer-shell, evdev). AppImage en dernier recours, avec mode dégradé annoncé par
-`kadro doctor`. Pour un développeur seul : Flatpak + un seul format natif au départ (non tranché, voir questions).
+`kropa doctor`. Pour un développeur seul : Flatpak + un seul format natif au départ (non tranché, voir questions).
 
 ## 6. Comment s'en sortent les autres outils
 

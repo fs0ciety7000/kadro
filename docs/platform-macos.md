@@ -1,4 +1,6 @@
-# Kadro — plateforme macOS
+# Kropa — plateforme macOS
+
+> Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
 
 > Équipe Plateforme macOS. État vérifié en ligne le 11 novembre 2026. Versions en circulation : macOS 26 « Tahoe »
 > et macOS 27 « Golden Gate », sorti le 14 septembre 2026 pour Apple silicon seulement ([MacRumors][mr27], [9to5Mac][9to527]).
@@ -56,11 +58,11 @@ Permissions TCC : **ER** = Enregistrement de l'écran et de l'audio système, **
 | AX | défilement automatique de la capture défilante | seulement si cette option est activée |
 
 Note macOS 27 : une catégorie « Bureau à distance » distincte apparaît dans Réglages, et aucune API ne lit son état
-([forum][f841530]). Elle ne devrait concerner que les apps de type VNC (non vérifié pour Kadro).
+([forum][f841530]). Elle ne devrait concerner que les apps de type VNC (non vérifié pour Kropa).
 
 ## 2. Replis pour les cas dégradés
 
-- **Capture défilante** : v1 en défilement **manuel**. L'utilisateur fait défiler et Kadro assemble. Le défilement
+- **Capture défilante** : v1 en défilement **manuel**. L'utilisateur fait défiler et Kropa assemble. Le défilement
   automatique est une option qui demande AX. Si l'assemblage échoue, on le dit (« assemblage incertain »), on propose
   l'image brute et on n'invente jamais de raccord.
 - **Rappel mensuel ER** : impossible à supprimer. Expliquer dans l'accueil pourquoi la boîte réapparaît. Ne pas
@@ -71,7 +73,7 @@ Note macOS 27 : une catégorie « Bureau à distance » distincte apparaît dans
   normal : il est incompatible avec « tout au clavier » et avec la loupe.
 - **Raccourcis Option seule** : refuser la combinaison à la saisie avec un message clair, et proposer par défaut des
   raccourcis avec ⌘ ou ⌃ (Shottr fait de même, [Shottr][shottr-seq]).
-- **Affichage des touches** : désactivé par défaut. Quand on l'active, Kadro explique la permission SE et ce qu'elle
+- **Affichage des touches** : désactivé par défaut. Quand on l'active, Kropa explique la permission SE et ce qu'elle
   permet.
 - **Keychain sans signature stable** : voir §4.4. En dernier recours, le fichier chiffré par mot de passe maître déjà
   prévu par le brief.
@@ -105,10 +107,10 @@ vérifiée.
   Réglages > Confidentialité et sécurité > **Ouvrir quand même**, puis confirmation et **mot de passe administrateur**
   ([Apple][apple-open], [Eclectic Light][el-nonot]). Une app ad hoc passe par ce chemin et fonctionne ensuite
   ([Eclectic Light][el-nonot]). Le bouton n'apparaîtrait que pour les apps signées (ad hoc inclus) : non vérifié.
-- Autre voie : `xattr -d com.apple.quarantine Kadro.app`. Elle est à documenter honnêtement, comme une décision de
+- Autre voie : `xattr -d com.apple.quarantine Kropa.app`. Elle est à documenter honnêtement, comme une décision de
   l'utilisateur qui saute les contrôles de premier lancement ([Eclectic Light][el-nonot]).
 - Apple prévient que passer outre est « le moyen le plus courant d'infecter un Mac » ([Apple][apple-safe]). C'est
-  l'image que donnera Kadro, à assumer dans la documentation.
+  l'image que donnera Kropa, à assumer dans la documentation.
 - Chaque nouvelle version téléchargée est à nouveau en quarantaine. Il faut donc probablement refaire « Ouvrir quand
   même » à chaque mise à jour (non vérifié : à tester sur 15, 26 et 27).
 - Un binaire **compilé sur la machine** (`cargo install`, formule Homebrew compilée depuis les sources) n'est pas en
@@ -125,7 +127,7 @@ vérifiée.
   selon les options). Les anciennes entrées s'accumulent ou restent cochées sans effet. macshot documente ce symptôme
   (« activé mais la capture échoue », retirer puis rajouter l'app) au changement de sa signature ([macshot][macshot]).
 - Un binaire nu, hors `.app`, n'apparaît plus dans la liste ER sur 26.1. Apple y voit un bug ([forum][f807898]). Il
-  faut donc **toujours livrer un `.app`**, y compris pour la CLI : le binaire `kadro` vit dans le bundle et un lien
+  faut donc **toujours livrer un `.app`**, y compris pour la CLI : le binaire `kropa` vit dans le bundle et un lien
   symbolique le met dans le `PATH`.
 
 ### 4.3 Atténuation recommandée : certificat auto-signé stable
@@ -137,7 +139,7 @@ vérifiée.
   (sources non Apple).
 - Ce que cela **ne change pas** : Gatekeeper (pas de notarisation, donc toujours « Ouvrir quand même »), le rappel
   mensuel ER, le Keychain « data protection ».
-- Risques : si la clé privée fuit, n'importe qui peut signer un binaire qui hérite des permissions accordées à Kadro.
+- Risques : si la clé privée fuit, n'importe qui peut signer un binaire qui hérite des permissions accordées à Kropa.
   Changer de certificat fait perdre toutes les permissions à tous les utilisateurs ([skhd.zig][skhd]). La clé doit
   donc être un secret de CI.
 - Pour une compilation locale (formule ou `cargo install`), on peut proposer un script qui crée un certificat
@@ -146,10 +148,10 @@ vérifiée.
 ### 4.4 Keychain
 
 - Le Keychain « data protection » est réservé aux entitlements autorisés par un profil de provisionnement
-  ([TN3137][tn3137]), donc fermé sans compte (le code d'erreur exact sans profil n'est pas vérifié). Kadro doit
+  ([TN3137][tn3137]), donc fermé sans compte (le code d'erreur exact sans profil n'est pas vérifié). Kropa doit
   utiliser le **Keychain à fichier** (login). Son contrôle d'accès est une ACL qui désigne l'app par sa DR
   ([TN3137][tn3137], [TN3127][tn3127]).
-- En ad hoc : après chaque mise à jour, la DR ne correspond plus. On peut s'attendre à une invite « Kadro veut utiliser
+- En ad hoc : après chaque mise à jour, la DR ne correspond plus. On peut s'attendre à une invite « Kropa veut utiliser
   des informations confidentielles… » avec le mot de passe de session, pour chaque secret (déduit des sources, **à
   tester**). Avec le certificat auto-signé stable (§4.3), l'ACL reste valide.
 - Repli prévu par le brief : le fichier chiffré par mot de passe maître si l'utilisateur refuse ces invites.
@@ -162,7 +164,7 @@ vérifiée.
 | Tap personnel, cask | possible, peu utile | Le `.dmg` téléchargé reste en quarantaine (« Ouvrir quand même »). Homebrew 6 demande d'**approuver explicitement** un tap tiers ([brew 6.0][brew6]). Des taps « unsigned » existent ([SoftwareRat][srtap]). |
 | Tap personnel, formule compilée depuis les sources | possible | Pas de quarantaine, donc pas de Gatekeeper. Coût : Rust + outils en ligne de commande Xcode, compilation longue, et nouvelle DR ad hoc à chaque `brew upgrade` (permissions redemandées), sauf si on signe avec un certificat local (§4.3). La formule doit produire un `.app` (§4.2). Accueil d'une GUI dans homebrew/core : non vérifié, probablement refusé. |
 | `.dmg` / `.zip` sur GitHub Releases | possible | Canal principal recommandé, signé avec le certificat auto-signé stable. Première ouverture et chaque mise à jour téléchargée : « Ouvrir quand même ». Un outil de mise à jour intégré qui télécharge sans poser la quarantaine éviterait cette étape (non vérifié). Il doit rester désactivé par défaut (principe « aucune requête réseau non configurée »). |
-| `cargo install kadro` | possible pour les développeurs | Binaire nu : TCC mal listé sur 26.1 ([forum][f807898]), Info.plist absent (micro). À réserver à la CLI, sans promettre la GUI par ce canal. |
+| `cargo install kropa` | possible pour les développeurs | Binaire nu : TCC mal listé sur 26.1 ([forum][f807898]), Info.plist absent (micro). À réserver à la CLI, sans promettre la GUI par ce canal. |
 
 ### 4.6 Ce que changerait un compte Apple Developer (99 $/an)
 
@@ -182,7 +184,7 @@ vérifiée.
 
 | Option | Pour | Contre |
 |---|---|---|
-| **objc2 + crates générées** (`objc2` 0.6.5 du 2026-10-05 ; `objc2-app-kit`, `objc2-screen-capture-kit`, `objc2-vision`, `objc2-av-foundation`, `objc2-core-graphics`, `objc2-security` 0.3.2 du 2025-10-04, crates.io) | Rust pur, `cargo build` seul. Couverture du SDK 26 vérifiée : `SCScreenshotConfiguration`, `captureScreenshotWithFilter`, `setCaptureMicrophone`, `setShowMouseClicks` sont présents dans les sources de la 0.3.2. Gestion mémoire et blocs (`block2`) typés. Utilisé par Cap ([Cap][cap]) | Appels `unsafe` partout, à isoler dans un crate `kadro-macos`. Pas d'accès aux API réservées à Swift. Délai entre un SDK et sa génération. |
+| **objc2 + crates générées** (`objc2` 0.6.5 du 2026-10-05 ; `objc2-app-kit`, `objc2-screen-capture-kit`, `objc2-vision`, `objc2-av-foundation`, `objc2-core-graphics`, `objc2-security` 0.3.2 du 2025-10-04, crates.io) | Rust pur, `cargo build` seul. Couverture du SDK 26 vérifiée : `SCScreenshotConfiguration`, `captureScreenshotWithFilter`, `setCaptureMicrophone`, `setShowMouseClicks` sont présents dans les sources de la 0.3.2. Gestion mémoire et blocs (`block2`) typés. Utilisé par Cap ([Cap][cap]) | Appels `unsafe` partout, à isoler dans un crate `kropa-macos`. Pas d'accès aux API réservées à Swift. Délai entre un SDK et sa génération. |
 | Pont Swift (`swift-rs` 1.0.9, `swift-bridge` 0.1.59) | Accès à toutes les API, y compris celles réservées à Swift. async/await natif | Il faut Xcode et `swiftc` pour compiler, ce qui gêne la formule et `cargo install`. Deux langages et une FFI à maintenir seul. |
 | `screencapturekit` 11.1.2 (crate de haut niveau) | API ergonomique, maintenue (2026-11-02) | Version majeure 11 : ruptures fréquentes. Ne couvre que SCK. |
 | `cidre` 0.29.0 | Large couverture (SCK, AVF, VT), utilisé par Cap | Un seul mainteneur, version 0.x, licence non vérifiée. |
@@ -203,13 +205,13 @@ contrôler par `dependency-hygiene` avant adoption.
 - Keychain à fichier, avec un repli par fichier chiffré (déjà au brief).
 - Vidéo : `SCStream` vers `AVAssetWriter` (matériel, sans FFmpeg) sur macOS. FFmpeg seulement pour le GIF et la coupe
   si besoin, ce qui influe sur la licence choisie.
-- Exclure de la capture les fenêtres de Kadro (miniature, épingles, overlay des touches) avec `SCContentFilter`.
+- Exclure de la capture les fenêtres de Kropa (miniature, épingles, overlay des touches) avec `SCContentFilter`.
 - Pas d'outil de mise à jour actif par défaut. S'il existe, il est optionnel et documenté (quarantaine).
 
 **Design**
 - Écran d'accueil des permissions : une permission à la fois, au moment où elle sert, avec la raison. Prévoir
-  l'écran « la permission semble active mais la capture échoue : retirez puis rajoutez Kadro ».
-- Expliquer le rappel mensuel d'Apple, qui ne vient pas de Kadro.
+  l'écran « la permission semble active mais la capture échoue : retirez puis rajoutez Kropa ».
+- Expliquer le rappel mensuel d'Apple, qui ne vient pas de Kropa.
 - Le champ de raccourci refuse Option seule et Option+Maj (macOS 15+). Valeurs par défaut avec ⌘/⌃, sans conflit avec
   ⌘⇧3/4/5 du système.
 - Page d'installation honnête : « Ouvrir quand même » en captures d'écran, alternative `xattr`, et conséquences.

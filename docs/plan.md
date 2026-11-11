@@ -43,7 +43,7 @@ Dépend de : rien. En parallèle : D1, S.
 - [ ] 0.4 CI GitHub Actions : fmt, clippy `-D warnings`, nextest + doctests sur `ubuntu-24.04` et `macos-15`, MSRV, `cargo-deny` (licences), `zizmor` ; actions épinglées par SHA, `permissions: contents: read`, Renovate (`renovate.json`, à la place de Dependabot). Agent : `devops`. Fin : PR verte en < 12 min ; une dépendance AGPL fait échouer `deny`.
 - [ ] 0.5 `CLAUDE.md` et `AGENTS.md` (stack, commandes, règles : local d'abord, client HTTP unique, horloge injectable, jamais de succès simulé, secrets ni en argument ni en variable d'environnement, Fluent dès la première chaîne, `unsafe` confiné à macOS), `docs/memory/`. Agent : `architect`. Fin : relus par l'utilisateur.
 - [ ] 0.6 Spécification CLI v1 `docs/cli.md` (`capture screen|output|area`, `upload`, `dest`, `queue`, `secrets`, `history`, `edit`, `doctor`, `version` ; `--upload[=profil]`, `--no-upload`, `--copy url|markdown|html|none`, `--json`, `--output`, `--name`, `--delay`, `--last` ; codes de sortie, schéma JSON). Agents : `architect`, `copywriter`. Fin : validée par l'utilisateur.
-- [ ] 0.7 Kadro → Kropa dans `docs/` (historique conservé), `.kadro` → `.kropa` ; mettre à jour `uploads.md` (age, plus de vidéo). Agent : `copywriter`. Fin : `grep -ri kadro docs/` ne renvoie que l'historique.
+- [x] 0.7 Kadro → Kropa dans `docs/` (historique conservé), `.kadro` → `.kropa` ; mettre à jour `uploads.md` (age, plus de vidéo). Agent : `copywriter`. Fin : `grep -ri kadro docs/` ne renvoie que l'historique.
 - [ ] 0.8 **[Utilisateur]** Réserver le crate `kropa` (squelette 0.0.x). Dépend de 0.3.
 - [ ] 0.9 **[Utilisateur]** Recherche de marques (classes 9 et 42) et de domaines ; résultat dans `decisions.md`.
 
