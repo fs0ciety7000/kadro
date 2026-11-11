@@ -252,10 +252,12 @@ mod tests {
         request_bytes: &[u8],
     ) -> (Result<(), Refusal>, Vec<u8>) {
         let (client, server) = UnixStream::pair().unwrap();
+        // Set before the broker can close its end: macOS refuses setsockopt once a socket is shut
+        // down both ways (EINVAL).
+        client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
         let bytes = request_bytes.to_vec();
         let thread = std::thread::spawn(move || {
             let mut client = client;
-            client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
             // The broker may stop reading a request it has already refused: a write that fails then
             // is the broker's business, not the test's.
             let _ = client.write_all(&bytes);
@@ -378,6 +380,8 @@ mod tests {
             ..Facts::good()
         };
         let (client, server) = UnixStream::pair().unwrap();
+        // Before the server end closes: macOS refuses setsockopt on a shut-down socket (EINVAL).
+        client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
         // The request is never read: nothing is written to the client either.
         let result = serve(|| Ok(server), &facts, &store);
         assert_eq!(result, Err(Refusal::PeerCodeRejected));
@@ -386,7 +390,6 @@ mod tests {
         // The server end is already closed: macOS answers ENOTCONN here, Linux does not.
         let _ = client.shutdown(std::net::Shutdown::Write);
         let mut client = client;
-        client.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
         client.read_to_end(&mut reply).unwrap();
         assert!(reply.is_empty());
     }
