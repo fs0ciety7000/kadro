@@ -186,6 +186,28 @@ autre terminal et vérifier **qu'aucune requête n'apparaît** pendant la comman
 - [ ] Deux `kropa secrets set` simultanés (deux terminaux) sur deux secrets : `kropa secrets status` en voit les deux.
   Dossier `~/Library/Application Support/io.github.fs0ciety7000.Kropa/` en `0700`, `store.lock` en `0600`.
 
+## Presse-papiers : `NSPasteboard` (lot 1.10)
+
+Aucune permission à accorder. Le bundle et le binaire nu doivent donner le même résultat. Le contenu doit rester collable
+**après la fin** de `kropa` (le serveur de presse-papiers le garde).
+
+- [ ] Image : `kropa capture screen --output /tmp/k.png --copy image` (permission d'enregistrement de l'écran requise,
+  voir plus haut). Code 0, stderr `Image copied` / `Image copiée`. Avec `--json` : `clipboard.status` = `copied`, pas de `reason`.
+- [ ] Coller l'image dans **Aperçu** (Fichier > Nouveau depuis le presse-papiers), dans **Notes** et dans **Messages** ou un
+  champ de mail : elle apparaît à sa taille native, sans couleurs décalées. Noter la taille affichée (L x H attendus).
+- [ ] Texte brut : `kropa upload <FICHIER> --to <PROFIL> --copy url` (ou `markdown`). Coller dans **TextEdit** en texte
+  brut (Format > Convertir au format texte) et dans le champ d'adresse de Safari : le lien exact, sans espace ni retour
+  à la ligne en trop. Le lien reste aussi sur stdout.
+- [ ] HTML : même commande avec `--copy html`. Coller dans **TextEdit** en texte enrichi ou **Notes** : un lien cliquable.
+  Coller dans un champ texte brut (Terminal, `pbpaste`) : le balisage `<a href=...>` tel quel.
+- [ ] `pbpaste` après chaque copie texte : la valeur exacte. `pbpaste -Prefer public.html` après `--copy html` : le HTML.
+- [ ] Remplacement : copier une image, puis un lien : coller dans Aperçu (Nouveau depuis le presse-papiers) ne propose plus
+  l'image. Copier un lien, puis une image : `pbpaste` ne rend plus le lien.
+- [ ] Depuis un terminal ouvert **par ssh** vers le Mac (sans session graphique dans le processus) : lancer la même copie et
+  **noter** ce qui arrive (`failed` avec quel détail, ou `copied`). Un `copied` n'est acceptable que si le collage dans une
+  application de la session graphique rend bien le contenu.
+- [ ] Lien contenant des accents ou des caractères non ASCII (nom de fichier `été 日本.png`) : le collage est identique.
+
 ## Résultats
 
 À remplir : date, macOS, architecture, terminal utilisé, entrée listée par les Réglages (Kropa ou terminal), cases non

@@ -366,7 +366,6 @@ note-clipboard-copied = { $what ->
 clipboard-reason-no-data-control = This Wayland session does not allow clipboard access without focus (GNOME does not).
 clipboard-reason-no-graphical-session = There is no graphical session to copy to.
 clipboard-reason-x11-not-supported = The X11 clipboard is not supported yet; Wayland sessions with data-control are.
-clipboard-reason-macos-not-implemented = The macOS pasteboard is not wired yet (lot 1.10).
 clipboard-reason-unsupported-platform = There is no clipboard support on this system.
 clipboard-reason-connection-failed = The Wayland compositor could not be reached.
 clipboard-reason-no-seat = The compositor has no seat to copy to.
@@ -374,7 +373,8 @@ clipboard-reason-compositor-error = The compositor refused the copy.
 clipboard-reason-helper-spawn-failed = The process that serves the clipboard could not be started.
 clipboard-reason-helper-failed = The process that serves the clipboard failed.
 clipboard-reason-timeout = The compositor did not answer in time.
-clipboard-reason-selection-mismatch = The compositor did not keep the copied content.
+clipboard-reason-pasteboard-rejected = The macOS pasteboard refused the content.
+clipboard-reason-selection-mismatch = The system did not keep the copied content.
 clipboard-reason-too-large = The content is too large for the clipboard.
 
 note-uploaded = Uploaded to { $profile }

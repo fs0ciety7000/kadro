@@ -24,8 +24,11 @@
 
 mod displays;
 mod image;
+mod pasteboard;
 mod sck;
 mod system;
+
+pub use pasteboard::PasteboardClipboard;
 
 use kropa_core::ImageFormat;
 use objc2_core_graphics::CGImage;

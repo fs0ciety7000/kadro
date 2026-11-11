@@ -239,7 +239,7 @@ compilent séparément sans gêne. Le cœur ne dépend d'aucune bibliothèque gr
 | HTTP et envoi | reqwest 0.13.5 (rustls) ; aws-sdk-s3 1.159.0 (très lourd) ; rust-s3 0.38.0 ; opendal 0.59.5 | reqwest pour Zipline, Imgur, HTTP générique ; S3 par reqwest + **aws-sigv4** 1.6.5 (multipart maison, compatible MinIO/R2) ; SFTP par **russh 0.65.1 + russh-sftp 3.0.1** (pur Rust) |
 | i18n | **Fluent** (fluent 0.17.0, i18n-embed 0.16.0) ; gettext-rs 0.8.0 | Fluent : mêmes fichiers `.ftl` pour CLI, GTK et AppKit, pluriels corrects ; chaînes posées depuis Rust, pas dans les `.ui` |
 | Raccourcis globaux | **portail GlobalShortcuts** (ashpd) ; **global-hotkey** 0.10.0 ; raccourci du bureau → CLI | Portail sous Wayland (KDE ; GNOME 48+, fiabilité à vérifier) ; global-hotkey sous X11 et macOS ; repli documenté partout : raccourci personnalisé du bureau lançant `kropa capture area` |
-| Presse-papiers | arboard 3.7.0 ; wl-clipboard-rs 0.9.5 ; API du toolkit | `GdkClipboard` (démon propriétaire de la sélection) et `NSPasteboard` (fichier + image + URL en même temps) ; wl-clipboard-rs pour la CLI sans démon là où data-control existe |
+| Presse-papiers | wl-clipboard-rs 0.9.5 (CLI Linux) ; NSPasteboard via objc2-app-kit (macOS, arboard écarté) ; API du toolkit | `GdkClipboard` (démon propriétaire de la sélection) et `NSPasteboard` (fichier + image + URL en même temps) ; wl-clipboard-rs pour la CLI sans démon là où data-control existe |
 | Zone d'icône | ksni 0.3.7 (StatusNotifierItem) ; tray-icon 0.26.1 | ksni sous Linux (KDE natif ; GNOME seulement avec l'extension AppIndicator) ; `NSStatusItem` sous macOS |
 | Métadonnées | img-parts 0.4.2, kamadak-exif 0.6.2 | Nos exports n'écrivent aucune métadonnée ; img-parts retire EXIF/XMP des fichiers importés avant envoi |
 

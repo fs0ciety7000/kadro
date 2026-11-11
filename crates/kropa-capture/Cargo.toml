@@ -18,18 +18,18 @@ ashpd.workspace = true
 # selection is served by a detached child process (`clipboard/wayland.rs`).
 wl-clipboard-rs.workspace = true
 
-# ScreenCaptureKit through the generated Objective-C bindings (no Swift bridge). Only the features
-# the macOS backend uses are enabled; every `unsafe` call lives in `src/macos/`.
+# ScreenCaptureKit and NSPasteboard through the generated Objective-C bindings (no Swift bridge). Only
+# the features the macOS backend uses are enabled; every `unsafe` call lives in `src/macos/`.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSGraphics", "NSScreen"] }
+objc2-app-kit = { workspace = true, features = ["NSGraphics", "NSPasteboard", "NSScreen"] }
 objc2-core-foundation = { workspace = true, features = ["CFData", "CFString", "CFDictionary"] }
 objc2-core-graphics = { workspace = true, features = [
     "CGBitmapContext", "CGColorSpace", "CGContext", "CGDirectDisplay", "CGDisplayConfiguration",
     "CGError", "CGGeometry", "CGImage", "CGSession", "CGWindow",
 ] }
-objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSDictionary", "NSEnumerator", "NSError", "NSString", "NSProcessInfo", "NSValue"] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSData", "NSDictionary", "NSEnumerator", "NSError", "NSString", "NSProcessInfo", "NSValue"] }
 objc2-image-io = { workspace = true, features = ["CGImageDestination", "objc2", "objc2-core-graphics"] }
 objc2-screen-capture-kit = { workspace = true, features = [
     "SCStream", "SCShareableContent", "SCScreenshotManager", "block2",

@@ -366,7 +366,6 @@ note-clipboard-copied = { $what ->
 clipboard-reason-no-data-control = Cette session Wayland n'autorise pas l'accès au presse-papiers sans focus (GNOME ne le permet pas).
 clipboard-reason-no-graphical-session = Il n'y a pas de session graphique où copier.
 clipboard-reason-x11-not-supported = Le presse-papiers X11 n'est pas encore pris en charge ; les sessions Wayland avec data-control le sont.
-clipboard-reason-macos-not-implemented = Le presse-papiers macOS n'est pas encore branché (lot 1.10).
 clipboard-reason-unsupported-platform = Ce système n'a pas de presse-papiers pris en charge.
 clipboard-reason-connection-failed = Le compositeur Wayland est injoignable.
 clipboard-reason-no-seat = Le compositeur n'a pas de siège où copier.
@@ -374,7 +373,8 @@ clipboard-reason-compositor-error = Le compositeur a refusé la copie.
 clipboard-reason-helper-spawn-failed = Le processus qui sert le presse-papiers n'a pas pu démarrer.
 clipboard-reason-helper-failed = Le processus qui sert le presse-papiers a échoué.
 clipboard-reason-timeout = Le compositeur n'a pas répondu à temps.
-clipboard-reason-selection-mismatch = Le compositeur n'a pas gardé le contenu copié.
+clipboard-reason-pasteboard-rejected = Le presse-papiers de macOS a refusé le contenu.
+clipboard-reason-selection-mismatch = Le système n'a pas gardé le contenu copié.
 clipboard-reason-too-large = Le contenu est trop volumineux pour le presse-papiers.
 
 note-uploaded = Envoyé vers { $profile }

@@ -301,12 +301,16 @@ nom de l'option est cité, ou « argument en trop » pour une valeur positionnel
 
 | Plateforme | Image (`--copy image`) | Lien après envoi | Statut rendu |
 |---|---|---|---|
-| macOS (`NSPasteboard`) | copiée | copié | `copied` |
+| macOS (`NSPasteboard`) | copiée (`public.png`) | copié (`public.utf8-plain-text`, et `public.html` pour le format `html`) | `copied`, ou `failed` si le presse-papiers refuse ou ne rend pas le contenu écrit |
 | KDE, wlroots (data-control) | copiée | copié ; le contenu est servi par `kropa-app`, ou par un processus fils détaché tant que le démon n'existe pas (lot 1) | `copied`, ou `failed` si le compositeur refuse |
 | X11 seul | lot 1 : non copiée (`x11_not_supported`) ; sélection X11 prévue plus tard | lot 1 : non copié | `unavailable` |
 | GNOME Wayland (Mutter, sans data-control) | lot 1 : non copiée ; lot 2 : copiée pendant que l'overlay a le focus (`area`) | lot 1 à 3 : non copié ; lot 4 : notification « Lien prêt, Copier » | `unavailable`, puis `pending` ; jamais `copied` avant la copie réelle |
 
-Règles : le statut reflète l'effet réel, vérifié quand l'API le permet. Sous Wayland (lot 1.10), le processus fils qui
+Règles : le statut reflète l'effet réel, vérifié quand l'API le permet. Sous macOS (lot 1.10), le presse-papiers
+général est vidé, chaque type est écrit, puis **relu** (`stringForType:` / `dataForType:`) et comparé : `copied` veut
+dire que les octets relus sont ceux écrits ; un `NO` du système donne `failed` / `pasteboard_rejected`, une relecture
+différente ou vide `failed` / `selection_mismatch` (le détail ne cite que des longueurs, jamais le contenu). Le serveur
+de presse-papiers garde les données après la fin du processus : pas de fils détaché ni de permission à demander. Sous Wayland (lot 1.10), le processus fils qui
 sert la sélection la **relit** par une seconde connexion avant de répondre : `copied` veut dire que le compositeur
 tient exactement le contenu copié ; une sélection reprise avant la relecture, un compositeur qui ne répond pas dans
 5 s, un fils mort donnent `failed`. La détection se fait par capacité (le compositeur annonce-t-il
@@ -321,9 +325,9 @@ sur « Copier » ne change pas
 le code déjà rendu.
 
 `clipboard.reason` (liste ouverte) : `unavailable` : `no_data_control`, `no_graphical_session`, `x11_not_supported`,
-`macos_not_implemented` (jusqu'au branchement de `NSPasteboard`), `unsupported_platform` ; `failed` :
+`unsupported_platform` ; `failed` :
 `connection_failed`, `no_seat`, `compositor_error`, `helper_spawn_failed`, `helper_failed`, `timeout`,
-`selection_mismatch`, `too_large` ; `skipped` : `nothing_to_copy` (un format de lien sans envoi). `--copy image`
+`pasteboard_rejected` (macOS), `selection_mismatch`, `too_large` ; `skipped` : `nothing_to_copy` (un format de lien sans envoi). `--copy image`
 copie le PNG de la capture, avec ou sans `--upload` et même si l'envoi échoue. `--copy url|markdown|html` copie le
 texte (en texte brut) : le lien formaté va au presse-papiers, l'URL brute reste sur stdout.
 

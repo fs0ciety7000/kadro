@@ -16,8 +16,8 @@
 //!   the content is served by a detached child process, like `wl-copy`, with no daemon (lot 1).
 //! - Linux, Wayland without data-control (GNOME): `unavailable` (`no_data_control`).
 //! - Linux, X11 only, or no display: `unavailable` (`x11_not_supported`, `no_graphical_session`).
-//! - macOS: [`UnavailableClipboard`] until the `NSPasteboard` backend of lot 1.10 exists (see
-//!   [`default_clipboard`]).
+//! - macOS: the general `NSPasteboard` (`PasteboardClipboard`, `macos/pasteboard.rs`); the content is
+//!   stored by the pasteboard server at once and outlives the process, and every type is read back.
 //!
 //! [`FakeClipboard`] is the double of the tests of the crates above.
 
@@ -52,8 +52,6 @@ pub enum ClipboardReason {
     NoGraphicalSession,
     /// An X11 session without Wayland: the X11 selection is not served yet. Unavailable.
     X11NotSupported,
-    /// The macOS pasteboard is not wired yet (lot 1.10, macOS part). Unavailable.
-    MacosNotImplemented,
     /// No clipboard for this operating system. Unavailable.
     UnsupportedPlatform,
     /// `WAYLAND_DISPLAY` is set but the compositor cannot be reached. Failed.
@@ -68,7 +66,10 @@ pub enum ClipboardReason {
     HelperFailed,
     /// The compositor did not answer in time. Failed.
     Timeout,
-    /// The selection was set but reading it back gave something else, or nothing. Failed.
+    /// The system refused to store the content (macOS: `setString:forType:` or `setData:forType:`
+    /// answered `NO`). Failed.
+    PasteboardRejected,
+    /// The content was handed over but reading it back gave something else, or nothing. Failed.
     SelectionMismatch,
     /// The content is too large to hand to the compositor. Failed.
     TooLarge,
@@ -79,7 +80,6 @@ pub const ALL_CLIPBOARD_REASONS: [&str; 13] = [
     "no_data_control",
     "no_graphical_session",
     "x11_not_supported",
-    "macos_not_implemented",
     "unsupported_platform",
     "connection_failed",
     "no_seat",
@@ -87,6 +87,7 @@ pub const ALL_CLIPBOARD_REASONS: [&str; 13] = [
     "helper_spawn_failed",
     "helper_failed",
     "timeout",
+    "pasteboard_rejected",
     "selection_mismatch",
     "too_large",
 ];
@@ -97,7 +98,6 @@ impl ClipboardReason {
         Self::NoDataControl,
         Self::NoGraphicalSession,
         Self::X11NotSupported,
-        Self::MacosNotImplemented,
         Self::UnsupportedPlatform,
         Self::ConnectionFailed,
         Self::NoSeat,
@@ -105,6 +105,7 @@ impl ClipboardReason {
         Self::HelperSpawnFailed,
         Self::HelperFailed,
         Self::Timeout,
+        Self::PasteboardRejected,
         Self::SelectionMismatch,
         Self::TooLarge,
     ];
@@ -116,7 +117,6 @@ impl ClipboardReason {
             Self::NoDataControl => "no_data_control",
             Self::NoGraphicalSession => "no_graphical_session",
             Self::X11NotSupported => "x11_not_supported",
-            Self::MacosNotImplemented => "macos_not_implemented",
             Self::UnsupportedPlatform => "unsupported_platform",
             Self::ConnectionFailed => "connection_failed",
             Self::NoSeat => "no_seat",
@@ -124,6 +124,7 @@ impl ClipboardReason {
             Self::HelperSpawnFailed => "helper_spawn_failed",
             Self::HelperFailed => "helper_failed",
             Self::Timeout => "timeout",
+            Self::PasteboardRejected => "pasteboard_rejected",
             Self::SelectionMismatch => "selection_mismatch",
             Self::TooLarge => "too_large",
         }
@@ -215,7 +216,7 @@ pub trait Clipboard {
 
 /// A clipboard that does not exist on this system: every copy is `unavailable` with one reason.
 ///
-/// Used for the platforms that have no backend, and for macOS until the `NSPasteboard` one lands.
+/// Used for the platforms that have no backend.
 #[derive(Debug, Clone, Copy)]
 pub struct UnavailableClipboard {
     reason: ClipboardReason,
@@ -239,14 +240,8 @@ impl Clipboard for UnavailableClipboard {
     }
 }
 
-/// The clipboard this system offers.
-///
-/// macOS (lot 1.10, macOS part, not written yet): replace the [`UnavailableClipboard`] below by an
-/// `NSPasteboard` implementation of [`Clipboard`] in `src/macos/pasteboard.rs` (`generalPasteboard`,
-/// `clearContents`, then `setData:forType:` with `public.png` for the image and `setString:forType:`
-/// with `public.utf8-plain-text` or `public.html` for the text; the `Bool` it returns, and a
-/// `dataForType:` read back, decide between `Copied` and `Failed`). The `unsafe` of the Objective-C
-/// calls stays in that module, like the other `macos` ones.
+/// The clipboard this system offers: Wayland data-control on Linux, the general `NSPasteboard` on
+/// macOS, `unavailable` elsewhere.
 #[must_use]
 pub fn default_clipboard() -> Box<dyn Clipboard> {
     #[cfg(target_os = "linux")]
@@ -255,9 +250,7 @@ pub fn default_clipboard() -> Box<dyn Clipboard> {
     }
     #[cfg(target_os = "macos")]
     {
-        Box::new(UnavailableClipboard::new(
-            ClipboardReason::MacosNotImplemented,
-        ))
+        Box::new(crate::macos::PasteboardClipboard::new())
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
@@ -302,8 +295,8 @@ mod tests {
 
     #[test]
     fn the_unavailable_clipboard_never_copies() {
-        let clipboard = UnavailableClipboard::new(ClipboardReason::MacosNotImplemented);
-        let expected = ClipboardOutcome::unavailable(ClipboardReason::MacosNotImplemented);
+        let clipboard = UnavailableClipboard::new(ClipboardReason::UnsupportedPlatform);
+        let expected = ClipboardOutcome::unavailable(ClipboardReason::UnsupportedPlatform);
         assert_eq!(clipboard.copy_text("x", TextKind::Plain), expected);
         assert_eq!(clipboard.copy_image(b"png"), expected);
     }

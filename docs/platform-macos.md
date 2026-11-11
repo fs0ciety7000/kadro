@@ -44,7 +44,7 @@ Permissions TCC : **ER** = Enregistrement de l'écran et de l'audio système, **
 | Glisser-déposer sortant | possible | — | — | `NSDraggingSource` + `NSPasteboardItem` (fichier PNG + URL). |
 | Épinglage au-dessus des fenêtres | possible | — | — | `NSWindow.level = .floating`, et passage au-dessus des apps en plein écran avec `fullScreenAuxiliary`. À exclure de la capture (`SCContentFilter` `excludingWindows`). |
 | Raccourcis globaux | **dégradé** (partiel) | — | — | `RegisterEventHotKey` (Carbon), sans permission (crate `global-hotkey`). **Depuis macOS 15, les combinaisons Option seule ou Option+Maj sont refusées** (erreur -9868), volontairement ([forum][f763878], [Shottr][shottr-seq], [Eternal Storms][es-opt]). Un retour en 15.2 est annoncé, mais les sources se contredisent : non vérifié. |
-| Presse-papiers | possible | — | — | `NSPasteboard` (image + texte du lien), crate `arboard` 3.7.0. |
+| Presse-papiers | possible (**livré, lot 1.10**) | — | — | `NSPasteboard` général via `objc2-app-kit`, sans `arboard` : `clearContents`, `setData:forType:` `public.png` pour l'image, `setString:forType:` `public.utf8-plain-text` (et `public.html` pour un lien HTML), puis relecture et comparaison avant de répondre `copied`. Aucune permission, pas besoin du thread principal ni d'`NSApplication` (le serveur de presse-papiers garde les données après la fin du processus). Sans session graphique (ssh, démon hors session), le comportement n'est **pas vérifié** : quoi qu'il arrive, `copied` n'est rendu que si la relecture est identique. |
 | Keychain | possible, **dégradé sans signature stable** | — | invite Keychain | Keychain à fichier (ACL liées à la signature). Le Keychain « data protection » demande des entitlements autorisés par un profil de provisionnement ([TN3137][tn3137]), donc pas accessible sans compte. Voir §4.4. |
 | Rappel périodique de la permission ER | **dégradé** (subi) | 15+ | ER | macOS 15 redemande périodiquement de confirmer l'accès, environ une fois par mois ([TidBITS][tidbits-m], [MacRumors 15.1][mr151]). Aucune exemption pour une app ordinaire : `persistent-content-capture` est réservé aux apps de type VNC, sur demande à Apple ([M. Tsai][mjt]). Toujours présent sur 26 et 27 : **non vérifié** (pas de note de version trouvée). Indépendant de la signature. |
 
@@ -191,7 +191,7 @@ vérifiée.
 
 **Choix : objc2 et ses crates générées**, enfermés dans un crate de plateforme avec une API sûre. Un petit shim Swift
 ne serait ajouté que si une API indispensable était réservée à Swift. Aucune ne l'est dans la matrice. Raccourcis :
-`global-hotkey` 0.10.0. Presse-papiers : `arboard` 3.7.0. Keychain : `security-framework` 3.7.0 ou `keyring` 4.2.0
+`global-hotkey` 0.10.0. Presse-papiers : `NSPasteboard` direct (lot 1.10, `arboard` écarté : une dépendance de plus pour trois appels). Keychain : `security-framework` 3.7.0 ou `keyring` 4.2.0
 (vérifier qu'ils visent le Keychain à fichier). Versions relevées sur crates.io le 2026-11-11 ; licences et failles à
 contrôler par `dependency-hygiene` avant adoption.
 
