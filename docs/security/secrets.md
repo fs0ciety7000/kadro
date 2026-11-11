@@ -1,245 +1,466 @@
 # Modèle de sécurité des secrets — Kropa
 
-> Tâche S.1, rédigée par `architect` le 11/11/2026. **À revoir** par `security-reviewer` (S.2), puis validation de
-> l'utilisateur (S.3). Prime sur `uploads.md` § 4 et § 7 (Argon2id/XChaCha remplacé par `age`, vidéo retirée).
-> Aucun code de stockage (1.8, 2.8, 4.7) avant validation. « Doit » = exigence testable ; « non vérifié » = à tester.
+> S.1 rédigée par `architect` le 11/11/2026, revue par `security-reviewer` (S.2, `secrets-review.md` : 2 bloquants,
+> 10 importants, 12 mineurs), **corrigée en S.3** le 11/11/2026. **À valider par l'utilisateur**, avec les décisions
+> du § 0.2 et les changements de `cli.md` du § 9. Prime sur `uploads.md` § 4 et § 7 (Argon2id/XChaCha remplacé par
+> `age`, vidéo retirée). Aucun code de stockage (1.8, 2.8, 4.7) avant validation. « Doit » = exigence testable ;
+> « non vérifié » = à tester.
+
+## 0. Changements après revue (S.3)
+
+### 0.1 Constats → corrections
+
+| Constat | Correction (ou raison du refus) | § |
+|---|---|---|
+| **B1** sorties tirées de la réponse non contrôlées | `{responseurl}` sans query, fragment ni `user:pass@` ; `{header:}` interdit sur les en-têtes d'authentification ; **contrôle de sortie** unique sur toute valeur issue de la réponse (formes brute, percent, base64 aux 3 alignements, JSON, HTML) avant presse-papiers, SQLite, stdout, JSON, notification → code 11, rien copié ni enregistré. Écart assumé : `error` et l'extrait de réponse sont **masqués** (`***`) et non refusés, car l'envoi a déjà échoué (code 9) et le diagnostic reste utile. | 4.4 |
+| **B2** import TOML, références inter-profils, emplacement libre | Références limitées au profil courant (`{secret:token}` = entrée `<profil>/token`, plus de `ref`) ; import `.toml` aux règles de `.sxcu` ; **emplacements** autorisés (`header:`, `query:`, `form:`, `body`) stockés avec les origines dans la valeur protégée, vérifiés à la résolution. | 2.3, 4.1–4.3, 5 |
+| I1 phrase faible | Refus si `zxcvbn` < 3 ou < 12 caractères ; phrase diceware de 6 mots proposée. | 3.2 |
+| I2 verrou perdu au `rename` | Verrou sur `store.lock` stable, relecture après verrou, jamais d'écriture depuis un cache. | 3.4 |
+| I3 IPC non authentifiée côté client | Le client vérifie l'UID du serveur et le dossier ; aucun repli hors `XDG_RUNTIME_DIR` (code 14) ; ligne ≤ 64 Kio ; `secrets.*` jamais journalisé. | 1.2 |
+| I4 bouclage HTTP squattable | `localhost` jamais ; IP littérales de bouclage seulement dans les builds de test. Option par profil : **décision U3**. | 4.5 |
+| I5 trousseau Linux bloquant | Sans interaction possible : lecture de `Locked`, échec `keyring_locked` sans prompt ; appels D-Bus en `spawn_blocking` avec délai ; `Ambiguous` expliqué par `doctor`. | 2.1 |
+| I6 deux binaires macOS | Un seul élément ; protocole 1.6 sur les deux binaires ; jamais `apple-tool:` ; courtier unique proposé (**U1**). | 2.2 |
+| I7 expurgation incomplète | Même détecteur que B1 (formes dérivées) ; `-vv` n'ouvre que `kropa*` ; `HeaderValue::set_sensitive(true)`. | 6 |
+| I8 `zeroize` surpromis | « Au mieux », copies connues listées, tampons pré-alloués, désérialisation empruntée ; `mlock` retiré ; swap chiffré conseillé. | 3.5 |
+| I9 session du coffre mal bornée | Inactivité = aucune action humaine ; plafond 8 h ; `LockedHint`, `PrepareForSleep` (inhibiteur `delay`), fin de session ; test par compteur de `Drop`. | 3.6 |
+| I10 secret dans le chemin (§ 4 contre § 5) | Interdit en v1 : import refusé avec message explicite. Autorisation sous B1 : **décision U2**. | 4.3, 5 |
+| M1 IMDS d'`object_store` | Refus avant `build()` sans clés ; `with_http_connector` vers le client unique. | 4.6 |
+| M2 proxy d'environnement | `.no_proxy()` (aucune variable lue, `cli.md` § 1.7) ; proxy explicite par config hors v1. | 4.5 |
+| M3 CA privée | `rustls-platform-verifier` 0.7.1 (magasin système, où l'utilisateur ajoute sa CA) ; jamais « ignorer TLS ». `ca_file` par profil non retenu (un seul mécanisme). | 4.5 |
+| M4 forme des origines | `url::Url::origin()` ; `user:pass@` refusé. | 4.1 |
+| M5 réponse hostile | `regex` seul avec `size_limit`, XML sans DTD (`roxmltree`), `thumbnail_url` jamais téléchargée d'office, bidi et largeur nulle refusés. | 4.4 |
+| M6 fichiers | `O_NOFOLLOW`, `fstat` du descripteur et du dossier, `*.tmp` orphelins retirés, SQLite `0600` ; `sync_all` suffit (F_FULLFSYNC sur Apple). | 3.4 |
+| M7 descripteurs | 4 Kio max, `CLOEXEC`, refus de 1, 2 et d'un fd à double usage, un seul `\n` final retiré. | 3.7 |
+| M8 `--var` d'authentification | Un `{inputbox:}` en emplacement de secret devient un secret à l'import ; `--var` vers un emplacement de secret → code 11. | 5 |
+| M9 délai croissant | Retiré des mitigations (attaque hors ligne) ; déverrouillages sérialisés. | 3.6 |
+| M10 `unsafe` | `prctl`, `setrlimit`, `flock` par `rustix` 1.1.6 ; pair par tokio ; `unsafe_code = "deny"`. | 6 |
+| M11 incohérences | `Serialize` sur un type privé au magasin seulement ; magasin Apple = recherche puis modification (pas `SecItemUpdate`) ; `allow`, `use`, `migrate` proposés à `cli.md` (§ 9), `allow` interactif seulement. | 2.2, 6, 9 |
+| M12 limites | § 7 : un processus du même utilisateur passe outre la confirmation ; proposition de vider le presse-papiers après collage ; X11 : frappe lisible, documenté. | 7 |
+| Q1–Q8 | Intégrées : Q2, Q3, Q4, Q5, Q6, Q7, Q8 adoptées ; Q1 = **décision U1**. | 2–5 |
+| Tests jugés irréalistes | Remplacés (UID injecté + `sudo -u nobody`, compteur de `Drop`, TLS `rcgen`, deux binaires × deux builds). | 8 |
+
+### 0.2 Décisions à soumettre à l'utilisateur (non tranchées ici)
+
+- **U1. Magasin macOS sans compte Developer.** Fait établi par la revue (source Apple) : chaque mise à jour provoque une
+  invite Keychain, **une par binaire** qui lit le trousseau. Options : (a) Keychain, `kropa` et `kropa-app` lisent
+  chacun l'élément → 2 invites par mise à jour ; (b) Keychain via **un seul binaire courtier** (§ 2.2) → 1 invite ;
+  (c) coffre `age` par défaut sur macOS → aucune invite Keychain, mais phrase de passe à chaque session. Recommandation
+  de l'architecte : **(b)**, avec (c) proposé en repli dans `doctor` et au premier lancement ; à confirmer par 1.6.
+- **U2. Secret dans le chemin de l'URL** (webhooks du type `/api/<jeton>`) : (a) refusé en v1 (recommandé, modèle plus
+  simple) ; (b) autorisé comme emplacement `path:<n>` sous le contrôle de sortie B1.
+- **U3. HTTP en bouclage avec secret** (serveur Zipline local) : (a) jamais hors builds de test (recommandé) ;
+  (b) option par profil `insecure_loopback = true`, IP littérales seules, avertissement à chaque envoi.
+- **U4. Changements de `cli.md`** (§ 9) : la spécification est validée, ses ajouts doivent l'être aussi.
 
 ## 1. Inventaire et transit
 
 | Secret | Destination | Forme | Saisi par |
 |---|---|---|---|
-| Jeton Zipline | HTTP (préréglage) | en-tête `Authorization` | TTY, stdin, dialogue, import `.sxcu` |
+| Jeton Zipline | HTTP (préréglage) | en-tête `Authorization` | TTY, stdin, dialogue, import |
 | Clé d'accès + clé secrète S3 | `object_store` | identifiants statiques (jamais `from_env`, IMDS, profils AWS) | TTY, stdin, dialogue |
 | Mot de passe SFTP ; phrase de passe de clé privée | `russh` | mot de passe ; la clé reste un fichier de l'utilisateur, jamais copiée | TTY, stdin, dialogue |
-| En-têtes, arguments, paramètres d'une destination HTTP | `kropa-upload` | `{secret:nom}` dans un gabarit de requête | TTY, stdin, dialogue, import `.sxcu` |
-| Phrase de passe du coffre `age` | coffre local | jamais stockée | TTY, `--password-fd`, dialogue |
+| En-têtes, arguments, paramètres d'une destination HTTP | `kropa-upload` | `{secret:nom}` dans un emplacement autorisé (§ 4.3) | TTY, stdin, dialogue, import `.sxcu`/`.toml` |
+| Phrase de passe du coffre `age` | coffre local | jamais stockée, jamais gardée en mémoire après usage (§ 3.6) | TTY, `--password-fd`, dialogue |
 
 Hors inventaire (sensibles mais non secrets) : URL de suppression (historique oui, journaux non), `SSH_AUTH_SOCK`
-(chemin d'agent lu tel quel, pas un secret), clé privée de signature macOS (secret de CI, hors application).
+(chemin d'agent lu tel quel), clé privée de signature macOS (secret de CI, hors application).
 
-**Transit autorisé, et lui seul** : saisie (TTY masqué, stdin, descripteur, dialogue natif) → processus `kropa` ou
-`kropa-app` → magasin (§ 2, § 3). À l'envoi : magasin → mémoire `Zeroizing` → requête TLS vers une origine autorisée
-(§ 4). Entre CLI et résident : socket Unix JSON-RPC (2.1), fichier `0600` dans `$XDG_RUNTIME_DIR` (Linux) ou dossier
-`0700` propre à l'utilisateur (macOS), avec contrôle de l'UID pair (`SO_PEERCRED` / `getpeereid`). Seules méthodes qui
-portent une valeur : `secrets.set` et `secrets.unlock` ; aucune méthode ne **renvoie** une valeur (pas de
-`secrets.get` côté IPC). **Jamais** : argument de commande, variable d'environnement, fichier de config, base SQLite,
-presse-papiers, journal, notification, sortie `--json`.
+### 1.1 Transit autorisé, et lui seul
+
+Saisie (TTY masqué, stdin, descripteur, dialogue natif) → processus `kropa` ou `kropa-app` → magasin (§ 2, § 3). À
+l'envoi : magasin → mémoire `Zeroizing` → requête TLS vers une origine **et** un emplacement autorisés (§ 4).
+**Jamais** : argument de commande, variable d'environnement, fichier de config, base SQLite, presse-papiers, journal,
+notification, stdout, sortie `--json`, URL (hôte, chemin) — y compris par écho du serveur (§ 4.4).
+
+### 1.2 IPC entre CLI et résident (2.1, 4.7)
+
+- Socket Unix JSON-RPC, ligne ≤ **64 Kio** (au-delà : connexion fermée). Linux : `$XDG_RUNTIME_DIR/kropa/` ; macOS :
+  `~/Library/Caches/Kropa/` (chemin d'`architecture.md`, < 104 octets). Le dossier est créé `0700` par Kropa.
+- **Les deux côtés vérifient** : le serveur, l'UID du client (`peer_cred()` de tokio = `SO_PEERCRED` / `getpeereid`) ;
+  le client, **avant d'envoyer quoi que ce soit**, que le serveur a son UID (`peer_cred().uid == getuid()`), et que le
+  dossier appartient à cet UID, est en `0700` et n'est pas un lien (`lstat`). Échec = code 14, rien envoyé.
+- **Aucun repli** : sans `XDG_RUNTIME_DIR` (su, cron, SSH sans logind), pas de `/tmp` → code 14 « résident
+  injoignable : pas de dossier d'exécution sûr ». La CLI reste utilisable sans résident (`cli.md` § 1.10).
+- Méthodes qui portent une valeur : `secrets.set` et `secrets.unlock` seulement ; aucune ne **renvoie** de valeur (pas
+  de `secrets.get`). Les paramètres de `secrets.*` ne sont jamais journalisés, même en `-vv`.
+- Limite (§ 7) : un processus du même utilisateur peut appeler l'IPC comme la CLI.
 
 ## 2. Stockage principal : trousseau système
 
-Crate **`keyring` 4.2.0** (2026-08-29) sur **`keyring-core` 1.0.1**, magasins choisis à la compilation :
-`zbus-secret-service-keyring-store` 1.0.1 (Linux, Rust pur) et `apple-native-keyring-store` 1.0.2 (macOS, module
-`keychain`). Versions relues sur crates.io le 11/11/2026 [1][2][3][4]. Autres magasins de l'écosystème (keyutils,
-`db-keystore`, dbus/libdbus) : **non retenus**. Clé d'une entrée : service `kropa`, compte `<profil>/<nom>`.
+Crate **`keyring` 4.2.0** sur **`keyring-core` 1.0.1**, magasins choisis à la compilation :
+`zbus-secret-service-keyring-store` 1.0.1 (Linux, fonction `rt-tokio-crypto-rust`, sans OpenSSL) et
+`apple-native-keyring-store` 1.0.2 (macOS, module `keychain`) [1][2][3][4]. Autres magasins : **non retenus**.
+
+**Un seul élément** sur les deux systèmes (Q5) : service `kropa`, compte `store`, valeur = le document du § 2.3, le
+même que le clair du coffre. Un modèle, un verrou (§ 3.4), une invite macOS par mise à jour et par binaire. Coût
+accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets », pas une par jeton.
 
 ### 2.1 Linux : Secret Service (gnome-keyring, oo7, ksecretd de Plasma 6, KeePassXC)
 
-- **Attributs** posés par le magasin : `service`, `username` (obligatoires), `target` (facultatif), libellé
-  `keyring:{user}@{service}` sauf modificateur [3]. Kropa fixe le libellé « Kropa — <profil>/<nom> » (lisible dans
-  Seahorse/KWallet) et **n'utilise pas** `target`, qui crée une collection séparée [3].
-- **Collection** : alias `default` (la collection « login », déverrouillée à l'ouverture de session). Si elle est
-  **verrouillée**, on demande son déverrouillage par le prompt du service (`Unlock` + `Prompt`) ; un refus ou un prompt
-  fermé = statut `keyring_locked`, jamais repli implicite vers le coffre. En CLI non interactive (pas de session
-  graphique pour afficher le prompt) : échec explicite, code de sortie dédié.
-- **Absence de démon** (wlroots, X11 minimal, SSH) : pas de nom `org.freedesktop.secrets` sur le bus de session et pas
-  d'activation D-Bus → statut `keyring_unavailable`. Kropa **ne lance pas** de démon et ne démarre pas de session
-  D-Bus. Il propose le coffre (§ 3) par un message explicite.
-- **Session de transport** : le magasin dépend de fonctions de `secret-service` qui fixent runtime et crypto (quatre
-  options exclusives, non nommées dans la doc relue) [3]. Exiger la variante **chiffrée** (`dh-ietf1024-sha256-aes128-cbc-pkcs7`)
-  si elle est offerte ; sinon le dire (question 2). Le bus de session reste lisible par tout processus du même
-  utilisateur : hors périmètre (§ 7).
-- Flatpak : hors distribution v1 (`decisions.md`) ; le portail Secret ne serait qu'une clé maître pour notre fichier.
+- **Attributs** : `service`, `username` ; libellé « Kropa — secrets » ; `target` **non utilisé** (collection séparée) [3].
+- **Collection** : alias `default` (« login »).
+- **Session de transport** : le magasin 1.0.1 impose `EncryptionType::Dh` [3] ; pas de repli `plain` ; un service
+  sans DH = échec explicite (non vérifié, test en 1.8). Gain faible (bus du même utilisateur, DH 1024 bits), coût nul.
+- **Verrouillé, sans interaction possible** (pas de TTY, `--no-input`, ou pas de session graphique pour le prompt,
+  SSH compris) : Kropa lit la propriété `Locked` de la collection et de l'élément **avant** toute lecture et échoue
+  `keyring_locked` (code 7) **sans prompt**. Le magasin 1.0.1 appelle `unlock_all` puis attend [3] : si son API ne
+  permet pas de l'éviter, Kropa interroge `Locked` directement par zbus avant l'appel (à confirmer en 1.8).
+- **Verrouillé, interaction possible** : prompt du service (`Unlock` + `Prompt`) ; refus ou fermeture =
+  `keyring_locked`. Jamais de repli implicite vers le coffre.
+- **Délais** : tout appel au magasin en `tokio::task::spawn_blocking` avec délai (5 s par appel, 120 s pour un prompt
+  affiché) ; dépassement = `keyring_timeout` (code 7). Aucun script n'attend un humain.
+- **Doublons** : `search_items` parcourt toutes les collections ; deux éléments `kropa`/`store` = `Ambiguous` → code 7
+  `keyring_ambiguous`, jamais de choix arbitraire ; `doctor` dit combien et dans quelles collections (aucune valeur).
+- **Absence de démon** (wlroots, X11 minimal, SSH) : pas de `org.freedesktop.secrets` ni d'activation →
+  `keyring_unavailable`. Kropa ne lance pas de démon et propose le coffre (§ 3) par un message explicite.
+- Flatpak : hors distribution v1 (`decisions.md`).
 
 ### 2.2 macOS : Keychain à fichier (login)
 
-- Module `keychain` du magasin Apple = trousseau « legacy » à fichier, chiffré, accessible à toute app [4]. Le module
-  `protected` (data protection) est réservé aux apps sandboxées et à des entitlements de profil de provisionnement [4]
-  [5] : **non utilisable** sans compte Developer, donc non activé.
-- Élément : mot de passe générique, service `kropa`, compte `<profil>/<nom>`. Contrôle d'accès en deux couches
-  (sources Apple partielles, sources tierces pour la seconde) :
-  1. **ACL des applications de confiance**, désignées par leur *Designated Requirement* (DR) [6]. Avec un certificat
-     auto-signé stable, la DR est `identifier "…" and certificate leaf = H"…"` et survit aux mises à jour ; en ad hoc,
-     la DR est liée à la version et change à chaque build [6].
-  2. **Liste de partitions** (`partition_id`, macOS ≥ 10.12) : `apple:`, `apple-tool:`, `teamid:<id>` ou `cdhash:<…>`.
-     Un certificat auto-signé n'a **pas de Team ID Apple** ; un développeur signé par une CA non Apple a constaté
-     qu'après mise à jour un nouveau `cdhash` s'ajoute à la partition, **avec une invite**, malgré une DR stable [7][8].
-- **Conséquence (à vérifier en 1.6 sur le Mac)** : le certificat auto-signé protège probablement les permissions TCC,
-  mais **pas forcément** l'absence d'invite Keychain à chaque mise à jour, contrairement à ce qu'affirme
-  `platform-macos.md` § 4.4. Hypothèse de travail : une invite « Kropa veut utiliser… » par élément après chaque mise
-  à jour, en ad hoc **et** en auto-signé ; « Toujours autoriser » ajoute le nouveau `cdhash`. Mitigations : regrouper
-  les secrets d'un profil dans **un seul élément** (moins d'invites), mettre à jour en place (`SecItemUpdate`) au lieu de
-  supprimer/recréer (qui réinitialise l'ACL) [8], et l'annoncer dans les notes de version. Jamais d'ajout de
-  `unsigned:` ni de `security set-generic-password-partition-list` par Kropa.
-- Invite refusée = statut `keychain_denied`, la tâche passe `waiting_unlock`, jamais repli implicite.
+- Module `keychain` = trousseau « legacy » à fichier [4]. Module `protected` : réservé aux apps sandboxées avec
+  entitlements de provisionnement [4][5], **non utilisable** sans compte Developer.
+- **Contrôle d'accès, établi par la revue** sur la source Apple `securityd/src/clientid.cpp`
+  (`partitionIdForProcess`) [11] :
+  1. l'**ACL** désigne l'application par sa *Designated Requirement* ; avec le certificat auto-signé stable, la DR
+     survit aux mises à jour [6] ;
+  2. la **partition** : `teamid:` n'est donnée qu'au code Mac App Store, TestFlight, Developer ID ou Apple
+     Development ; **tout autre code signé, auto-signé comme ad hoc, reçoit `cdhash:<hash>`**, qui change à chaque
+     build.
+- **Conséquence, dite honnêtement** : après **chaque mise à jour**, macOS affiche une invite « Kropa veut utiliser…
+  » **par binaire** qui lit l'élément (`kropa` et `kropa-app` ont des cdhash distincts) ; « Toujours autoriser »
+  ajoute le nouveau cdhash. Le certificat auto-signé garde son intérêt pour TCC (qui ne lit que la DR) et pour l'ACL,
+  pas pour la partition. `platform-macos.md` § 4.4 (« pas d'invite ») est à corriger (§ 10).
+- **Replis proposés** (choix : **U1**) :
+  - *Courtier unique* (recommandé) : seul `kropa` (la CLI, présente dans le paquet et dans `Kropa.app`) ouvre le
+    trousseau. `kropa-app` lance `kropa __store-broker` en processus fils, sans socket : requête et document passent
+    par un **tube anonyme hérité** (`CLOEXEC` ailleurs), le fils vérifie que son parent est le `kropa-app` du même
+    paquet (chemin et signature), sert une requête et sort. → **1 invite par mise à jour**. Coût : `kropa-app` dépend
+    du binaire `kropa` voisin.
+  - *Coffre `age`* sur macOS : aucune invite Keychain, phrase de passe à chaque session du résident.
+  - *Accepter 2 invites* par mise à jour.
+- Mitigations communes : un seul élément ; **modification en place** (le magasin Apple fait recherche puis
+  modification [4], jamais suppression/recréation qui réinitialise l'ACL) ; notes de version qui annoncent l'invite.
+  Jamais d'ajout de `unsigned:` ni de `apple-tool:` (partition de `security(1)` [11]), jamais de
+  `security set-generic-password-partition-list` par Kropa.
+- Invite refusée = `keychain_denied` (code 4), la tâche passe `waiting_unlock`, jamais de repli implicite.
+- **Vérification prévue en 1.6** (Mac de l'utilisateur, macOS 15 et plus si possible 26) : build N signé, secret
+  rangé et lu par `kropa` **et** `kropa-app` ; build N+1 signé du même certificat ; relever le nombre d'invites par
+  binaire, l'effet de « Toujours autoriser », la survie de TCC ; refaire avec le courtier. Résultat dans
+  `decisions.md`, qui tranche U1 si l'utilisateur ne l'a pas fait.
 
-### 2.3 Format de la valeur stockée (trousseau et coffre)
+### 2.3 Document stocké (trousseau et coffre)
 
-Une entrée = un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
-`{"v":1, "origins":["https://img.example.org:443"], "created":"…", "value":"…"}`. Les **origines autorisées** (§ 4)
-font partie de la valeur protégée : modifier la config TOML en clair ne les change pas.
+Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
+
+```json
+{"v":2, "entries":{"zipline/token":{
+  "origins":["https://zipline.example.org:443"],
+  "placements":["header:Authorization"],
+  "created":"2026-11-11T14:00:00+01:00", "value":"…"}}}
+```
+
+- Clé d'entrée `<profil>/<nom>` ; `/` interdit dans un nom de profil ou de secret (code 6).
+- **`origins`** (§ 4.1) et **`placements`** (§ 4.3) font partie de la valeur protégée : modifier le TOML en clair ne
+  les change pas. Pour S3, l'origine est un triplet (§ 4.6).
+- Version 1 (une entrée par élément, sans `placements`) : jamais livrée, aucune migration.
 
 ## 3. Repli : coffre `age` à phrase de passe
 
-- **Crate `age` 0.12.1** (2026-07-14), recipient `scrypt` seul (la spécification impose qu'un stanza scrypt soit le
-  **seul** stanza du fichier) [9][10]. Pas de format maison ; déchiffrable en secours par `age -d` ou `rage -d`.
-- **Format** : fichier age v1 binaire (pas d'armure) ; en-tête `age-encryption.org/v1`, stanza
-  `scrypt <sel 16 o> <log2 N>`, MAC HMAC-SHA-256 ; charge utile STREAM ChaCha20-Poly1305 par blocs de 64 Kio [10]. Le
-  clair est un document JSON : `{"v":1, "entries":{"<profil>/<nom>": <valeur § 2.3>}}`.
-- **Facteur de travail** : scrypt r = 8, p = 1 [10]. À l'écriture, `log2 N` **fixé à 18** (≈ 256 Mio, valeur de
-  l'exemple de la spec) plutôt que la calibration par défaut du crate (≈ 1 s sur la machine) [9], pour qu'un coffre créé
-  sur une machine rapide s'ouvre sur une lente ; relevable par réglage. À la lecture,
-  `set_max_work_factor(20)` : le défaut du crate vise ≈ 16 s et la doc prévient qu'au-delà de 22 un fichier piégé peut
-  coûter des heures et des dizaines de Gio [9]. Facteur lu < 16 → avertissement « coffre faible, à réécrire ».
-- **Emplacement** : `$XDG_DATA_HOME/kropa/secrets.age` (Linux, défaut `~/.local/share`) ;
-  `~/Library/Application Support/<App ID>/secrets.age` (macOS). Hors dossier de config, pour qu'un dépôt de dotfiles
-  ne l'emporte pas par défaut. Dossier `0700`, fichier **`0600`** ; à l'ouverture, refus si le fichier appartient à un
-  autre UID ou est lisible par le groupe ou les autres (`kropa doctor` explique comment corriger).
-- **Écriture atomique** : temporaire `secrets.age.<aléa>.tmp` créé `O_CREAT|O_EXCL` en `0600` dans le **même dossier**,
-  écriture, `fsync` du fichier, `rename` sur la cible, `fsync` du dossier. Verrou consultatif (`flock`) pendant
-  lecture-modification-écriture : CLI et résident peuvent écrire. Chaque écriture tire un nouveau sel et une nouvelle
-  clé de fichier (assuré par `age`).
-- **Mémoire** : phrase de passe, clair JSON et valeurs dans `zeroize::Zeroizing` (`zeroize` 1.9.1) ou
-  `age::secrecy::SecretString`, jamais `String` nu ; `mlock` au mieux, **non garanti** (swap, vidage mémoire) : dit dans
-  la doc. Réécrire le coffre exige la phrase de passe en mémoire pendant la session (limite connue de l'option A,
-  `uploads.md` § 4.2) : elle est effacée au verrouillage.
-- **Déverrouillage, deux niveaux** :
-  1. *Par processus* (lot 2, 2.8) : sans résident, chaque `kropa` qui a besoin d'un secret demande la phrase de passe
-     (TTY masqué), l'utilise, efface tout à la sortie.
-  2. *Par session du résident* (lot 4, 4.7) : `kropa secrets unlock` (ou dialogue) transmet la phrase de passe au
-     résident par l'IPC ; celui-ci garde le coffre ouvert **15 min d'inactivité** (réglable, ou « jusqu'au verrouillage
-     de session »), puis efface. Verrouillage immédiat sur verrouillage d'écran (logind `Lock`/`PrepareForSleep` ;
-     `com.apple.screenIsLocked` sur macOS) quand c'est détectable ; sinon le dire dans `kropa secrets status`.
-     `kropa secrets lock` verrouille à la demande.
-- **`--password-fd N`** : lit la phrase de passe sur le descripteur `N` jusqu'à EOF ou `\n`, puis le ferme ; refus si
-  `N` vaut 0 alors que stdin porte aussi un fichier à envoyer. Pas de `--password`, pas de `KROPA_PASSWORD`.
-- **Non interactif** (pas de TTY, pas de `--password-fd`, pas de résident déverrouillé) : aucun blocage ni attente,
-  échec immédiat avec code dédié et message « coffre verrouillé : `kropa secrets unlock` ou `--password-fd` ». Dans la
-  file du résident, la tâche passe `waiting_unlock`, sans échec.
-- **Mauvaise phrase de passe** : message unique « phrase de passe incorrecte ou fichier altéré » (age ne distingue pas),
-  délai croissant après 3 essais dans le résident. Phrase perdue = secrets perdus (dit à la création, avec la commande
-  de ressaisie).
+### 3.1 Format
 
-### 3.1 Choix du magasin, bascule jamais silencieuse
+- **Crate `age` 0.12.1**, recipient `scrypt` seul (stanza unique imposée par la spécification) [9][10]. Déchiffrable
+  en secours par `age -d` ou `rage -d`. Fichier age v1 binaire ; clair = le document du § 2.3.
+- **Facteur de travail** (Q3) : r = 8, p = 1 ; à l'écriture, `log2 N` **fixé à 18** (≈ 256 Mio), portable entre
+  machines ; relevable par réglage. À la lecture, `set_max_work_factor(20)` ; au-delà, refus immédiat avec la valeur lue
+  et le réglage `secrets.vault.max_work_factor` (≤ 22) pour cette lecture, l'écriture suivante revenant au réglage.
+  Facteur lu < 16 → avertissement « coffre faible, à réécrire ». La marge de sécurité vient de la phrase (§ 3.2).
 
-- Ordre : trousseau s'il répond ; coffre seulement si l'utilisateur le **choisit** (`kropa secrets use vault`, ou
-  réglage), y compris quand le trousseau est absent. Le choix est écrit dans la config (`secrets.store = "keyring" |
-  "vault"`) ; il ne change jamais tout seul.
-- Trousseau devenu indisponible, verrouillé ou refusé alors que `store = "keyring"` : erreur explicite, **pas** de
-  lecture ni d'écriture dans le coffre. Inversement, coffre choisi : jamais d'écriture au trousseau.
-- Migration explicite seulement : `kropa secrets migrate --to vault|keyring` (copie, vérifie par relecture, puis
-  supprime la source après confirmation).
-- `kropa secrets status [--json]` : magasin, état (`unlocked`, `locked`, `unavailable`, `denied`), facteur scrypt du
-  coffre, nombre d'entrées, **jamais** de valeur ni de liste de valeurs.
+### 3.2 Phrase de passe (I1)
 
-## 4. Liaison secret ↔ origines et résolution
+- À la création et au changement : refus si moins de **12 caractères** ou score **`zxcvbn` 3.1.1 < 3**, avec la raison
+  (code 11, `weak_passphrase`). Kropa propose une phrase **diceware de 6 mots** (≈ 77 bits) tirée par `getrandom`.
+- Phrase perdue = secrets perdus : dit à la création, avec la commande de ressaisie (`kropa secrets set`).
 
-- **Origine** = schéma + hôte (IDNA, minuscules) + port explicite. Fixée à la création d'après l'URL du profil
-  (`kropa dest add`, import `.sxcu`), stockée **dans** la valeur protégée (§ 2.3).
-- **Références** : la config TOML ne contient que `[destination.secrets] token = { ref = "<profil>/<nom>" }` et des
-  gabarits `{secret:token}`. Résolution au **dernier moment**, juste avant l'envoi, dans `kropa-upload` :
-  1. la requête est construite sans secret ; son origine est calculée ;
-  2. chaque `{secret:x}` exige que l'origine figure dans `origins` de `x`, sinon refus **avant toute connexion** ;
-  3. `{secret:}` n'est permis que dans en-têtes, paramètres de requête, champs de formulaire et corps de requête ;
-     **interdit** dans l'URL de base (hôte, chemin), le nom de fichier et **tous** les gabarits de réponse (`url`,
-     `thumbnail_url`, `deletion_url`, `error`) — vérifié au chargement de la config, pas à l'envoi.
-- **Changement d'URL** d'un profil qui utilise un secret : l'autorisation ne suit pas. Confirmation interactive qui
-  montre l'ancienne et la nouvelle origine ; en non interactif, refus. Origine ajoutée par `kropa secrets allow`.
-- **HTTPS obligatoire** dès qu'un secret est résolu, exceptions `localhost`, `127.0.0.1`, `::1` (tests). Vérification
-  TLS rustls par défaut, aucune option pour l'ignorer en v1.
-- **Redirections** : client `reqwest` unique avec politique maison : `none` ou `same-origin` (défaut), 5 sauts au
-  plus ; une redirection vers une autre origine **échoue** (même sans secret : pas de suivi « en-têtes retirés »). HTTPS → HTTP
-  interdit.
-- **Réponse** : corps lu en flux et **coupé à 1 Mio** (erreur au-delà), délais de connexion et totaux, annulation.
-  L'URL extraite doit être `http(s)` sans caractère de contrôle avant toute copie.
-- S3 et SFTP : l'origine est l'endpoint S3 (ou région AWS résolue) et `sftp://hôte:port` ; SFTP impose en plus
-  `known_hosts` strict (4.9). Un secret S3 ne sert jamais à une autre destination.
+### 3.3 Emplacement et droits
 
-## 5. Import `.sxcu`
+- `$XDG_DATA_HOME/kropa/secrets.age` (Linux, défaut `~/.local/share`) ; `~/Library/Application Support/<App ID>/`
+  (macOS). Hors dossier de config (dotfiles). Dossier `0700`, fichier **`0600`**.
+- Ouverture en `O_NOFOLLOW` ; contrôles par **`fstat` du descripteur ouvert** et du dossier (pas de `stat` sur le
+  chemin) : refus si autre propriétaire, lisible par groupe ou autres, ou dossier non `0700` (`doctor` explique).
+- La base SQLite (URL de suppression) est créée `0600` dans un dossier `0700`.
 
-- Le fichier est **lu comme données** : JSON borné (≤ 64 Kio), schéma ShareX ≥ 13.7.1 ; rien n'est exécuté, aucun
-  `{inputbox:}` ni `{select:}` résolu sans l'utilisateur, aucune requête réseau pendant l'import.
-- **Extraction** : en-têtes connus (`Authorization`, `x-api-key`, `x-zipline-*`, `Cookie`…), `Arguments`/`Parameters`
-  nommés `key`, `token`, `password`, `secret`, `apikey`…, segments de `RequestURL` ou valeurs à forte entropie. Chaque
-  valeur est montrée **masquée** (4 derniers caractères au plus), rangée dans le magasin choisi avec l'origine de
-  `RequestURL`, remplacée par `{secret:…}` dans le TOML.
-- **Confirmation de l'hôte** : résumé (origine, HTTPS ou non, champs, secrets détectés), création du profil seulement
-  après accord ; en non interactif, `--yes` **et** `--expect-host <hôte>` exigés, sinon refus. Un `.sxcu` en `http://`
-  avec secret est refusé (sauf loopback).
-- Un `.sxcu` ne peut **pas** réutiliser un secret existant : ses références pointent toujours vers des entrées neuves.
-  Le fichier d'origine n'est pas recopié ; Kropa invite à le supprimer (il contient le jeton en clair).
+### 3.4 Écriture atomique et concurrence (I2, M6)
+
+- Verrou consultatif `flock` (via `rustix`) sur un fichier **stable** `store.lock` du même dossier, jamais sur
+  `secrets.age` (le `rename` changerait l'inode). Le même verrou protège l'élément du trousseau (lecture-modification-
+  écriture du document unique).
+- Sous verrou : **relecture** du coffre, modification, temporaire `secrets.age.<aléa>.tmp` créé
+  `O_CREAT|O_EXCL|O_NOFOLLOW` en `0600` dans le même dossier, écriture, `sync_all`, `rename`, `sync_all` du dossier.
+  **Jamais d'écriture depuis un cache** : le résident relit toujours sous verrou.
+- `*.tmp` orphelins de plus de 1 h retirés à l'ouverture, sous verrou. Chaque écriture tire un nouveau sel et une
+  nouvelle clé de fichier (assuré par `age`).
+
+### 3.5 Mémoire (I8)
+
+- Phrase de passe, clair et valeurs dans `zeroize::Zeroizing` (`zeroize` 1.9.1) ou `secrecy::SecretString`, **au
+  mieux** : des copies restent hors de notre contrôle — croissance de `Vec` dans `serde_json`, `Vec<u8>` de `keyring`,
+  `String` de `rpassword`, `Bytes` de `HeaderValue`, tampons de rustls. Réduction : tampons pré-alloués à la taille
+  maximale, désérialisation **empruntée** (`&str` dans le tampon `Zeroizing`) puis copie immédiate en `SecretString`.
+- **Pas de `mlock`** (promesse non tenable). La doc conseille un swap chiffré et dit que vidage mémoire et
+  hibernation peuvent contenir des secrets.
+
+### 3.6 Déverrouillage (Q4, I9, M9)
+
+1. *Par processus* (2.8) : sans résident, chaque `kropa` qui a besoin d'un secret demande la phrase (TTY masqué ou
+   `--password-fd`), déchiffre, **efface la phrase aussitôt**, efface tout à la sortie.
+2. *Par session du résident* (4.7) : `kropa secrets unlock` (ou dialogue) transmet la phrase par l'IPC ; le résident
+   déchiffre, **efface la phrase**, et ne garde que les entrées déchiffrées. **Toute écriture** (`set`, `remove`,
+   `allow`, `migrate`), rare, redemande la phrase. Repli noté si gênant, non retenu : identité X25519 chiffrée par
+   phrase (format age standard), gardée à la place de la phrase.
+- **Bornes** : verrouillage après **15 min sans action humaine** (réglable) — `unlock`, interaction avec l'interface,
+  commande lancée depuis un TTY ; un envoi de la file ou d'un script sans TTY **ne prolonge pas**. Plafond absolu
+  **8 h**. Verrouillage immédiat : Linux, `LockedHint = true` de la session logind (`Lock` n'est qu'une demande),
+  `PrepareForSleep(true)` avec un inhibiteur `sleep` en mode `delay` pris à l'ouverture, fin de session ; macOS,
+  `com.apple.screenIsLocked` et `NSWorkspaceWillSleepNotification`. `LockedHint` non vérifié par bureau : si
+  l'événement n'est pas observable, `kropa secrets status` le dit. `kropa secrets lock` à la demande.
+- **Mauvaise phrase** : message unique « phrase de passe incorrecte ou fichier altéré ». Pas de « délai croissant »
+  (inutile contre l'attaque hors ligne) ; les déverrouillages sont **sérialisés** (un seul calcul scrypt de 256 Mio à
+  la fois).
+- **Non interactif** sans `--password-fd` ni résident déverrouillé : échec immédiat (code 7, « coffre verrouillé :
+  `kropa secrets unlock` ou `--password-fd` »). Dans la file du résident : `waiting_unlock`, sans échec.
+
+### 3.7 Descripteurs (`--password-fd`, `--secret-fd`) (M7)
+
+Lecture jusqu'à EOF ou `\n` ; **4 Kio max** (au-delà : refus) ; un seul `\n` final retiré ; descripteur passé
+`CLOEXEC` puis fermé. Refus de 1 et 2, et d'un descripteur à double usage (même fd pour phrase et secret, ou 0 quand
+stdin porte un fichier). Pas de `--password`, pas de `KROPA_PASSWORD`.
+
+### 3.8 Choix du magasin, bascule jamais silencieuse
+
+- Trousseau s'il répond ; coffre seulement si l'utilisateur le **choisit** (`kropa secrets use vault`, ou réglage),
+  y compris quand le trousseau est absent. `secrets.store = "keyring" | "vault"` ne change jamais tout seul.
+- Magasin choisi indisponible, verrouillé ou refusé : erreur explicite, aucune lecture ni écriture dans l'autre.
+- Migration explicite : `kropa secrets migrate --to vault|keyring` (copie, relecture, suppression de la source après
+  confirmation).
+- `kropa secrets status [--json]` : magasin et pourquoi, état (`unlocked`, `locked`, `unavailable`, `denied`,
+  `ambiguous`), facteur scrypt, échéance du verrouillage, nombre d'entrées, observabilité du verrouillage d'écran ;
+  **jamais** de valeur.
+
+## 4. Liaison secret ↔ origine et emplacement, résolution
+
+### 4.1 Origines
+
+- Origine = `url::Url::origin()` (schéma, hôte IDNA en minuscules, IPv4 normalisée, point final retiré, port explicite
+  ou par défaut du schéma). Une URL avec `user:pass@` est refusée (code 6). Fixée à la création, stockée **dans** la
+  valeur protégée (§ 2.3).
+
+### 4.2 Références (B2)
+
+- **Une référence ne vise que le profil courant** : `{secret:token}` dans le profil `zipline` résout l'entrée
+  `zipline/token`, et elle seule. La clé `ref` d'`uploads.md` § 2.2 est supprimée ; `[destination.secrets]` liste
+  seulement les noms attendus (`token = {}`) pour que `dest show` signale ceux qui manquent. Aucune syntaxe ne désigne
+  le secret d'un autre profil.
+- Renommer l'`id` d'un profil ne déplace pas ses secrets (ils deviennent « manquants ») ; `dest remove` supprime les
+  entrées du profil.
+
+### 4.3 Emplacements autorisés (B2, I10)
+
+- Valeurs : `header:<Nom>` (insensible à la casse), `query:<clé>`, `form:<champ>` (multipart ou urlencoded), `body`.
+  Un `{secret:}` placé dans `{base64:…}` d'un en-tête relève de cet en-tête. `body` lie aussi l'**empreinte SHA-256 du
+  gabarit de corps** : changer le gabarit vaut changer d'emplacement.
+- Fixés à la création de l'entrée : préréglage (Zipline : `header:Authorization`), lieu où l'import a trouvé la
+  valeur (§ 5), ou, pour `secrets set` d'une entrée neuve, lieux du gabarit du profil **montrés** et confirmés. Une
+  entrée existante garde ses emplacements quand sa valeur est remplacée.
+- **Interdits partout** : hôte et chemin de l'URL (choix v1, **U2**), nom de fichier, tout gabarit de réponse.
+  Vérifié **au chargement** de la config (code 6).
+- **À la résolution** (`kropa-upload`, juste avant l'envoi) : la requête est construite sans secret, son origine
+  calculée ; chaque `{secret:x}` exige que l'origine figure dans `origins` de `x` **et** que son emplacement figure dans
+  `placements` de `x` ; sinon code 11, **avant toute connexion**.
+- `query:` est permis (certaines API l'exigent) mais signalé à la création : la query finit dans les journaux du
+  serveur et des proxys.
+- **Changement** d'URL ou d'emplacement d'un profil qui utilise un secret : l'autorisation ne suit pas.
+  `kropa secrets allow <profil> <nom> --origin <URL> | --placement <P>` montre l'ancien et le nouveau et demande une
+  confirmation **interactive seulement** (jamais `--yes`, code 12 sans TTY). Même règle pour `dest edit --url`.
+
+### 4.4 Contrôle de sortie (B1, M5)
+
+Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** avant de quitter `kropa-upload`.
+
+- **Gabarits de réponse** (`url`, `thumbnail_url`, `deletion_url`, `error`) : `{secret:}` interdit (chargement).
+  `{responseurl}` rend l'URL finale **sans query, fragment ni `user:pass@`**. `{header:}` est refusé au chargement pour
+  `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `www-authenticate` et tout en-tête d'un emplacement
+  autorisé du profil.
+- **Détecteur** (partagé avec l'expurgation, § 6) : pour chaque secret résolu `s`, et chaque valeur de requête rendue
+  qui l'a contenu (`Bearer s`, sortie de `{base64:user:s}`), on cherche : forme brute ; percent-encodée (hex majuscule
+  et minuscule, `+` pour l'espace) ; échappement JSON (`\/`, `\uXXXX`) ; échappement HTML ; base64 standard et URL-safe,
+  avec ou sans `=`, aux **trois alignements** (partie stable de l'encodage). On cherche aussi la forme brute dans la
+  sortie décodée une fois (percent, HTML). Un secret de moins de 8 octets est accepté avec un avertissement (faux
+  positifs possibles : on refuse alors, côté sûr).
+- **Sorties contrôlées** : URL, miniature, suppression, texte du lien (URL, Markdown, HTML), entrée d'historique
+  SQLite, presse-papiers, notification, stdout, JSON. Les API d'historique, de presse-papiers et de sortie n'acceptent
+  qu'un type `CheckedOutput` dont le seul constructeur applique le contrôle.
+- **Détection** = code 11 (`secret_in_output`) : rien copié, rien enregistré dans l'historique au-delà d'une ligne
+  d'échec sans URL, stdout reçoit le chemin du fichier local, JSON avec `upload.status = "failed"`, `url = null`,
+  avertissement « le fichier a peut-être été envoyé ; lien retenu ». Échec définitif (pas de nouvel essai en file).
+  Le message ne cite jamais la valeur.
+- **`error` et extrait de réponse** (500 caractères) : masqués (`***`) par le même détecteur, avertissement
+  `secret_echoed` ; l'envoi a déjà échoué (code 9).
+- **Réponse hostile** : corps lu en flux et coupé à 1 Mio, délais de connexion et totaux, annulation ; `regex` 1.13
+  seul (temps linéaire, `size_limit` et `dfa_size_limit` bornés), jamais `fancy-regex` ; XML par `roxmltree` 0.21
+  sans DTD ; URL extraite `http(s)`, sans caractère de contrôle, de bidi (U+202A–202E, U+2066–2069) ni de largeur nulle ;
+  `thumbnail_url` jamais téléchargée d'office.
+
+### 4.5 Transport
+
+- **HTTPS obligatoire** dès qu'un secret est résolu. `localhost` jamais (passe par le résolveur). `http://127.0.0.1`
+  et `http://[::1]` acceptés **seulement dans les builds de test** (fonction Cargo non livrée) : un autre utilisateur
+  peut écouter un port libre du bouclage (I4). Option par profil : **U3**.
+- TLS par rustls avec **`rustls-platform-verifier` 0.7.1** (magasin système : une CA privée s'y installe) ; aucune
+  option pour ignorer la vérification.
+- Client `reqwest` unique, **`.no_proxy()`** (pas de lecture de `HTTP(S)_PROXY`) ; proxy explicite par config : hors
+  v1.
+- **Redirections** : `none` ou `same-origin` (défaut), 5 sauts au plus ; vers une autre origine = échec (même sans
+  secret) ; HTTPS → HTTP interdit.
+- En-têtes porteurs d'un secret : `HeaderValue::set_sensitive(true)` (masqué en `Debug`, hors table HPACK).
+
+### 4.6 S3 et SFTP
+
+- S3 (Q6) : l'« origine » est le **triplet** (endpoint canonique, région, bucket), styles virtual-host et path compris.
+  SigV4 n'envoie pas la clé ; le risque est l'écriture dans un autre bucket : changer un élément du triplet demande la
+  confirmation du § 4.3. Clés absentes = refus **avant** `build()` (jamais l'IMDS `InstanceCredentialProvider` [7]) ;
+  `with_http_connector` branche le client unique (même TLS, même absence de proxy).
+- SFTP : origine `sftp://hôte:port`, `known_hosts` strict (4.9). Un secret S3 ou SFTP ne sert qu'à son profil.
+
+## 5. Import `.sxcu` et `.toml` (B2, Q7, M8)
+
+Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus fiable qu'un `.sxcu`.
+
+- **Lu comme données** : ≤ 64 Kio ; `.sxcu` = schéma ShareX ≥ 13.7.1, `.toml` = tables `[[destination]]` seulement ;
+  rien d'exécuté, aucune requête réseau, aucun `{inputbox:}`/`{select:}` résolu sans l'utilisateur.
+- **Extraction** (Q7) : toute valeur d'en-tête, d'argument, de paramètre ou de corps est **présumée secrète**, sauf
+  liste blanche (`Accept`, `Content-Type`, `User-Agent`, gabarits purs comme `{filename}`), montrée masquée (4 derniers
+  caractères au plus) et **reclassable** par l'utilisateur ; `--yes` range le reste comme secrets. Chaque secret devient
+  une entrée **neuve** du profil importé, liée à l'origine de l'URL et à l'emplacement où il a été trouvé.
+- **`{secret:x}` dans un TOML importé** : crée une entrée **vide** (« manquante », `dest show`), à remplir par
+  `kropa secrets set`. Un import ne réutilise **jamais** une entrée existante, d'aucun profil.
+- **`id` déjà pris** : refus, sauf `--id <autre>` ou confirmation interactive « remplacer le profil X : ses secrets
+  seront supprimés ». Pas d'écrasement sans confirmation, jamais d'héritage de secrets.
+- **Secret dans le chemin** de l'URL (segment à forte entropie : seul usage restant de l'entropie, Q7) : import refusé
+  en v1 avec un message explicite (« jeton dans l'URL non pris en charge ») — **U2**.
+- **`{inputbox:}` d'authentification** (dans un emplacement de secret) : converti en secret à l'import, saisi masqué ;
+  `--var` qui viserait un emplacement de secret → code 11 (secret en argument).
+- **Confirmation** : résumé (origine, HTTPS ou non, emplacements, secrets détectés et masqués, query signalée) ;
+  profil créé après accord ; en non interactif, `--yes` **et** `--expect-host <hôte>` exigés (hôte différent → code
+  11), sinon code 12. Un import `http://` avec secret est refusé.
+- Le fichier d'origine n'est pas recopié ; Kropa invite à le supprimer s'il contenait un secret en clair.
 
 ## 6. Journaux, erreurs, interfaces
 
-- Types : `SecretValue` (et tout type qui en contient) implémente `Debug` et `Display` par `***` (`secrecy` ou type
-  maison), pas de `Serialize` ; `Clone` limité. Lint maison ou test qui échoue si un type secret dérive `Debug`.
+- Types : `SecretValue` (et tout type qui en contient) implémente `Debug` et `Display` par `***`, sans `Serialize`
+  public ; seul le type **privé** du document de magasin (§ 2.3) se sérialise, dans un tampon `Zeroizing`. `Clone`
+  limité. Test qui échoue si un type secret dérive `Debug`.
 - Couche `tracing` d'expurgation : en-têtes en **liste blanche** (`content-type`, `content-length`, `retry-after`,
-  `location` sans requête) ; `Authorization`, `Cookie`, `Set-Cookie`, `x-api-key` et champs marqués secrets → `***`.
-  Passe finale : toute valeur de secret chargée est remplacée par `***` dans messages, erreurs, extraits de réponse
-  (500 caractères max) et sortie `--json`. Jamais de corps de requête journalisé.
-- Erreurs : `kropa-upload` renvoie des erreurs typées sans valeur ; les erreurs de `reqwest` sont reformulées (leur URL
-  peut porter un paramètre secret) ; les messages Fluent ne reçoivent jamais de valeur.
-- **Pas en argument** : `kropa dest add --token` n'existe pas ; un argument ressemblant à un secret (`--header
-  "Authorization: …"`) est refusé avec renvoi vers stdin/TTY. **Pas en variable d'environnement** : aucune lecture de
-  `KROPA_*`, `AWS_*`, `ZIPLINE_*` ; `object_store` construit sans `from_env`.
-- Rapport de bug et `kropa doctor` : config avec références seulement, aucun contenu de magasin.
-- Fichiers d'échec et core dumps : `prctl(PR_SET_DUMPABLE, 0)` dans le résident Linux (au mieux), `RLIMIT_CORE = 0`.
+  `location` sans query) ; le reste → `***`. Passe finale avec le **détecteur du § 4.4** (formes dérivées comprises)
+  sur messages, erreurs, extraits de réponse et `--json`. Jamais de corps de requête journalisé.
+- `-vv` n'ouvre que `kropa*=debug` ; `hyper`, `h2`, `reqwest`, `rustls`, `russh`, `zbus`, `object_store` restent à
+  `info`, sans réglage pour les ouvrir en release.
+- Erreurs : `kropa-upload` renvoie des erreurs typées sans valeur ; erreurs de `reqwest` reformulées (URL avec query
+  retirée) ; Fluent ne reçoit jamais de valeur.
+- **Pas en argument** : pas de `--token` ; un argument ressemblant à un secret (`--header "Authorization: …"`) est
+  refusé (code 11). **Pas en variable d'environnement** : aucune lecture de `KROPA_*`, `AWS_*`, `ZIPLINE_*`, ni des
+  variables de proxy ; `object_store` sans `from_env`.
+- `doctor` et rapport de bug : config avec noms de secrets seulement, aucun contenu de magasin.
+- **Vidages mémoire** (Q8) : `prctl(PR_SET_DUMPABLE, 0)` et `RLIMIT_CORE = 0` (via `rustix`, `unsafe_code = "deny"`)
+  dans `kropa-app` en release et dans `kropa` dès qu'il tient un secret : interdit aussi `ptrace` et
+  `/proc/<pid>/mem` au même utilisateur non root [8]. Coût accepté : ni core dump ni gdb sans root (pas de rapport de
+  plantage de toute façon, zéro télémétrie). Désactivé sous `debug_assertions`, jamais par variable. macOS : runtime
+  renforcé (`codesign --options runtime`), sans `get-task-allow`.
 
 ## 7. Modèle de menaces
 
-Hors périmètre, dit dans la doc : processus malveillant du **même utilisateur** (il lit la mémoire, le bus de session,
-le trousseau déverrouillé), root, machine compromise, serveur de destination lui-même malveillant pour son propre jeton.
+Hors périmètre, dit dans la doc : processus malveillant du **même utilisateur** (il lit la mémoire hors
+`PR_SET_DUMPABLE`, le bus de session, le trousseau déverrouillé, et **appelle l'IPC** : les confirmations d'origine et
+d'emplacement ne l'arrêtent pas), root, machine compromise, serveur de destination malveillant pour son propre jeton.
+À documenter aussi : sous **X11**, la frappe dans un dialogue est lisible par tout client X ; le jeton **collé** dans
+un dialogue reste dans le presse-papiers — le dialogue propose de le vider s'il contient la valeur saisie.
 
 | Menace | Mitigation | Test qui le prouve |
 |---|---|---|
-| Secret lu sur disque (sauvegarde, dotfiles) | Trousseau ou coffre `age` ; config avec références seulement | `kropa-store` : grep des valeurs connues dans config, SQLite, coffre (chiffré) → absentes |
-| Coffre lisible par un autre utilisateur | `0600`/`0700`, refus d'ouvrir sinon | test : coffre `0644` → erreur dédiée ; temporaire créé `0600` |
-| Coffre tronqué par un plantage | Écriture atomique + `fsync` + `flock` | test d'injection de panne entre écriture et `rename` : ancien coffre intact |
-| Attaque hors ligne du coffre | scrypt `log2 N` = 18, relevable | test : facteur lu dans l'en-tête = réglage ; < 16 → avertissement |
-| Fichier `age` piégé (facteur énorme) | `set_max_work_factor(20)` | fixture `log2 N` = 30 → refus immédiat (< 1 s) |
-| Bascule silencieuse vers un magasin moins sûr | `secrets.store` explicite, pas de repli | tests : bus sans Secret Service + `store = keyring` → erreur, coffre non créé |
-| `.sxcu`/TOML malveillant qui vise un jeton existant | Origines dans la valeur protégée, refus avant connexion | `wiremock` : `{secret:x}` vers origine non autorisée → zéro requête reçue |
-| Redirection vers un autre hôte | `same-origin`, 5 sauts, pas de HTTPS→HTTP | `wiremock` : 302 vers autre port/hôte → échec, second serveur sans requête |
-| Interception réseau | HTTPS obligatoire avec secret, TLS vérifié | test : `http://` non loopback + secret → refus au chargement |
-| Secret recopié dans le lien, l'historique, le presse-papiers | `{secret:}` interdit en réponse et dans le nom | test de config : `url = "{secret:t}"` → erreur de validation |
-| Serveur qui renvoie le jeton | Expurgation des valeurs connues | test 1.9 : réponse d'erreur contenant le jeton → journaux et `--json` avec `***` |
-| Réponse énorme, serveur lent | 1 Mio, délais, annulation | `wiremock` : 2 Mio → erreur sans dépassement mémoire ; délai → `timeout` |
-| Secret en argument (`ps`, historique du shell) | Pas d'option, refus des motifs | `trycmd` : `--header "Authorization: …"` → refus |
-| Secret en variable d'environnement | Aucune lecture | test : `AWS_SECRET_ACCESS_KEY` défini → ignoré ; « zéro requête » (1.11) |
-| Fuite par `Debug`/panique | `Debug` masqué, pas de `Serialize` | test : `format!("{:?}")` d'un profil chargé ne contient pas la valeur |
-| Autre utilisateur sur la socket IPC | `0600`, contrôle d'UID, pas de `secrets.get` | test : connexion d'un UID différent (namespace) → refus |
-| Coffre laissé ouvert | 15 min, verrouillage d'écran, `secrets lock` | horloge injectable : 15 min + 1 s → `locked`, mémoire effacée (inspection du tampon) |
-| Invites Keychain à chaque mise à jour | Un élément par profil, `SecItemUpdate`, doc | manuel 1.6 : deux builds signés → nombre d'invites relevé |
-| Usurpation d'hôte SFTP | `known_hosts` strict | test OpenSSH : clé changée → refus |
-| `.sxcu` partagé avec le jeton de l'auteur | Détection, masquage, rangement, avertissement | fixture `.sxcu` Zipline → TOML sans valeur, entrée créée liée à l'origine |
+| Secret lu sur disque (sauvegarde, dotfiles) | Trousseau ou coffre ; config avec noms seulement | grep des valeurs connues dans config, données, cache, journaux, SQLite, `*.tmp` → absentes |
+| Coffre lisible par un autre | `0600`/`0700`, `O_NOFOLLOW`, `fstat` | coffre `0644`, lien symbolique, dossier `0755`, autre propriétaire (`sudo` en CI) → erreur dédiée |
+| Coffre tronqué, écritures concurrentes | `store.lock` stable, relecture sous verrou, atomique | panne entre écriture et `rename` → ancien intact ; 2 écrivains × 100 → 200 entrées |
+| Attaque hors ligne du coffre | Phrase robuste + scrypt 18 | phrase « kropa2026 » refusée ; facteur lu = réglage ; < 16 → avertissement |
+| Fichier `age` piégé | `set_max_work_factor(20)` ; stanza unique | fixtures `log2 N` = 21 et 30 → refus < 1 s ; scrypt mêlé à un autre stanza → refus |
+| Bascule silencieuse | `secrets.store` explicite | `dbus-run-session` sans Secret Service + `store = keyring` → erreur, coffre non créé |
+| Trousseau qui bloque un script | `Locked` lu, pas de prompt, délais | service simulé verrouillé, sans TTY → code 7 en < 6 s, aucun `Prompt` appelé |
+| TOML/`.sxcu` qui vise un jeton existant | Références au profil courant, import en entrées neuves | import visant `autre/token` ou `id` existant → refus ; `wiremock` : 0 requête |
+| Secret déplacé (query, champ affiché) | Emplacements protégés | `wiremock` : `Authorization` déplacé en `query:key` ou `form:title` → code 11, 0 requête |
+| Redirection vers un autre hôte | `same-origin`, 5 sauts | 302 vers autre port/hôte → échec, second serveur sans requête |
+| Interception réseau | HTTPS + TLS vérifié | `http://` non loopback → refus ; serveur TLS avec certificat `rcgen` non approuvé → échec |
+| Bouclage squatté | Pas d'exception en release | build de release : `http://127.0.0.1` + secret → code 11 |
+| Secret dans le lien, l'historique, le presse-papiers | Contrôle de sortie § 4.4 | écho + `url = "{json:$.echo}"` → code 11, SQLite et presse-papiers factice vides, stdout = chemin ; écho base64 de Basic, percent, JSON → idem ; query secrète + `{responseurl}` → URL sans query |
+| Serveur qui renvoie le jeton dans l'erreur | Masquage par le détecteur | réponse 400 avec le jeton (brut et base64) → stderr, journaux, `--json` avec `***` |
+| Réponse énorme, lente, regex piège | 1 Mio, délais, `regex` borné | 2 Mio → erreur sans dépassement ; délai → `timeout` ; motif catastrophique → refus au chargement |
+| Secret en argument ou en `--var` | Pas d'option, refus des motifs | `trycmd` : `--header "Authorization: …"` et `--var` vers emplacement secret → code 11 |
+| Secret en variable d'environnement | Aucune lecture, `.no_proxy()` | `AWS_SECRET_ACCESS_KEY`, `HTTPS_PROXY` définis → ignorés, zéro requête au proxy |
+| Fuite par `Debug`/panique | `Debug` masqué | `format!("{:?}")` d'un profil chargé ; panique provoquée pendant un envoi → stderr sans valeur |
+| IPC usurpée (client ou serveur) | Contrôle d'UID des deux côtés, dossier `0700`, pas de `/tmp` | identifiants de pair injectés + CI `sudo -u nobody`, dans les deux sens → refus, rien envoyé |
+| Coffre laissé ouvert | 15 min sans action humaine, 8 h, `LockedHint`, veille | horloge injectable ; envois périodiques sans TTY ne prolongent pas ; signaux logind simulés sur bus privé ; compteur de `Drop` des tampons |
+| Invites Keychain à chaque mise à jour | Un élément, modification en place, courtier (U1) | manuel 1.6 : deux binaires × deux builds, invites relevées |
+| Usurpation d'hôte SFTP | `known_hosts` strict | clé changée → refus |
+| `.sxcu` partagé avec le jeton de l'auteur | Extraction, masquage, entrées neuves | fixtures Zipline (en-tête), `Data` JSON, jeton dans le chemin (→ refus v1) |
 
-## 8. Questions ouvertes pour la revue
+## 8. Questions ouvertes
 
-1. **Keychain et auto-signé** : la partition `cdhash:` provoque-t-elle une invite à chaque mise à jour malgré une DR
-   stable [7][8] ? Si oui, faut-il proposer le coffre par défaut sur macOS sans compte Developer ? Test en 1.6.
-2. **Session Secret Service** : quelle fonction de `secret-service` choisir (runtime tokio + crypto Rust) et le
-   chiffrement de transport est-il réellement négocié ? Exiger `dh-ietf1024…` ou accepter `plain` (bus local) ?
-3. **Facteur scrypt** : 18 fixe (portable) ou calibration ≈ 1 s du crate (plus fort sur machine rapide) ? Plafond de
-   lecture 20 suffisant ?
-4. **Phrase de passe en mémoire** dans le résident pour réécrire le coffre : acceptable, ou forcer un nouveau
-   déverrouillage pour toute écriture (aucune phrase gardée, seulement les valeurs) ?
-5. **Granularité** : un élément de trousseau par secret (simple) ou par profil (moins d'invites macOS) ?
-6. **Origines S3** : une région AWS implicite (`s3.<région>.amazonaws.com` et virtual-host `<bucket>.s3…`) compte-t-elle
-   comme une seule origine autorisée ?
-7. Détection par **entropie** à l'import `.sxcu` : seuil, et risque de faux négatifs sur jetons courts.
-8. `prctl(PR_SET_DUMPABLE, 0)` gêne-t-il le débogage et les rapports de plantage (apport réel faible vu § 7) ?
+Toutes les questions de S.1 ont reçu une réponse (§ 0.1). Restent : décisions **U1–U4** (§ 0.2), et le **non
+vérifié** : invites Keychain réelles (15, 26), `LockedHint` par bureau, échec d'un service sans DH, possibilité
+d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSec des crates de stockage (à leur ajout).
+
+## 9. Changements proposés à `cli.md` (non appliqués, validation : U4)
+
+1. **§ 2.4 `secrets`** : ajouter `kropa secrets allow <PROFIL> <NOM> (--origin <URL> | --placement <P>)`,
+   interactif seulement (code 12 sans TTY, `--yes` sans effet) ; `kropa secrets use keyring|vault` ;
+   `kropa secrets migrate --to vault|keyring` (confirmation, `--yes` sans TTY). Préciser que `set` d'une entrée neuve
+   montre et fait confirmer origines et emplacements, et qu'avec le coffre toute écriture redemande la phrase, même
+   déverrouillé.
+2. **§ 2.3 `dest import`** : ajouter `--expect-host <HÔTE>`, exigé avec `--yes` sans TTY (code 12 sinon, 11 si l'hôte
+   diffère) ; `.toml` soumis aux mêmes règles que `.sxcu` ; `id` existant refusé sauf `--id` ou confirmation
+   interactive ; jeton dans le chemin refusé (selon U2). Ajouter `--expect-host` à la liste du principe 4.
+3. **§ 2.3 `dest edit`** : la confirmation vaut aussi pour un changement d'emplacement d'un secret (pas seulement d'URL).
+4. **§ 3 codes** : 11 couvre aussi `secret_in_output`, `placement_not_allowed`, `weak_passphrase`, `--var` vers un
+   emplacement secret ; 7 couvre `keyring_locked` (sans prompt), `keyring_timeout`, `keyring_ambiguous` ; 14 couvre
+   « dossier d'exécution absent ou non sûr ». Aucun code nouveau.
+5. **§ 4 JSON** : ajouter `error.reason` (sous-cause machine : `origin_not_allowed`, `placement_not_allowed`,
+   `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`,
+   `keyring_locked`…) — ajout de champ, sans changement de version ; avertissements `secret_echoed` et
+   `uploaded_link_withheld`.
+6. **§ 1.5 et options globales** : `--password-fd` et `--secret-fd` : 4 Kio max, refus des fd 1 et 2 et d'un fd à
+   double usage.
+7. **§ 2.1 `--var`** : refusé (code 11) quand la variable alimente un emplacement de secret.
+8. **§ 2.4 `secrets set|remove <PROFIL> <NOM>`** : inchangé, cohérent avec la portée par profil (B2).
+
+## 10. Suites hors de ce fichier (non modifiés en S.3)
+
+- `uploads.md` § 2.2 : exemple `ref = "kropa/maison/token"` obsolète (→ `token = {}`) ; § 4.5 point 5 : exception
+  `localhost` retirée (§ 4.5, U3) ; § 2.4 : `.toml` importé comme `.sxcu`.
+- `platform-macos.md` § 4.4 : l'auto-signé n'évite pas l'invite Keychain (partition `cdhash:`).
+- `architecture.md` (IPC) : contrôles du client et absence de repli du § 1.2 ; courtier macOS si U1 = (b).
 
 ## Sources
 
 [1] https://crates.io/crates/keyring (4.2.0) et https://docs.rs/keyring/4.2.0/keyring/ — magasins disponibles.
 [2] https://crates.io/crates/keyring-core (1.0.1).
-[3] https://docs.rs/zbus-secret-service-keyring-store/1.0.1/ — attributs, collection par défaut, `target`, fonctions.
-[4] https://docs.rs/apple-native-keyring-store/1.0.2/ — modules `keychain` et `protected`.
+[3] https://docs.rs/zbus-secret-service-keyring-store/1.0.1/ et `src/service.rs` (`connect(EncryptionType::Dh)`,
+    `unlock_all`) — attributs, collection par défaut, `target`, fonctions.
+[4] https://docs.rs/apple-native-keyring-store/1.0.2/ et `src/keychain.rs` (recherche puis modification) ;
+    `security-framework` 3.7.0 `src/os/macos/passwords.rs`.
 [5] https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains
 [6] https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements
-[7] https://developer.apple.com/forums/thread/98484 — invite après mise à jour, CA non Apple, nouveau `cdhash`.
-[8] https://developer.apple.com/forums/thread/746931 ; rapports tiers sur la liste de partitions et la recréation
-    d'éléments : https://claudeissues.com/issue/53501-remote-daemon-claude-remote-server-ships-adhoc-codesigned-breaks-keychain-partit
-[9] https://docs.rs/age/0.12.1/age/scrypt/struct.Recipient.html et `struct.Identity.html` — calibration ≈ 1 s,
-    plafond par défaut ≈ 16 s, avertissement au-delà de 22.
+[7] `object_store` 0.14.2, `src/aws/builder.rs` (`InstanceCredentialProvider`, `with_http_connector`).
+[8] man7.org : `unix(7)`, `user_namespaces(7)`, `PR_SET_DUMPABLE(2const)`, `ptrace(2)`.
+[9] https://docs.rs/age/0.12.1/age/scrypt/ — calibration ≈ 1 s, `set_max_work_factor`, avertissement au-delà de 22.
 [10] https://github.com/C2SP/C2SP/blob/main/age.md — stanza scrypt, r = 8, p = 1, stanza unique, STREAM 64 Kio.
-Versions relevées sur l'API crates.io le 11/11/2026 : `age` 0.12.1, `zeroize` 1.9.1, `secrecy` 0.10.3.
+[11] https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/clientid.cpp — `partitionIdForProcess`
+     (relevé par `security-reviewer`, S.2).
+Versions relevées sur l'API crates.io le 11/11/2026 : `age` 0.12.1, `zeroize` 1.9.1, `secrecy` 0.10.3 (S.1) ;
+`zxcvbn` 3.1.1, `rustix` 1.1.6, `rustls-platform-verifier` 0.7.1, `roxmltree` 0.21.2, `regex` 1.13.1 (S.3).
