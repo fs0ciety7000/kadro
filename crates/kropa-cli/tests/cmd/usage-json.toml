@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--json", "frobnicate"]
+status.code = 2
+env.inherit = false

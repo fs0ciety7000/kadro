@@ -1,0 +1,3 @@
+bin.name = "kropa"
+args = ["--json", "version"]
+env.inherit = false

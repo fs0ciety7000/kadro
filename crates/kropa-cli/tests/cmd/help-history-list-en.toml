@@ -1,0 +1,3 @@
+bin.name = "kropa"
+args = ["--lang", "en", "history", "list", "--help"]
+env.inherit = false

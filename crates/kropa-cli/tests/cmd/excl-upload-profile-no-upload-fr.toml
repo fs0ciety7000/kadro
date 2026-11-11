@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--lang", "fr", "capture", "area", "--upload=s3", "--no-upload"]
+status.code = 2
+env.inherit = false

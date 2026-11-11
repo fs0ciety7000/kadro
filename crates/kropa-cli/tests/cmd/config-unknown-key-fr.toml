@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "fr", "--config", ".", "dest", "list"]
+status.code = 6
+env.inherit = false
+fs.cwd = "ctx/unknown-key"
+fs.sandbox = true

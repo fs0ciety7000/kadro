@@ -1,0 +1,3 @@
+bin.name = "kropa"
+args = ["-V"]
+env.inherit = false

@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "en", "edit", "shot.png", "--no-upload", "--upload=x"]
+status.code = 2
+env.inherit = false
+fs.cwd = "ctx/with-file"
+fs.sandbox = true

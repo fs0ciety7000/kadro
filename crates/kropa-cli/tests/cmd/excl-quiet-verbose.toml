@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--quiet", "--verbose", "version"]
+status.code = 2
+env.inherit = false

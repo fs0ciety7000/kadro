@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--help"]
+env.inherit = false
+env.add.LANG = "en_US.UTF-8"

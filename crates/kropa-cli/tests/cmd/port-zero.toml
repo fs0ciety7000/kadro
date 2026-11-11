@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--lang", "en", "dest", "add", "s", "--type", "sftp", "--port", "0"]
+status.code = 2
+env.inherit = false

@@ -1,0 +1,4 @@
+bin.name = "kropa"
+args = ["--lang", "en", "capture", "screen", "--upload", "zipline"]
+status.code = 2
+env.inherit = false

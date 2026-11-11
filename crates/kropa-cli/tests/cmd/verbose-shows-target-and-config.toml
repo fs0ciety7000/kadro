@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--config", ".", "-v", "capture", "screen", "--output", ".", "--name", "shot"]
+status.code = 5
+env.inherit = false
+fs.cwd = "ctx/empty"
+fs.sandbox = true

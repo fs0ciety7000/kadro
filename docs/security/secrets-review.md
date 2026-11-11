@@ -151,53 +151,40 @@ Invites Keychain réelles (15, 26, 27) ; `LockedHint` par bureau ; échec d'un s
 
 ## Contre-revue S.3 (11/11/2026)
 
-> `security-reviewer`. Relu dans le texte de `secrets.md` (§ 1 à 9), pas seulement dans le § 0.1. Versions S.3 confirmées
-> sur crates.io (`zxcvbn` 3.1.1, `rustix` 1.1.6, `rustls-platform-verifier` 0.7.1, `roxmltree` 0.21.2, `regex` 1.13.1),
-> aucune retirée, licences MIT ou Apache-2.0, compatibles.
+> `security-reviewer`, sur le texte de `secrets.md` (§ 1 à 9), pas seulement le § 0.1. Versions S.3 confirmées sur
+> crates.io (`zxcvbn` 3.1.1, `rustix` 1.1.6, `rustls-platform-verifier` 0.7.1, `roxmltree` 0.21.2, `regex` 1.13.1), MIT/Apache.
 
 | Constat | État | Justification (§ de `secrets.md`) |
 |---|---|---|
-| B1 | fermé | 4.4 : `{responseurl}` sans query, fragment ni `user:pass@` ; `{header:}` d'authentification refusé ; `CheckedOutput` seul accepté par lien, historique, presse-papiers, notification, stdout, JSON → code 11 ; tests § 7. |
-| B2 | fermé | 4.2 : référence = profil courant, `ref` supprimé ; 5 : `.toml` aux règles `.sxcu`, entrées neuves, `id` pris refusé ; 4.3 : `placements` dans la valeur protégée, vérifiés avant connexion. Réserve N2. |
-| I1 | fermé | 3.2 : < 12 caractères ou `zxcvbn` < 3 → `weak_passphrase` ; diceware 6 mots par `getrandom`. |
-| I2 | fermé | 3.4 : `store.lock` stable (trousseau compris), relecture sous verrou, jamais depuis un cache ; test 2 × 100. |
-| I3 | fermé | 1.2 : UID vérifié des deux côtés avant tout envoi, dossier `0700` par `lstat`, pas de `/tmp` (code 14), 64 Kio. |
-| I4 | fermé | 4.5 : `localhost` jamais, bouclage en build de test seulement, test sur build de release ; U3 (b) reprend mes conditions. |
-| I5 | fermé | 2.1 : `Locked` lu sans prompt, `spawn_blocking` et délais, `Ambiguous` expliqué ; éviter `unlock_all` reste à prouver en 1.8. |
-| I6 | fermé | 2.2 : un élément, protocole 1.6 sur les deux binaires, jamais `apple-tool:` ; courtier : voir N3. |
-| I7 | fermé | 6 : même détecteur, `-vv` = `kropa*` seul, `set_sensitive` ; test Basic en écho. Réserves N1, N4. |
-| I8 | fermé | 3.5 : « au mieux », copies listées, désérialisation empruntée, `mlock` retiré, swap chiffré conseillé. |
-| I9 | fermé | 3.6 : envoi sans TTY ne prolonge pas, plafond 8 h, `LockedHint`, inhibiteur `delay`, compteur de `Drop`. |
-| I10 | fermé | 4.3 et 5 : chemin interdit au chargement, import refusé avec message (U2). |
+| B1 | fermé | 4.4 : `{responseurl}` sans query, fragment ni `user:pass@` ; `{header:}` d'authentification refusé ; `CheckedOutput` seul accepté par lien, historique, presse-papiers, notification, stdout, JSON → code 11 ; tests § 7 |
+| B2 | fermé | 4.2 : référence = profil courant, plus de `ref` ; 5 : `.toml` aux règles `.sxcu`, entrées neuves, `id` pris refusé ; 4.3 : `placements` protégés, vérifiés avant connexion (réserve N2) |
+| I1, I2 | fermés | 3.2 : < 12 caractères ou `zxcvbn` < 3 refusés, diceware 6 mots ; 3.4 : `store.lock` stable, relecture sous verrou, jamais depuis un cache |
+| I3, I4 | fermés | 1.2 : UID vérifié des deux côtés avant envoi, dossier `0700`, pas de `/tmp` ; 4.5 : bouclage en build de test seulement (U3 b = mes conditions) |
+| I5, I6 | fermés | 2.1 : `Locked` sans prompt, délais, `Ambiguous` expliqué (éviter `unlock_all` : à prouver en 1.8) ; 2.2 : un élément, 1.6 sur deux binaires (courtier : N3) |
+| I7, I8 | fermés | 6 : même détecteur, `-vv` = `kropa*`, `set_sensitive` (réserves N1, N4) ; 3.5 : « au mieux », copies listées, `mlock` retiré |
+| I9, I10 | fermés | 3.6 : envoi sans TTY ne prolonge pas, 8 h, `LockedHint`, inhibiteur `delay`, compteur de `Drop` ; 4.3 et 5 : chemin interdit, import refusé (U2) |
 
 **Masquage de `error` plutôt que refus** : acceptable (aucun lien produit, code 9 déjà rendu, diagnostic utile), sous N1.
-**Faux négatifs du détecteur** : il en reste (N4) ; tolérable, car il vise l'écho d'un serveur honnête (serveur hostile hors
-périmètre, § 7) et les fermetures de B1 et B2 n'en dépendent pas (`{responseurl}`, `CheckedOutput`, emplacements).
+**Faux négatifs du détecteur** : il en reste (N4), tolérables : il vise l'écho d'un serveur honnête (serveur hostile hors
+périmètre, § 7), et B1 et B2 n'en dépendent pas (`{responseurl}`, `CheckedOutput`, emplacements).
 
-### Nouveaux constats
+**Nouveaux constats**
+- **N1. Moyenne. Masquage : ordre et étendue non dits** (4.4, 6 ; avant 1.7/1.9). Extrait coupé à 500 caractères avant
+  masquage : un jeton à cheval sur la coupe sort à moitié ; masquer la seule correspondance base64 laisse les caractères
+  de bord, porteurs de bits du secret. *Correctif* : détecter sur le corps entier puis couper, masquer toute la suite de
+  l'alphabet autour, type `MaskedText` seul accepté par stderr, journaux, historique, notification. *Test* : jeton en 495–530.
+- **N3. Moyenne. Courtier macOS** (2.2, avant U1). Premier canal qui **rend** des valeurs à un autre processus (1.2 n'en a
+  aucun) ; « parent vérifié » sans méthode, et un tube n'a pas d'audit token : qui lance `kropa __store-broker` et passe
+  ce contrôle obtient tout le document sans l'invite Keychain du chemin direct. *Correctif* : contrôle avant tout accès
+  (`getppid() != 1`, `SecCodeCopyGuestWithAttributes` sur ce PID, DR de `kropa-app`), réponse limitée au profil ; § 7 dit
+  ce que (b) retire à (a). *Test* : lancé depuis un shell → refus, zéro accès Keychain.
+- **N2. Faible. Orphelins** (4.2, 5). Après renommage ou retrait manuel d'un profil, si « `id` pris » ne lit que la config,
+  un TOML reprenant l'ancien `id` hérite de `<id>/token` (origine et emplacement bornés, mais chemin, méthode et gabarits
+  du tiers). *Correctif* : `id` pris = config **ou** magasin ; `doctor` liste les orphelins.
+- **N4. Faible. Détecteur** (4.4). Ni échappements JSON partiels (`+`), ni double percent, ni base64 à retours à la
+  ligne, ni hex ; secret de 1 à 2 octets sans partie base64 stable. *Correctif* : normaliser percent, HTML, JSON (deux
+  passes), ignorer les blancs en base64, ajouter l'hex ; secret < 4 octets refusé à la saisie.
+- **N5. Faible.** Expurgation (6) : « secret résolu » = tout secret chargé dans le processus, sinon un journal tardif y
+  échappe. **N6. Faible.** `secrets set` sur une entrée vide d'import (4.3, 9.1) : remontrer origine et emplacements.
 
-- **N1. Moyenne. Masquage : ordre et étendue non dits** (4.4, 6 ; avant 1.7 et 1.9). Extrait coupé à 500 caractères
-  *avant* masquage : un jeton à cheval sur la coupe sort à moitié ; masquer la seule correspondance base64 laisse 1 à 3
-  caractères de bord liés au secret. *Correctif* : détecter sur le corps entier, puis couper ; masquer toute la suite de
-  caractères de l'alphabet autour de la correspondance ; type `MaskedText` seul accepté par stderr, journaux, historique,
-  notification. *Test* : jeton aux caractères 495 à 530, brut et base64.
-- **N3. Moyenne. Courtier macOS** (2.2, U1 b ; avant de trancher U1). Premier canal qui **rend** des valeurs à un autre
-  processus (1.2 n'en a aucun) ; « parent vérifié, chemin et signature » sans méthode, et un tube n'a pas d'audit token.
-  Qui lance `kropa __store-broker` et passe ce contrôle obtient tout le document sans l'invite Keychain qu'il aurait eue
-  en direct. *Correctif* : contrôle avant tout accès au trousseau (`getppid() != 1`, `SecCodeCopyGuestWithAttributes` sur
-  ce PID, DR de `kropa-app`), réponse limitée au profil demandé ; dire en § 7 ce que (b) retire à (a). *Test* : lancé
-  depuis un shell → refus, zéro accès Keychain.
-- **N2. Faible. Entrées orphelines** (4.2, 5). Après renommage d'`id` ou profil retiré à la main, si « `id` pris » ne lit
-  que la config, un TOML importé reprenant l'ancien `id` hérite de `<id>/token` : origine et emplacement bornent l'envoi,
-  mais chemin, méthode et gabarits sont ceux du tiers. *Correctif* : `id` pris = config **ou** magasin ; `doctor` liste
-  les orphelins.
-- **N4. Faible. Détecteur** (4.4). Décodage unique limité au percent et au HTML (pas d'échappements JSON partiels comme
-  `+`, ni double percent), base64 coupé par des retours à la ligne, hexadécimal ; base64 d'un secret de 1 à 2 octets
-  sans partie stable. *Correctif* : normaliser percent, HTML et JSON (deux passes), ignorer les blancs d'une suite base64,
-  ajouter l'hex ; base64 cherché si partie stable ≥ 4 caractères, sinon refus du secret à la saisie.
-- **N5. Faible.** Expurgation (6) : « secret résolu » = tout secret chargé pendant la vie du processus (résident compris),
-  sinon un journal tardif (nouvel essai, autre tâche) échappe au masquage. **N6. Faible.** `secrets set` sur une entrée
-  vide créée par import (4.3, 9.1) : la traiter en « neuve », remontrer origine et emplacements choisis par le tiers.
-
-**Verdict : aucun bloquant ouvert.** B1, B2 et I1 à I10 sont fermés dans le texte. N1 et N3 à intégrer avant 1.7/1.9 et
-avant U1 ; reste la validation utilisateur (U1 à U4).
+**Verdict : aucun bloquant ouvert.** B1, B2, I1 à I10 fermés ; N1 et N3 avant 1.7/1.9 et U1 ; reste la validation U1–U4.

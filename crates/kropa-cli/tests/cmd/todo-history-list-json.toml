@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--json", "history", "list", "--search", "grafana", "--limit", "5", "--since", "2026-11-01"]
+status.code = 5
+env.inherit = false
+fs.cwd = "ctx/empty"
+fs.sandbox = true
