@@ -14,3 +14,7 @@
 - **2026-11-11** — Capture macOS via `objc2-screen-capture-kit` 0.3.2 (et crates `objc2-*`), pas la crate
   `screencapturekit` préférée par `architecture.md` : son `build.rs` compile un pont Swift, exclu sans décision
   validée. `unsafe` confiné à `kropa-capture/src/macos/`.
+- **2026-11-11** — Fournisseur crypto de rustls : **aws-lc-rs** (recommandation retenue sur « Continue » de
+  l'utilisateur, réversible) à la place de Graviola. Raison : mûr, audité, FIPS, repli selon le processeur (Graviola
+  exclut les CPU sans ADX/BMI2/AVX2 et le Raspberry Pi 4). Conséquence : la vérification de compilation macOS depuis
+  Linux peut ne plus passer (C compilé) ; la CI `macos-15` compile nativement.
