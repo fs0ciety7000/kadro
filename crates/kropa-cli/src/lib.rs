@@ -5,7 +5,8 @@
 //! Layout: [`args`] is the typed command line (clap derive), [`command`] gives it its Fluent texts,
 //! [`errors`] localises clap's usage errors, [`output`] separates stdout and stderr and builds the
 //! JSON envelope, [`target`] resolves file names, [`capture`] and [`doctor`] are the commands that
-//! use the capture backend, and [`exec`] runs the commands.
+//! use the capture backend, [`secret_args`] spots secrets given in arguments, and [`exec`] runs the
+//! commands.
 
 pub mod args;
 pub mod capture;
@@ -14,6 +15,7 @@ pub mod doctor;
 pub mod errors;
 pub mod exec;
 pub mod output;
+pub mod secret_args;
 pub mod target;
 
 use std::ffi::OsString;
@@ -21,14 +23,14 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use clap::error::ErrorKind;
-use clap::{ColorChoice, FromArgMatches};
+use clap::{ColorChoice, FromArgMatches, ValueEnum};
 use kropa_capture::CaptureBackend;
 use kropa_core::{Clock, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
 
 pub use output::Io;
 
-use args::Cli;
+use args::{Cli, ColorWhen};
 use errors::{CliError, localize_clap_error, plain_clap_message};
 use exec::{Context, ERROR_SCHEMA};
 use output::{Session, error_document};
@@ -69,12 +71,13 @@ fn prescan_json(args: &[OsString]) -> bool {
         .any(|a| a == "--json")
 }
 
+/// Colour choice before the real parsing (the help is rendered by clap with it). The accepted
+/// values are those of the `--color` enum, so that the list lives in one place; an invalid one is
+/// reported by the real parsing, and the help stays on `auto` meanwhile.
 fn prescan_color(args: &[OsString]) -> ColorChoice {
-    match prescan(args, "--color").as_deref() {
-        Some("always") => ColorChoice::Always,
-        Some("never") => ColorChoice::Never,
-        _ => ColorChoice::Auto,
-    }
+    prescan(args, "--color")
+        .and_then(|v| ColorWhen::from_str(&v, true).ok())
+        .map_or(ColorChoice::Auto, command::color_choice)
 }
 
 /// Runs the command line on the real standard streams: `args` includes the program name, `lookup`

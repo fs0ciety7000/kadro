@@ -15,6 +15,25 @@ thiserror.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd.workspace = true
 
+# ScreenCaptureKit through the generated Objective-C bindings (no Swift bridge). Only the features
+# the macOS backend uses are enabled; every `unsafe` call lives in `src/macos/`.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSScreen"] }
+objc2-core-foundation = { workspace = true, features = ["CFData", "CFString", "CFDictionary"] }
+objc2-core-graphics = { workspace = true, features = [
+    "objc2-core-foundation",
+    "CGBitmapContext", "CGColorSpace", "CGContext", "CGDirectDisplay", "CGDisplayConfiguration",
+    "CGGeometry", "CGImage", "CGSession", "CGWindow",
+] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSError", "NSString", "NSProcessInfo", "NSValue"] }
+objc2-image-io = { workspace = true, features = ["CGImageDestination", "objc2", "objc2-core-graphics"] }
+objc2-screen-capture-kit = { workspace = true, features = [
+    "SCStream", "SCShareableContent", "SCScreenshotManager", "block2",
+    "objc2-core-foundation", "objc2-core-graphics",
+] }
+
 [features]
 # Builders of small PNG files, for the tests of crates that fake a portal.
 test-support = []

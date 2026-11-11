@@ -24,13 +24,14 @@ use crate::capture::{self, Job};
 use crate::doctor;
 use crate::errors::CliError;
 use crate::output::Session;
+use crate::secret_args::{set_carries_secret, url_carries_secret, var_carries_secret};
 use crate::target::{Target, TargetSpec, resolve_target};
 
 /// Version of the JSON schema of the errors that no command schema covers (usage errors).
 pub const ERROR_SCHEMA: &str = "kropa.error/1";
 
 /// JSON schemas this binary speaks (`docs/cli.md` section 4).
-pub const SCHEMAS: [&str; 10] = [
+pub const SCHEMAS: [&str; 9] = [
     "kropa.capture/1",
     "kropa.upload/1",
     "kropa.dest.list/1",
@@ -40,7 +41,6 @@ pub const SCHEMAS: [&str; 10] = [
     "kropa.secrets.status/1",
     "kropa.version/1",
     "kropa.error/1",
-    "kropa.edit/1",
 ];
 
 const COMMIT: Option<&str> = option_env!("KROPA_BUILD_COMMIT");
@@ -107,10 +107,17 @@ fn path(cmd: &Command) -> Vec<&'static str> {
     }
 }
 
-/// JSON schema name of a command.
+/// JSON schema of a command's output, and of its error envelope: the documented schema of the
+/// command (`SCHEMAS`) when it has one, `kropa.error/1` for the others, so that a script never meets
+/// a schema name that is not listed by `kropa version --json`.
 #[must_use]
 pub fn schema_of(cmd: &Command) -> String {
-    format!("kropa.{}/1", path(cmd).join("."))
+    let own = format!("kropa.{}/1", path(cmd).join("."));
+    if SCHEMAS.contains(&own.as_str()) {
+        own
+    } else {
+        ERROR_SCHEMA.to_owned()
+    }
 }
 
 /// The lot that brings the capture backend of this platform, `None` when it is delivered.
@@ -284,43 +291,6 @@ fn print_version(ctx: &Context<'_>, session: &mut Session<'_, '_>) {
 // Secrets never go in arguments (docs/cli.md section 1, principle 5)
 // ---------------------------------------------------------------------------------------------
 
-const SENSITIVE_WORDS: [&str; 10] = [
-    "authorization",
-    "token",
-    "secret",
-    "password",
-    "passwd",
-    "apikey",
-    "api-key",
-    "api_key",
-    "bearer",
-    "credential",
-];
-
-fn is_sensitive_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    SENSITIVE_WORDS.iter().any(|w| key.contains(w))
-}
-
-fn looks_like_credential_value(value: &str) -> bool {
-    let value = value.trim_start().to_ascii_lowercase();
-    value.starts_with("bearer ") || value.starts_with("basic ")
-}
-
-/// A URL with `user:pass@` in it, or a query parameter named like a secret.
-fn url_carries_secret(url: &str) -> bool {
-    let rest = url.split_once("://").map_or(url, |(_, r)| r);
-    let (before_query, query) = match rest.split_once('?') {
-        Some((a, q)) => (a, q.split('#').next().unwrap_or_default()),
-        None => (rest.split('#').next().unwrap_or(rest), ""),
-    };
-    let authority = before_query.split('/').next().unwrap_or_default();
-    authority.contains('@')
-        || query
-            .split('&')
-            .any(|pair| is_sensitive_key(pair.split('=').next().unwrap_or_default()))
-}
-
 fn refuse_secrets_in_arguments(cmd: &Command, loc: &Localizer) -> Result<(), CliError> {
     let mut urls: Vec<(&str, &str)> = Vec::new();
     let mut vars: &[(String, String)] = &[];
@@ -358,13 +328,15 @@ fn refuse_secrets_in_arguments(cmd: &Command, loc: &Localizer) -> Result<(), Cli
         },
         _ => {}
     }
+    // Only the name of the option goes in the message, never the value.
     let refuse = |option: &str| {
         Err(CliError::new(
             ExitCode::SecurityRefused,
             loc,
             "error-secret-in-argument",
             &[("option", option)],
-        ))
+        )
+        .with_reason("secret_in_argument"))
     };
     for (name, url) in urls {
         if url_carries_secret(url) {
@@ -372,14 +344,14 @@ fn refuse_secrets_in_arguments(cmd: &Command, loc: &Localizer) -> Result<(), Cli
         }
     }
     for (key, value) in sets {
-        if is_sensitive_key(key) || looks_like_credential_value(value) {
+        if set_carries_secret(key, value) {
             return refuse("--set");
         }
     }
     // A variable may legitimately be named `password` (it is answered on purpose), but a value that
-    // is an `Authorization` header is never accepted.
+    // looks like a credential is never accepted.
     for (_, value) in vars {
-        if looks_like_credential_value(value) {
+        if var_carries_secret(value) {
             return refuse("--var");
         }
     }
@@ -532,35 +504,45 @@ fn check_interaction(cmd: &Command, interactive: bool, loc: &Localizer) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::{is_sensitive_key, looks_like_credential_value, url_carries_secret};
+    use super::{COMMIT, SCHEMAS};
+
+    /// The commit of a build is absent (no git checkout) or 12 hexadecimal digits, with `-dirty`
+    /// when the working tree had changes.
+    fn is_commit(text: &str) -> bool {
+        let hex = text.strip_suffix("-dirty").unwrap_or(text);
+        hex.len() == 12 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    }
 
     #[test]
-    fn urls_with_credentials_are_detected() {
-        for bad in [
-            "https://user:pw@host/x",
-            "https://user@host",
-            "https://host/p?token=abc",
-            "https://host/p?a=1&X-Api-Key=abc",
-            "host:1@x",
-        ] {
-            assert!(url_carries_secret(bad), "{bad}");
-        }
-        for good in [
-            "https://host/path@v2",
-            "https://host/p?a=1&b=2#frag@x",
-            "https://zipline.example.org",
-        ] {
-            assert!(!url_carries_secret(good), "{good}");
+    fn build_commit_is_absent_or_twelve_hexadecimal_digits() {
+        assert!(COMMIT.is_none_or(is_commit), "{COMMIT:?}");
+        assert!(is_commit("0123456789ab"));
+        assert!(is_commit("0123456789ab-dirty"));
+        for bad in ["", "0123456789a", "0123456789abc", "0123456789AB", "0123456789ag", "0123456789ab-dirt"] {
+            assert!(!is_commit(bad), "{bad}");
         }
     }
 
     #[test]
-    fn sensitive_keys_and_values() {
-        assert!(is_sensitive_key("headers.Authorization"));
-        assert!(is_sensitive_key("API_KEY"));
-        assert!(!is_sensitive_key("response.url"));
-        assert!(looks_like_credential_value("Bearer abc"));
-        assert!(looks_like_credential_value(" basic abc"));
-        assert!(!looks_like_credential_value("bearers"));
+    fn schemas_are_the_documented_ones() {
+        // docs/cli.md section 4: capture and upload, then one schema per listing command, and the
+        // errors of every command without a schema of its own.
+        assert_eq!(
+            SCHEMAS,
+            [
+                "kropa.capture/1",
+                "kropa.upload/1",
+                "kropa.dest.list/1",
+                "kropa.queue.list/1",
+                "kropa.history.list/1",
+                "kropa.doctor/1",
+                "kropa.secrets.status/1",
+                "kropa.version/1",
+                "kropa.error/1",
+            ]
+        );
+        for schema in SCHEMAS {
+            assert!(schema.starts_with("kropa.") && schema.ends_with("/1"), "{schema}");
+        }
     }
 }

@@ -11,11 +11,19 @@ repository = "https://github.com/fs0ciety7000/kropa"
 
 [workspace.dependencies]
 ashpd = { version = "0.14.0", default-features = false, features = ["async-io", "screenshot"] }
+block2 = { version = "0.6.2", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive", "string"] }
 directories = "6.0.0"
 fluent-bundle = "0.16.0"
 gethostname = "1.1.0"
 jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-image-io = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std"] }
 proptest = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
