@@ -743,13 +743,15 @@ mod tests {
     fn every_reason_and_note_has_a_message_in_both_languages() {
         for lang in Lang::ALL {
             let loc = Localizer::new(lang).unwrap();
+            // Messages may use `$detail` and `$app_id`: give them a value, as the real calls do.
+            let args = [("detail", "x"), ("app_id", "x")];
             for reason in ALL_ERROR_REASONS {
                 let id = error_id(reason);
-                assert_ne!(loc.message(&id), id, "{lang:?}: {id}");
+                assert_ne!(loc.message_args(&id, &args), id, "{lang:?}: {id}");
             }
             for note in ALL_NOTES {
                 let id = note_id(note);
-                assert_ne!(loc.message(&id), id, "{lang:?}: {id}");
+                assert_ne!(loc.message_args(&id, &args), id, "{lang:?}: {id}");
             }
         }
     }

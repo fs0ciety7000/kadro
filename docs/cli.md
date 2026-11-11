@@ -215,7 +215,7 @@ Code 0 même si des capacités manquent (c'est un rapport) ; code 1 seulement si
 
 ### 2.9 `version` (lot 1.3 ; `--check` au lot 5)
 
-`kropa version [--check] [--json]` : version, commit, cible, version du protocole IPC et des schémas JSON.
+`kropa version [--check] [--json]` : version, commit (12 chiffres hexadécimaux, suivis de `-dirty` si des fichiers suivis avaient des modifications non validées ; absent hors d'un dépôt git), cible, version du protocole IPC et des schémas JSON.
 `--check` interroge GitHub Releases **à la demande seulement** et dit si une version plus récente existe ; jamais de
 téléchargement. Échec réseau : code 8.
 
@@ -283,7 +283,9 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 `error.message` et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
 Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.queue.list/1`,
 `kropa.history.list/1`, `kropa.doctor/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
-`trycmd` du lot 1.3 et dans la référence CLI du lot 5.6.
+`trycmd` du lot 1.3. Les erreurs d'une commande sans schéma propre (`dest add`, `edit`, erreurs d'usage...) portent
+`kropa.error/1`. Aucune erreur, de clap ou de Kropa, ne reprend une valeur saisie (elle peut être un secret) : seul le
+nom de l'option est cité, ou « argument en trop » pour une valeur positionnelle et dans la référence CLI du lot 5.6.
 
 ## 5. Presse-papiers selon la plateforme
 

@@ -320,6 +320,18 @@ mod tests {
     }
 
     #[test]
+    fn version_text_is_exact_where_it_does_not_depend_on_the_machine() {
+        let r = run(&["kropa", "--lang", "en", "version"], false);
+        assert_eq!(r.code, ExitCode::Ok);
+        let lines: Vec<&str> = r.out.lines().collect();
+        assert_eq!(lines[0], format!("kropa {}", env!("CARGO_PKG_VERSION")));
+        assert!(lines[1].starts_with("commit: "), "{}", r.out);
+        assert!(lines[2].starts_with("target: "), "{}", r.out);
+        assert_eq!(lines[3], "IPC protocol: not available yet (lot 2.1)");
+        assert!(lines[4].ends_with("kropa.version/1, kropa.error/1"), "{}", r.out);
+    }
+
+    #[test]
     fn usage_error_in_json_mode() {
         let r = run(&["kropa", "--json", "--lang", "en", "nope"], false);
         assert_eq!(r.code, ExitCode::Usage);
