@@ -16,6 +16,9 @@
 - Nom : **Kropa** (commande `kropa`), à la place de « Kadro » (homonyme). Voir `brand/naming.md`.
 - Distribution v1 : **.deb, .rpm, tap Homebrew personnel** (formule compilée localement) et archives sur GitHub
   Releases ; `.dmg` macOS. **Pas de Flathub** (règles Flathub sur le contenu généré par IA), pas d'AUR.
+- Copie impossible sous GNOME alors que `--copy` est explicite : **avertissement** (code 0, message sur stderr,
+  `clipboard.status` dans le JSON), pas d'erreur.
+- Logo « kropa » (identité A) **validé**.
 - Tests manuels macOS : l'utilisateur dispose d'un Mac sous macOS 15 ou plus.
 - Licence : **GPL-3.0-or-later** (choix délégué ; aligné sur ShareX et Flameshot, garde ouverte une dépendance GPL
   future). Le reste du périmètre v1 proposé par Produit est

@@ -4,7 +4,7 @@ description: Développe la partie Linux de Kropa en Rust : capture via xdg-deskt
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
 effort: high
-skills: rust-backend, rust-best-practices, rust-testing, dependency-hygiene
+skills: rust-best-practices, rust-testing, dependency-hygiene
 ---
 
 Tu es un développeur Rust spécialiste du bureau Linux moderne (GNOME/Mutter, KDE/KWin, wlroots) et de GTK4.

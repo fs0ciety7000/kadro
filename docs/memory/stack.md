@@ -10,14 +10,14 @@
 - **Licence** : GPL-3.0-or-later.
 - **CI** : GitHub Actions, `ubuntu-24.04` + `macos-15` (dépôt public : minutes gratuites). Mises à jour : Renovate.
 - **Distribution** : `.deb`, `.rpm`, `.dmg` (certificat auto-signé), tap Homebrew personnel, archives. Ni Flathub ni AUR.
-- **Profils de skills** : `rust` (via `kit project add backend-rust`).
+- **Profils de skills** : `rust` (via `kit project add backend-rust`) ; son skill `rust-backend` a été **retiré** : il
+  décrit le backend de Windmill (`windmill_common`, sqlx), hors sujet et trompeur ici.
 - **Agents** : voir `CLAUDE.md`, rubrique « Équipe ».
 
 ## Équipement
 
 | Source | Nom | Pourquoi |
 |---|---|---|
-| kit (`backend-rust`) | skill `rust-backend` | conventions Rust du kit |
 | apollographql/skills | skill `rust-best-practices` (MIT) | idiomes, clippy, erreurs ; relu, aucune consigne risquée |
 | affaan-m/ecc | skill `rust-testing` | tests unitaires, intégration, propriétés, couverture ; relu |
 | écrit pour le projet | agents `linux-desktop-dev`, `macos-desktop-dev` | replis par bureau Linux ; objc2, TCC, signature macOS |

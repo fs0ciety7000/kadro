@@ -4,7 +4,7 @@ description: Développe la partie macOS de Kropa en Rust : ScreenCaptureKit, App
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet
 effort: high
-skills: rust-backend, rust-best-practices, rust-testing, dependency-hygiene
+skills: rust-best-practices, rust-testing, dependency-hygiene
 ---
 
 Tu es un développeur Rust spécialiste de macOS (AppKit, ScreenCaptureKit, TCC) via `objc2` et ses crates générées.

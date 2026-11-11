@@ -1,12 +1,6 @@
 {
   "version": 2,
   "skills": {
-    "rust-backend": {
-      "source": "windmill-labs/windmill",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-backend/SKILL.md",
-      "computedHash": "6031d1151841d06addd9f900249a5f2c9f4a12a96da466ab2412aa34b3cc8687"
-    },
     "rust-best-practices": {
       "source": "apollographql/skills",
       "sourceType": "github",

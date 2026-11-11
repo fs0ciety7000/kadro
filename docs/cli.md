@@ -202,7 +202,7 @@ téléchargement. Échec réseau : code 8.
 | 10 | `capture_failed` | Échec de capture hors permission (écran introuvable, pas de session graphique, `--last` sans zone). |
 | 11 | `security_refused` | Origine non autorisée pour un secret, HTTPS exigé, redirection vers une autre origine, secret en argument. |
 | 12 | `interaction_required` | Une réponse est nécessaire mais stdin n'est pas un TTY ou `--no-input` est actif. |
-| 13 | `clipboard_not_copied` | Résultat obtenu (stdout rempli) mais la copie **explicitement demandée** par `--copy` n'a pas eu lieu. |
+| 13 | — | Réservé (non utilisé : une copie impossible donne un avertissement et le code 0, voir § 5). |
 | 14 | `daemon_unavailable` | `kropa-app` injoignable ou version IPC incompatible (`hello`). |
 | 15 | `io` | Fichier introuvable ou illisible, écriture impossible, fichier existant sans `--force`. |
 | 130 | — | Interruption (SIGINT). |
@@ -258,8 +258,8 @@ Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `k
 
 Règles : le statut reflète l'effet réel, vérifié quand l'API le permet. Sur GNOME, stderr dit
 `Link not copied: GNOME does not allow clipboard access without focus. The link is printed above.` et le lien reste
-sur stdout. Si la copie n'a été demandée que par la config, le code reste 0 (un raccourci du bureau ne doit pas
-« échouer » pour cela) ; si `--copy` était explicite, le code est 13. Un clic ultérieur sur « Copier » ne change pas
+sur stdout. Que la copie ait été demandée par la config ou explicitement par `--copy`, le code reste **0** avec cet
+avertissement sur stderr et `clipboard.status` dans le JSON (décision de l'utilisateur du 11/11/2026). Un clic ultérieur sur « Copier » ne change pas
 le code déjà rendu.
 
 ## 6. Arbitrages faits (à valider)
@@ -286,8 +286,7 @@ le code déjà rendu.
 
 ## 7. Questions ouvertes
 
-1. **Code 13 vs 0** pour une copie explicitement demandée mais impossible sur GNOME : un script `set -e` avec
-   `--copy url` échouera sous GNOME. Garder 13, ou rendre 0 avec seulement un avertissement ?
+1. ~~Code 13 vs 0~~ — **tranché** : code 0 et avertissement (décision du 11/11/2026).
 2. **`--output`** est à la fois dossier ou fichier selon l'extension : faut-il plutôt deux options
    (`--output-dir`, `--file`) pour éviter les ambiguïtés de chemins sans extension ?
 3. **Isolation d'un écran sur GNOME** : le portail Screenshot ne rend que l'ensemble des écrans ; le découpage exige
