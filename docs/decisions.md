@@ -1,7 +1,18 @@
 # Kadro — synthèse des équipes (vague 1)
 
-État : **propositions, rien n'est validé.** Documents sources : `product.md`, `architecture.md`, `platform-linux.md`,
+État : **vague 1 relue ; décisions validées ci-dessous (11/11/2026).** Documents sources : `product.md`, `architecture.md`, `platform-linux.md`,
 `platform-macos.md`, `uploads.md`, `brand/brand.md` (+ `brand/preview.html`).
+
+## Décisions validées par l'utilisateur
+
+- macOS minimal : **15 Sequoia**.
+- Repli des secrets sans trousseau : **`age`** (fichier chiffré par phrase de passe).
+- Imgur : **retiré des destinations intégrées**, fourni comme modèle de destination personnalisée.
+- **Vidéo et GIF retirés du produit** (hors périmètre, pas seulement repoussés) : enregistrement, audio, affichage des
+  clics et touches, coupe avant export.
+- Identité visuelle : **A « Repère »**.
+- Nom : « Kadro » à remplacer (homonyme) ; recherche de nom en cours. Le reste du périmètre v1 proposé par Produit est
+  retenu par défaut.
 
 ## Propositions convergentes
 
