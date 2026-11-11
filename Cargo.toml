@@ -17,7 +17,7 @@ gethostname = "1.1.0"
 jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
 proptest = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.2.1"
