@@ -67,7 +67,7 @@ Dépend de : D1 pour le logo. En parallèle : lot 1. Bloque : 2.3, 2.4, 3.5, 3.6
 - [x] D2.1 Maquettes libadwaita et AppKit, clair/sombre, FR/EN : overlay (loupe, dimensions, clavier, multi-écran), éditeur (outils à une touche), notifications (« Lien copié », « Lien prêt, Copier », « Envoi échoué »), réglages (destinations, test, import `.sxcu`, raccourcis), coffre `age`, file d'attente, premier lancement et permissions, miniature (macOS, KDE) et variante notification (GNOME) ; puis `DESIGN.md`. Agent : `ui-designer`. Fin : fichiers dans `docs/design/`.
 - [x] D2.2 Icônes d'outils (grille 20 px, trait 1,75 px). Agent : `ui-designer`.
 - [x] D2.3 Critique et corrections. Agent : `design-critic`. Fin : aucun bloquant ; **[Utilisateur]** valide.
-- [ ] D2.4 Chaînes FR et EN en `.ftl`. Agent : `copywriter`.
+- [x] D2.4 Chaînes FR et EN en `.ftl`. Agent : `copywriter`.
 
 ## Lot 1 — v0.1 Cœur scriptable (capture → fichier → envoi → lien)
 Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.

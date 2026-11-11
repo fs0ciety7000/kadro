@@ -24,7 +24,7 @@ Details
   Host application registry, interface version: not checked: no session bus
   KWin on the session bus (its ScreenShot2 interface is not used): not checked: no session bus
   Application ID: io.github.fs0ciety7000.Kropa
-  Desktop file of the application ID installed (scripts/dev-install.sh): no
+  Desktop file installed for the application ID (scripts/dev-install.sh): no
   Wayland layer-shell: not checked yet
   Wayland data-control (clipboard): not found
 
