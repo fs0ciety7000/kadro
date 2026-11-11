@@ -1,1 +1,1 @@
-{"schema":"kropa.capture/1","status":"error","exit_code":5,"error":{"code":"unsupported","message":"Not available yet: this command arrives with lot [..].","step":null,"lots":["[..]"]}}
+{"schema":"kropa.capture/1","status":"error","exit_code":5,"error":{"code":"unsupported","reason":null,"message":"Not available yet: this command arrives with lot [..].","step":null,"lots":["[..]"]}}

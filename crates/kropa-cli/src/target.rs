@@ -72,6 +72,36 @@ pub fn resolve_target(
     host: Option<&str>,
     loc: &Localizer,
 ) -> Result<Target, CliError> {
+    resolve(spec, config, clock, host, loc, None)
+}
+
+/// Like [`resolve_target`], once the size of the image is known: `{w}` and `{h}` have a value, so
+/// the result is always a file.
+///
+/// # Errors
+/// The errors of [`resolve_target`]; a name that still lacks a value is a usage error.
+pub fn resolve_final(
+    spec: &TargetSpec<'_>,
+    config: &Config,
+    clock: &dyn Clock,
+    host: Option<&str>,
+    loc: &Localizer,
+    size: (u32, u32),
+) -> Result<PathBuf, CliError> {
+    match resolve(spec, config, clock, host, loc, Some(size))? {
+        Target::File(path) => Ok(path),
+        Target::Deferred(_) => Err(name_error(NameError::MissingVariable("output"), loc)),
+    }
+}
+
+fn resolve(
+    spec: &TargetSpec<'_>,
+    config: &Config,
+    clock: &dyn Clock,
+    host: Option<&str>,
+    loc: &Localizer,
+    size: Option<(u32, u32)>,
+) -> Result<Target, CliError> {
     let ext = config.image_format.extension();
     let dir = match spec.output {
         Some(path) if has_image_extension(path) => {
@@ -101,6 +131,8 @@ pub fn resolve_target(
         kind: Some(spec.mode.to_owned()),
         output: spec.connector.map(str::to_owned),
         host: host.map(str::to_owned),
+        width: size.map(|(w, _)| w),
+        height: size.map(|(_, h)| h),
         ..NameContext::default()
     };
     match template.render_unique(&dir, &ctx, clock, ext) {
@@ -230,6 +262,22 @@ mod tests {
         );
         let e = resolve(&spec(Some(dir.path()), Some("{output}"))).unwrap_err();
         assert_eq!(e.code, ExitCode::Usage);
+    }
+
+    #[test]
+    fn deferred_names_get_their_value_from_the_image_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = spec(Some(dir.path()), Some("shot-{w}x{h}"));
+        let got = super::resolve_final(
+            &spec,
+            &Config::default(),
+            &clock(),
+            Some("laptop"),
+            &loc(),
+            (1920, 1080),
+        )
+        .unwrap();
+        assert_eq!(got, dir.path().join("shot-1920x1080.png"));
     }
 
     #[test]

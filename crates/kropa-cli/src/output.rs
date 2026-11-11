@@ -122,6 +122,7 @@ mod tests {
             message: "boom".into(),
             step: None,
             lots: vec!["1.7"],
+            reason: None,
         }
     }
 

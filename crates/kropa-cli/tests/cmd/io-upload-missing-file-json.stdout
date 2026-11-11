@@ -1,1 +1,1 @@
-{"schema":"kropa.upload/1","status":"error","exit_code":15,"error":{"code":"io","message":"File not found, or not a regular file: nope.png","step":null}}
+{"schema":"kropa.upload/1","status":"error","exit_code":15,"error":{"code":"io","reason":null,"message":"File not found, or not a regular file: nope.png","step":null}}
