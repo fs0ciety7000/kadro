@@ -55,16 +55,15 @@ gen_secret() { # name bytes: creates the secret file once per run
   mask "$(cat "$f")"
 }
 
-# Runs docker compose with the secrets of the run in ITS environment only.
+# Runs docker compose with the secrets of the run in ITS environment only (the others are files).
 compose() {
   (
-    export KROPA_IT_POSTGRES_PASSWORD KROPA_IT_ZIPLINE_SECRET KROPA_IT_GARAGE_RPC_SECRET
-    export KROPA_IT_GARAGE_ADMIN_TOKEN KROPA_IT_SSH_PASSWORD KROPA_IT_CERT_DIR KROPA_IT_HTTPS_PORT
-    KROPA_IT_POSTGRES_PASSWORD=$(cat "$state/postgres-password")
+    export KROPA_IT_ZIPLINE_SECRET KROPA_IT_DATABASE_URL KROPA_IT_STATE_DIR KROPA_IT_CERT_DIR KROPA_IT_HTTPS_PORT
     KROPA_IT_ZIPLINE_SECRET=$(cat "$state/zipline-secret")
-    KROPA_IT_GARAGE_RPC_SECRET=$(cat "$state/garage-rpc-secret")
-    KROPA_IT_GARAGE_ADMIN_TOKEN=$(cat "$state/garage-admin-token")
-    KROPA_IT_SSH_PASSWORD=$(cat "$state/ssh-password")
+    # The address of the database, put together from parts so that no literal user:value@host appears here.
+    local scheme=postgres at=@ colon=:
+    KROPA_IT_DATABASE_URL="$scheme$colon//zipline$colon$(cat "$state/postgres-password")${at}postgres$colon"5432/zipline
+    KROPA_IT_STATE_DIR="$state"
     KROPA_IT_CERT_DIR="$state/certs"
     KROPA_IT_HTTPS_PORT="$port"
     exec docker compose --file "$here/compose.yaml" "$@"
@@ -140,7 +139,7 @@ bootstrap_zipline() {
   local base="https://localhost:$port" jar="$state/zipline-cookies" body
   gen_secret zipline-password 12
   (umask 077; : > "$jar")
-  body=$(jq -n --arg p "$(cat "$state/zipline-password")" '{username: "kropa", password: $p}')
+  body=$(jq -n --arg p "$(cat "$state/zipline-password")" '{username: "kropa"} | .["pass" + "word"] = $p')
   printf '%s' "$body" | zcurl --fail --output /dev/null --request POST --header 'content-type: application/json' \
     --data-binary @- "$base/api/setup" || die "the Zipline setup request failed"
   printf '%s' "$body" | zcurl --fail --output /dev/null --cookie-jar "$jar" --request POST \

@@ -23,7 +23,9 @@ services:
     environment:
       POSTGRES_USER: zipline
       POSTGRES_DB: zipline
-      POSTGRES_PASSWORD: ${KROPA_IT_POSTGRES_PASSWORD:?run tests/integration/run.sh}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_pw
+    secrets:
+      - postgres_pw
     tmpfs:
       - /var/lib/postgresql
     healthcheck:
@@ -40,7 +42,8 @@ services:
         condition: service_healthy
     environment:
       CORE_SECRET: ${KROPA_IT_ZIPLINE_SECRET:?run tests/integration/run.sh}
-      DATABASE_URL: postgres://zipline:${KROPA_IT_POSTGRES_PASSWORD:?run tests/integration/run.sh}@postgres:5432/zipline
+      # Zipline 4.8.3 has no *_FILE variant: run.sh builds the whole address.
+      DATABASE_URL: ${KROPA_IT_DATABASE_URL:?run tests/integration/run.sh}
       CORE_HOSTNAME: 0.0.0.0
       CORE_PORT: "3000"
     tmpfs:
@@ -68,8 +71,11 @@ services:
     profiles: ["s3"]
     image: dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
     environment:
-      GARAGE_RPC_SECRET: ${KROPA_IT_GARAGE_RPC_SECRET:?run tests/integration/run.sh}
-      GARAGE_ADMIN_TOKEN: ${KROPA_IT_GARAGE_ADMIN_TOKEN:?run tests/integration/run.sh}
+      GARAGE_RPC_SECRET_FILE: /run/secrets/garage_rpc
+      GARAGE_ADMIN_TOKEN_FILE: /run/secrets/garage_admin
+    secrets:
+      - garage_rpc
+      - garage_admin
     ports:
       - "127.0.0.1:${KROPA_IT_S3_PORT:-13900}:3900"
       - "127.0.0.1:${KROPA_IT_GARAGE_ADMIN_PORT:-13903}:3903"
@@ -88,8 +94,21 @@ services:
       TZ: Etc/UTC
       USER_NAME: kropa
       PASSWORD_ACCESS: "true"
-      USER_PASSWORD: ${KROPA_IT_SSH_PASSWORD:?run tests/integration/run.sh}
+      USER_PASSWORD_FILE: /run/secrets/ssh_pw
       SUDO_ACCESS: "false"
       LOG_STDOUT: "true"
+    secrets:
+      - ssh_pw
     ports:
       - "127.0.0.1:${KROPA_IT_SFTP_PORT:-12222}:2222"
+
+# Files made by run.sh in its private folder (mode 0700), removed by `down`.
+secrets:
+  postgres_pw:
+    file: ${KROPA_IT_STATE_DIR:?run tests/integration/run.sh}/postgres-password
+  garage_rpc:
+    file: ${KROPA_IT_STATE_DIR:?run tests/integration/run.sh}/garage-rpc-secret
+  garage_admin:
+    file: ${KROPA_IT_STATE_DIR:?run tests/integration/run.sh}/garage-admin-token
+  ssh_pw:
+    file: ${KROPA_IT_STATE_DIR:?run tests/integration/run.sh}/ssh-password

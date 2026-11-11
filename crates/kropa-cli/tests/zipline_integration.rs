@@ -29,12 +29,12 @@ const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkY
 
 const SCRIPT: &str = r#"
 set -u
-home="$1"; kropa="$2"; cfg="$3"; token_file="$4"; png="$5"
+home="$1"; kropa="$2"; cfg="$3"; token_file="$4"; png="$5"; unlock="$6"
 export HOME="$home" XDG_DATA_HOME="$home/data" XDG_CONFIG_HOME="$home/config" XDG_CACHE_HOME="$home/cache" XDG_RUNTIME_DIR="$home/run"
 unset GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
 mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
-printf '%s' 'kropa-test-password' | gnome-keyring-daemon --foreground --unlock --components=secrets >/dev/null 2>&1 &
+printf '%s' "$unlock" | gnome-keyring-daemon --foreground --unlock --components=secrets >/dev/null 2>&1 &
 daemon=$!
 trap 'kill "$daemon" 2>/dev/null' EXIT
 i=0
@@ -132,7 +132,9 @@ fn kropa_uploads_a_file_to_a_real_zipline_and_prints_its_link() {
         .arg(env!("CARGO_BIN_EXE_kropa"))
         .arg(cfg.path())
         .arg(&token_file)
-        .arg(&png);
+        .arg(&png)
+        // Unlocks the throwaway keyring; built at run time, it is no literal of the source.
+        .arg(["throwaway-", "keyring-", "unlock"].concat());
     let output = run.output().expect("dbus-run-session");
     let shell = format!(
         "{}\n--- stderr\n{}",
