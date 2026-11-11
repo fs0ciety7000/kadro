@@ -8,6 +8,9 @@ mod error;
 mod exit;
 mod template;
 
+/// Application identifier (reverse-DNS), shared by the `.desktop` file, the XDG portals and the macOS bundle.
+pub const APP_ID: &str = "io.github.fs0ciety7000.Kropa";
+
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use config::{
     CONFIG_FILE, Config, DEFAULT_NAME_TEMPLATE, ImageFormat, config_dir, default_output_dir,
