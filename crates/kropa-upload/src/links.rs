@@ -58,7 +58,8 @@ fn escape_markdown_text(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
-            '\\' | '`' | '*' | '_' | '[' | ']' | '(' | ')' | '<' | '>' | '!' | '#' | '|' | '~' | '&' => {
+            '\\' | '`' | '*' | '_' | '[' | ']' | '(' | ')' | '<' | '>' | '!' | '#' | '|' | '~'
+            | '&' => {
                 out.push('\\');
                 out.push(c);
             }
@@ -121,19 +122,28 @@ mod tests {
     fn link(format: LinkFormat, url: &str, name: &str) -> String {
         let secrets = SecretSet::new();
         let url = CheckedOutput::check(url, &secrets).unwrap();
-        format_link(format, &url, name, &secrets).unwrap().as_str().to_owned()
+        format_link(format, &url, name, &secrets)
+            .unwrap()
+            .as_str()
+            .to_owned()
     }
 
     #[test]
     fn the_three_formats() {
         let u = "https://z.example.org/u/a.png";
         assert_eq!(link(LinkFormat::Url, u, "a.png"), u);
-        assert_eq!(link(LinkFormat::Markdown, u, "a.png"), "![a.png](https://z.example.org/u/a.png)");
+        assert_eq!(
+            link(LinkFormat::Markdown, u, "a.png"),
+            "![a.png](https://z.example.org/u/a.png)"
+        );
         assert_eq!(
             link(LinkFormat::Html, u, "a.png"),
             "<img src=\"https://z.example.org/u/a.png\" alt=\"a.png\">"
         );
-        assert_eq!(link(LinkFormat::Markdown, u, "notes.txt"), "[notes.txt](https://z.example.org/u/a.png)");
+        assert_eq!(
+            link(LinkFormat::Markdown, u, "notes.txt"),
+            "[notes.txt](https://z.example.org/u/a.png)"
+        );
         assert_eq!(
             link(LinkFormat::Html, u, "notes.txt"),
             "<a href=\"https://z.example.org/u/a.png\">notes.txt</a>"
@@ -143,11 +153,22 @@ mod tests {
     #[test]
     fn names_and_urls_are_escaped() {
         let hostile = "a](https://evil.example)\"><script>x</script>.png";
-        let md = link(LinkFormat::Markdown, "https://z.example.org/a b(1).png", hostile);
+        let md = link(
+            LinkFormat::Markdown,
+            "https://z.example.org/a b(1).png",
+            hostile,
+        );
         assert!(md.starts_with("![a\\]\\(https://evil.example\\)"), "{md}");
-        assert!(md.ends_with("](https://z.example.org/a%20b%281%29.png)"), "{md}");
+        assert!(
+            md.ends_with("](https://z.example.org/a%20b%281%29.png)"),
+            "{md}"
+        );
         assert!(!md.replace("\\<", "").contains('<'), "{md}");
-        let html = link(LinkFormat::Html, "https://z.example.org/x?a=1&b='2'", hostile);
+        let html = link(
+            LinkFormat::Html,
+            "https://z.example.org/x?a=1&b='2'",
+            hostile,
+        );
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&amp;"), "{html}");
         assert!(html.contains("&quot;&gt;&lt;script&gt;"), "{html}");
@@ -158,6 +179,14 @@ mod tests {
     fn a_secret_in_the_name_is_refused() {
         let secrets = SecretSet::from_values(&["name-with-secret-1"]);
         let url = CheckedOutput::check("https://z.example.org/a", &secrets).unwrap();
-        assert!(format_link(LinkFormat::Markdown, &url, "name-with-secret-1.png", &secrets).is_err());
+        assert!(
+            format_link(
+                LinkFormat::Markdown,
+                &url,
+                "name-with-secret-1.png",
+                &secrets
+            )
+            .is_err()
+        );
     }
 }

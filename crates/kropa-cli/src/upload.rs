@@ -210,7 +210,12 @@ pub fn report(
         Err(e) => (None, Some(e)),
         Ok(outcome) => {
             let format = requested.format().unwrap_or(LinkFormat::Url);
-            match format_link(format, &outcome.url, &delivery.file_name, &SecretSet::loaded()) {
+            match format_link(
+                format,
+                &outcome.url,
+                &delivery.file_name,
+                &SecretSet::loaded(),
+            ) {
                 Ok(text) => {
                     link = Some(text);
                     (Some(outcome), None)
@@ -319,9 +324,8 @@ pub fn run(
     session: &mut Session<'_, '_>,
 ) -> Result<ExitCode, CliError> {
     let loc = ctx.loc;
-    let profile = profile_of(args.to.as_deref(), config).ok_or_else(|| {
-        CliError::new(ExitCode::Config, loc, "error-no-default-destination", &[])
-    })?;
+    let profile = profile_of(args.to.as_deref(), config)
+        .ok_or_else(|| CliError::new(ExitCode::Config, loc, "error-no-default-destination", &[]))?;
     let delivery = deliver(ctx, config_dir, &profile, &args.file, &args.vars);
     let copy = args.copy.map(CopyChoice::from);
     let report = report(&delivery, copy, loc, session);
@@ -378,13 +382,8 @@ fn file_member(path: &Path) -> Value {
 ///
 /// # Errors
 /// [`CliError`] for an unreadable file or an unknown profile.
-pub fn load_one(
-    config_dir: &Path,
-    id: &str,
-    loc: &Localizer,
-) -> Result<Destination, CliError> {
-    let destinations =
-        load_destinations(config_dir).map_err(|e| cli_error(&e, loc))?;
+pub fn load_one(config_dir: &Path, id: &str, loc: &Localizer) -> Result<Destination, CliError> {
+    let destinations = load_destinations(config_dir).map_err(|e| cli_error(&e, loc))?;
     find(&destinations, id)
         .cloned()
         .map_err(|e| cli_error(&e, loc))

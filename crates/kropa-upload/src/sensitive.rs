@@ -151,9 +151,22 @@ mod tests {
 
     #[test]
     fn tokens_in_paths() {
-        assert!(looks_like_token_segment(&format!("{}{}", "a8F3kQ9z", "TESTONLY0pX2vB7nC4m")));
-        assert!(looks_like_token_segment(&format!("{}{}{}", "pk_", "test_", "FAKE51H8xQz2eZvKYlo2C")));
-        for segment in ["upload", "v1", "api", "file-2026-11-11.png", "aaaaaaaaaaaaaaaaaaaaaaaa", "uploadimagefromsharex"] {
+        assert!(looks_like_token_segment(&format!(
+            "{}{}",
+            "a8F3kQ9z", "TESTONLY0pX2vB7nC4m"
+        )));
+        assert!(looks_like_token_segment(&format!(
+            "{}{}{}",
+            "pk_", "test_", "FAKE51H8xQz2eZvKYlo2C"
+        )));
+        for segment in [
+            "upload",
+            "v1",
+            "api",
+            "file-2026-11-11.png",
+            "aaaaaaaaaaaaaaaaaaaaaaaa",
+            "uploadimagefromsharex",
+        ] {
             assert!(!looks_like_token_segment(segment), "{segment}");
         }
     }

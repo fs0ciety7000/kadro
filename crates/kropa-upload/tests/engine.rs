@@ -111,7 +111,8 @@ async fn zipline_error_message_comes_from_the_error_field() {
     let server = MockServer::start().await;
     Mock::given(any())
         .respond_with(
-            ResponseTemplate::new(401).set_body_json(serde_json::json!({"error": "invalid token", "code": 401})),
+            ResponseTemplate::new(401)
+                .set_body_json(serde_json::json!({"error": "invalid token", "code": 401})),
         )
         .mount(&server)
         .await;
@@ -136,7 +137,10 @@ async fn zipline_error_message_comes_from_the_error_field() {
 #[tokio::test]
 async fn a_secret_for_another_origin_is_refused_before_any_request() {
     let server = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&server).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://x/y"))
+        .mount(&server)
+        .await;
     let store = MemorySecretSource::new();
     store
         .insert(
@@ -161,7 +165,10 @@ async fn a_secret_for_another_origin_is_refused_before_any_request() {
 #[tokio::test]
 async fn a_secret_moved_to_another_place_is_refused_before_any_request() {
     let server = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&server).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://x/y"))
+        .mount(&server)
+        .await;
     // The entry only allows `form:title`; the profile puts it in `Authorization`.
     let store = store_for(&server, "maison", vec![Placement::Form("title".into())]);
     let dest = http_destination(&server, HTTP_TOML);
@@ -193,7 +200,10 @@ async fn a_secret_moved_to_another_place_is_refused_before_any_request() {
 #[tokio::test]
 async fn a_changed_body_template_changes_the_placement() {
     let server = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&server).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://x/y"))
+        .mount(&server)
+        .await;
     let toml = r#"
 [[destination]]
 id = "maison"
@@ -211,7 +221,11 @@ url = "{json:$.data.url}"
     let store = store_for(&server, "maison", vec![Placement::body(original)]);
     let dest = http_destination(&server, toml);
     // Same template: allowed.
-    Uploader::new(&store).unwrap().upload(&dest, &input(), &[]).await.unwrap();
+    Uploader::new(&store)
+        .unwrap()
+        .upload(&dest, &input(), &[])
+        .await
+        .unwrap();
     // Edited template: the authorization does not follow.
     let edited = http_destination(&server, &toml.replace(r#"{"key": "#, r#"{"other": "#));
     let err = Uploader::new(&store)
@@ -225,7 +239,10 @@ url = "{json:$.data.url}"
 #[tokio::test]
 async fn a_missing_secret_is_code_7_and_sends_nothing() {
     let server = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&server).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://x/y"))
+        .mount(&server)
+        .await;
     let store = MemorySecretSource::new();
     let dest = http_destination(&server, HTTP_TOML);
     let err = Uploader::new(&store)
@@ -240,7 +257,10 @@ async fn a_missing_secret_is_code_7_and_sends_nothing() {
 
 #[tokio::test]
 async fn https_is_required_for_a_secret_off_the_loopback() {
-    assert!(LOOPBACK_HTTP_WITH_SECRET, "these tests run with the test-loopback feature");
+    assert!(
+        LOOPBACK_HTTP_WITH_SECRET,
+        "these tests run with the test-loopback feature"
+    );
     let store = MemorySecretSource::new();
     store
         .insert(
@@ -297,9 +317,15 @@ url = "{json:$.data.url}"
 async fn a_redirect_to_another_origin_is_refused_and_never_followed() {
     let first = MockServer::start().await;
     let second = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&second).await;
     Mock::given(any())
-        .respond_with(ResponseTemplate::new(302).insert_header("location", format!("{}/steal", second.uri()).as_str()))
+        .respond_with(ok_json("http://x/y"))
+        .mount(&second)
+        .await;
+    Mock::given(any())
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", format!("{}/steal", second.uri()).as_str()),
+        )
         .mount(&first)
         .await;
     let store = store_for(&first, "maison", vec![Placement::header("Authorization")]);
@@ -321,7 +347,10 @@ async fn a_redirect_to_another_port_is_another_origin() {
     let first = MockServer::start().await;
     let second = MockServer::start().await;
     Mock::given(any())
-        .respond_with(ResponseTemplate::new(307).insert_header("location", format!("{}/x", second.uri()).as_str()))
+        .respond_with(
+            ResponseTemplate::new(307)
+                .insert_header("location", format!("{}/x", second.uri()).as_str()),
+        )
         .mount(&first)
         .await;
     let toml = r#"
@@ -507,9 +536,11 @@ async fn client_and_server_errors_are_code_9_with_a_retry_class() {
     ] {
         server.reset().await;
         Mock::given(any())
-            .respond_with(ResponseTemplate::new(status).set_body_json(serde_json::json!({
-                "error": { "message": format!("failed with {status}") }
-            })))
+            .respond_with(
+                ResponseTemplate::new(status).set_body_json(serde_json::json!({
+                    "error": { "message": format!("failed with {status}") }
+                })),
+            )
             .mount(&server)
             .await;
         let err = Uploader::new(&store)
@@ -573,7 +604,10 @@ async fn hostile_urls_are_refused() {
         "not a url",
     ] {
         server.reset().await;
-        Mock::given(any()).respond_with(ok_json(url)).mount(&server).await;
+        Mock::given(any())
+            .respond_with(ok_json(url))
+            .mount(&server)
+            .await;
         let err = Uploader::new(&store)
             .unwrap()
             .upload(&dest, &input(), &[])
@@ -587,7 +621,10 @@ async fn hostile_urls_are_refused() {
 async fn the_response_url_has_no_query_fragment_or_userinfo() {
     let server = MockServer::start().await;
     Mock::given(path("/up"))
-        .respond_with(ResponseTemplate::new(302).insert_header("location", "/u/final.png?token=SERVERSIDE#frag"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", "/u/final.png?token=SERVERSIDE#frag"),
+        )
         .mount(&server)
         .await;
     Mock::given(path("/u/final.png"))
@@ -610,14 +647,20 @@ url = "{responseurl}"
         .upload(&dest, &input(), &[])
         .await
         .unwrap();
-    assert_eq!(outcome.url.as_str(), format!("{}/u/final.png", server.uri()));
+    assert_eq!(
+        outcome.url.as_str(),
+        format!("{}/u/final.png", server.uri())
+    );
 }
 
 #[tokio::test]
 async fn regex_templates_read_the_body() {
     let server = MockServer::start().await;
     Mock::given(any())
-        .respond_with(ResponseTemplate::new(200).set_body_string("saved as https://f.example.org/i/42.png ok"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string("saved as https://f.example.org/i/42.png ok"),
+        )
         .mount(&server)
         .await;
     let toml = r#"
@@ -647,7 +690,10 @@ async fn a_secret_echoed_in_the_link_is_refused_in_every_form() {
     use base64::Engine as _;
     let server = MockServer::start().await;
     let store = store_for(&server, "maison", vec![Placement::header("Authorization")]);
-    let toml = HTTP_TOML.replace("{json:$.data.url}", "https://files.example.org/{json:$.echo}");
+    let toml = HTTP_TOML.replace(
+        "{json:$.data.url}",
+        "https://files.example.org/{json:$.echo}",
+    );
     let dest = http_destination(&server, &toml);
     let standard = base64::engine::general_purpose::STANDARD;
     let forms = [
@@ -662,7 +708,9 @@ async fn a_secret_echoed_in_the_link_is_refused_in_every_form() {
     for form in forms {
         server.reset().await;
         Mock::given(any())
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"echo": form})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"echo": form})),
+            )
             .mount(&server)
             .await;
         let err = Uploader::new(&store)
@@ -732,7 +780,10 @@ async fn a_secret_echoed_in_an_error_is_masked_not_refused() {
     use base64::Engine as _;
     let server = MockServer::start().await;
     let store = store_for(&server, "maison", vec![Placement::header("Authorization")]);
-    let dest = http_destination(&server, &HTTP_TOML.replace("error        = \"{json:$.error.message}\"", ""));
+    let dest = http_destination(
+        &server,
+        &HTTP_TOML.replace("error        = \"{json:$.error.message}\"", ""),
+    );
     let basic = base64::engine::general_purpose::STANDARD.encode(format!("user:{TOKEN}"));
     for body in [
         format!("bad credentials: {TOKEN}"),
@@ -776,10 +827,17 @@ async fn a_secret_loaded_earlier_in_the_run_is_masked_in_a_later_error() {
             vec![Placement::header("Authorization")],
         )
         .unwrap();
-    Mock::given(any()).respond_with(ok_json("http://f.example.org/a.png")).mount(&first).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://f.example.org/a.png"))
+        .mount(&first)
+        .await;
     Uploader::new(&store)
         .unwrap()
-        .upload(&http_destination(&first, &HTTP_TOML.replace("maison", "a")), &input(), &[])
+        .upload(
+            &http_destination(&first, &HTTP_TOML.replace("maison", "a")),
+            &input(),
+            &[],
+        )
         .await
         .unwrap();
     Mock::given(any())
@@ -840,7 +898,11 @@ url = "{json:$.data.url}"
     assert_eq!(err.exit_code().code(), 2);
     let wrong = [("album".to_owned(), "nope".to_owned())];
     assert_eq!(
-        uploader.upload(&dest, &input(), &wrong).await.unwrap_err().reason(),
+        uploader
+            .upload(&dest, &input(), &wrong)
+            .await
+            .unwrap_err()
+            .reason(),
         "invalid_variable"
     );
 
@@ -856,7 +918,10 @@ url = "{json:$.data.url}"
 #[tokio::test]
 async fn a_file_over_max_size_is_refused_locally() {
     let server = MockServer::start().await;
-    Mock::given(any()).respond_with(ok_json("http://x/y")).mount(&server).await;
+    Mock::given(any())
+        .respond_with(ok_json("http://x/y"))
+        .mount(&server)
+        .await;
     let toml = r#"
 [[destination]]
 id = "small"
@@ -924,7 +989,10 @@ query = {{ x = "1" }}
 url = "{{json:$.data.url}}"
 "#
     );
-    let dest = DestinationFile::parse(&toml, "t.toml").unwrap().destination.remove(0);
+    let dest = DestinationFile::parse(&toml, "t.toml")
+        .unwrap()
+        .destination
+        .remove(0);
     let err = Uploader::new(&MemorySecretSource::new())
         .unwrap()
         .upload(&dest, &input(), &[])

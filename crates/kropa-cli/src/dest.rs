@@ -133,7 +133,12 @@ pub fn show(
             "deletion_url": response.deletion_url, "error": response.error,
             "success_status": response.success_status,
         });
-        doc["secrets"] = json!(secrets.iter().map(|(n, s)| json!({"name": n, "state": s})).collect::<Vec<_>>());
+        doc["secrets"] = json!(
+            secrets
+                .iter()
+                .map(|(n, s)| json!({"name": n, "state": s}))
+                .collect::<Vec<_>>()
+        );
         doc["vars"] = json!(destination.vars.keys().collect::<Vec<_>>());
         session.document(&json!({
             "schema": "kropa.dest.show/1", "status": "ok", "exit_code": 0, "destination": doc,
@@ -143,33 +148,73 @@ pub fn show(
     let say = |session: &mut Session<'_, '_>, id: &str, args: &[(&str, &str)]| {
         session.result(&loc.message_args(id, args));
     };
-    say(session, "out-show-title", &[("id", id), ("type", destination.kind.as_str())]);
+    say(
+        session,
+        "out-show-title",
+        &[("id", id), ("type", destination.kind.as_str())],
+    );
     if let Some(label) = &destination.label {
         say(session, "out-show-label", &[("label", label)]);
     }
-    say(session, "out-show-address", &[("address", destination.address().unwrap_or_default())]);
-    say(session, "out-show-origin", &[("origin", &destination.origin().unwrap_or_default())]);
-    say(session, "out-show-kinds", &[("kinds", &media_names(&destination).join(", "))]);
+    say(
+        session,
+        "out-show-address",
+        &[("address", destination.address().unwrap_or_default())],
+    );
+    say(
+        session,
+        "out-show-origin",
+        &[("origin", &destination.origin().unwrap_or_default())],
+    );
+    say(
+        session,
+        "out-show-kinds",
+        &[("kinds", &media_names(&destination).join(", "))],
+    );
     if default == Some(id) {
         say(session, "out-show-default", &[]);
     }
-    say(session, "out-show-request", &[("method", &request.method), ("url", &request.url)]);
+    say(
+        session,
+        "out-show-request",
+        &[("method", &request.method), ("url", &request.url)],
+    );
     for (name, value) in &request.headers {
-        say(session, "out-show-header", &[("name", name), ("value", value)]);
+        say(
+            session,
+            "out-show-header",
+            &[("name", name), ("value", value)],
+        );
     }
     for (name, value) in &request.query {
-        say(session, "out-show-query", &[("name", name), ("value", value)]);
+        say(
+            session,
+            "out-show-query",
+            &[("name", name), ("value", value)],
+        );
     }
     for (name, value) in &request.fields {
-        say(session, "out-show-field", &[("name", name), ("value", value)]);
+        say(
+            session,
+            "out-show-field",
+            &[("name", name), ("value", value)],
+        );
     }
     for name in destination.vars.keys() {
         say(session, "out-show-var", &[("name", name)]);
     }
     for (name, state) in &secrets {
         let text = loc.message(&format!("out-secret-{state}"));
-        let text = if text.starts_with("out-secret-") { (*state).to_owned() } else { text };
-        say(session, "out-show-secret", &[("name", name), ("state", &text)]);
+        let text = if text.starts_with("out-secret-") {
+            (*state).to_owned()
+        } else {
+            text
+        };
+        say(
+            session,
+            "out-show-secret",
+            &[("name", name), ("state", &text)],
+        );
     }
     Ok(ExitCode::Ok)
 }
@@ -195,7 +240,10 @@ pub fn test(
     if !yes {
         let prompt = loc.message_args(
             "prompt-dest-test",
-            &[("id", id), ("origin", &destination.origin().unwrap_or_default())],
+            &[
+                ("id", id),
+                ("origin", &destination.origin().unwrap_or_default()),
+            ],
         );
         if !(ctx.confirm)(&prompt) {
             return Err(cancelled(loc));
@@ -207,11 +255,16 @@ pub fn test(
     };
     let outcome = run().map_err(|e| cli_error(&e, loc))?;
     let known = SecretSet::loaded();
-    let link = format_link(LinkFormat::Url, &outcome.url, "kropa-test.png", &known)
-        .map_err(|_| cli_error(&UploadError::Security {
-            reason: "secret_in_output",
-            detail: String::new(),
-        }, loc))?;
+    let link =
+        format_link(LinkFormat::Url, &outcome.url, "kropa-test.png", &known).map_err(|_| {
+            cli_error(
+                &UploadError::Security {
+                    reason: "secret_in_output",
+                    detail: String::new(),
+                },
+                loc,
+            )
+        })?;
     let mut warnings: Vec<Value> = outcome
         .warnings
         .iter()
@@ -237,12 +290,21 @@ pub fn test(
             session.note(m);
         }
     }
-    session.result(&loc.message_args("out-test-status", &[("status", &outcome.status.to_string())]));
+    session.result(&loc.message_args(
+        "out-test-status",
+        &[("status", &outcome.status.to_string())],
+    ));
     for h in &outcome.headers {
-        session.result(&loc.message_args("out-test-header", &[("name", &h.name), ("value", h.value.as_str())]));
+        session.result(&loc.message_args(
+            "out-test-header",
+            &[("name", &h.name), ("value", h.value.as_str())],
+        ));
     }
     session.result(&loc.message_args("out-test-url", &[("url", outcome.url.as_str())]));
-    session.result(&loc.message_args("out-test-link", &[("format", "url"), ("text", link.as_str())]));
+    session.result(&loc.message_args(
+        "out-test-link",
+        &[("format", "url"), ("text", link.as_str())],
+    ));
     Ok(ExitCode::Ok)
 }
 
@@ -262,14 +324,22 @@ fn plan_summary(plan: &ImportPlan, loc: &Localizer, session: &mut Session<'_, '_
         session.note(&loc.message("out-import-http-warning"));
     }
     for s in &plan.secrets {
-        session.note(&loc.message_args(
-            "out-import-secret",
-            &[
-                ("name", &s.name),
-                ("placement", &format!("{}", s.placement).split(':').next().map_or_else(String::new, |k| format!("{k}:{}", slot_name(&s.slot)))),
-                ("preview", &s.preview),
-            ],
-        ));
+        session.note(
+            &loc.message_args(
+                "out-import-secret",
+                &[
+                    ("name", &s.name),
+                    (
+                        "placement",
+                        &format!("{}", s.placement)
+                            .split(':')
+                            .next()
+                            .map_or_else(String::new, |k| format!("{k}:{}", slot_name(&s.slot))),
+                    ),
+                    ("preview", &s.preview),
+                ],
+            ),
+        );
     }
     for n in &plan.notes {
         let id = format!("out-import-note-{}", n.code.replace('_', "-"));
@@ -322,9 +392,11 @@ pub fn import_command(
         Some("sxcu") => ImportFormat::Sxcu,
         Some("toml") => ImportFormat::Toml,
         _ => {
-            return Err(CliError::new(ExitCode::Config, loc, "error-import-file-type", &[])
-                .with_reason("import_unsupported")
-                .at_step("import"));
+            return Err(
+                CliError::new(ExitCode::Config, loc, "error-import-file-type", &[])
+                    .with_reason("import_unsupported")
+                    .at_step("import"),
+            );
         }
     };
     let bytes = read_import(file, loc)?;
@@ -362,7 +434,10 @@ pub fn import_command(
     }
     plan_summary(&plan, loc, session);
     if !yes {
-        let prompt = loc.message_args("prompt-dest-import", &[("id", &id), ("origin", &plan.origin)]);
+        let prompt = loc.message_args(
+            "prompt-dest-import",
+            &[("id", &id), ("origin", &plan.origin)],
+        );
         if !(ctx.confirm)(&prompt) {
             return Err(cancelled(loc));
         }

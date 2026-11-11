@@ -37,8 +37,9 @@ pub fn load_destinations(dir: &Path) -> Result<Vec<Destination>, UploadError> {
     let path = destinations_path(dir);
     match read(&path)? {
         None => Ok(Vec::new()),
-        Some(text) => DestinationFile::parse(&text, &path.display().to_string())
-            .map(|file| file.destination),
+        Some(text) => {
+            DestinationFile::parse(&text, &path.display().to_string()).map(|file| file.destination)
+        }
     }
 }
 
@@ -47,10 +48,13 @@ pub fn load_destinations(dir: &Path) -> Result<Vec<Destination>, UploadError> {
 /// # Errors
 /// [`UploadError::Config`] (`unknown_destination`) when there is none.
 pub fn find<'a>(destinations: &'a [Destination], id: &str) -> Result<&'a Destination, UploadError> {
-    destinations.iter().find(|d| d.id == id).ok_or_else(|| UploadError::Config {
-        reason: "unknown_destination",
-        detail: format!("no destination named {id:?}"),
-    })
+    destinations
+        .iter()
+        .find(|d| d.id == id)
+        .ok_or_else(|| UploadError::Config {
+            reason: "unknown_destination",
+            detail: format!("no destination named {id:?}"),
+        })
 }
 
 /// Adds `destination` at the end of the file, keeping what is there (comments included). The result
@@ -105,17 +109,28 @@ mod tests {
     fn missing_file_is_empty_and_append_keeps_comments() {
         let dir = tempfile::tempdir().unwrap();
         assert!(load_destinations(dir.path()).unwrap().is_empty());
-        append_destination(dir.path(), &Destination::zipline("one", "https://one.example.org")).unwrap();
+        append_destination(
+            dir.path(),
+            &Destination::zipline("one", "https://one.example.org"),
+        )
+        .unwrap();
         let path = destinations_path(dir.path());
         let mut text = std::fs::read_to_string(&path).unwrap();
         text.insert_str(0, "# my destinations\n");
         std::fs::write(&path, text).unwrap();
-        append_destination(dir.path(), &Destination::zipline("two", "https://two.example.org")).unwrap();
+        append_destination(
+            dir.path(),
+            &Destination::zipline("two", "https://two.example.org"),
+        )
+        .unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.starts_with("# my destinations\n"));
         let all = load_destinations(dir.path()).unwrap();
         assert_eq!(all.len(), 2);
-        assert_eq!(find(&all, "two").unwrap().url.as_deref(), Some("https://two.example.org"));
+        assert_eq!(
+            find(&all, "two").unwrap().url.as_deref(),
+            Some("https://two.example.org")
+        );
         assert!(find(&all, "three").is_err());
         assert!(append_destination(dir.path(), &all[0]).is_err());
     }

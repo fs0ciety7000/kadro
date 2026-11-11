@@ -165,7 +165,9 @@ impl View {
 }
 
 fn hex_val(b: u8) -> Option<u8> {
-    char::from(b).to_digit(16).and_then(|d| u8::try_from(d).ok())
+    char::from(b)
+        .to_digit(16)
+        .and_then(|d| u8::try_from(d).ok())
 }
 
 fn push_char(out: &mut Vec<u8>, c: char) {
@@ -412,12 +414,7 @@ struct Hit {
 }
 
 /// Looks in one view; returns `true` when the scan must stop.
-fn scan_view(
-    view: &View,
-    all: &[Vec<Needle>],
-    first_only: bool,
-    hits: &mut Vec<Hit>,
-) -> bool {
+fn scan_view(view: &View, all: &[Vec<Needle>], first_only: bool, hits: &mut Vec<Hit>) -> bool {
     let stripped = without_blanks(view);
     for (secret, list) in all.iter().enumerate() {
         for needle in list {
@@ -860,10 +857,8 @@ mod tests {
     #[test]
     fn a_secret_placed_around_the_cut_leaves_no_fragment() {
         let set = set();
-        let secret_forms: Vec<String> = forms(TOKEN)
-            .into_iter()
-            .filter(|f| f.len() >= 12)
-            .collect();
+        let secret_forms: Vec<String> =
+            forms(TOKEN).into_iter().filter(|f| f.len() >= 12).collect();
         for form in &secret_forms {
             for position in 495..=530 {
                 let mut body = " ".repeat(1000);

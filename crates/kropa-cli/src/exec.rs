@@ -256,7 +256,12 @@ fn run_command(
                 DestCommand::List => return dest::list(&config, &dir, ctx, session),
                 DestCommand::Show { id } => return dest::show(id, &config, &dir, ctx, session),
                 DestCommand::Test { id, yes } => return dest::test(id, *yes, &dir, ctx, session),
-                DestCommand::Import { file, as_id, yes, expect_host } => {
+                DestCommand::Import {
+                    file,
+                    as_id,
+                    yes,
+                    expect_host,
+                } => {
                     return dest::import_command(
                         file,
                         as_id.as_deref(),
@@ -520,7 +525,9 @@ fn check_interaction(cmd: &Command, interactive: bool, loc: &Localizer) -> Resul
         ));
     }
     if let Command::Dest {
-        action: DestCommand::Import { expect_host: None, .. },
+        action: DestCommand::Import {
+            expect_host: None, ..
+        },
     } = cmd
     {
         return Err(CliError::new(

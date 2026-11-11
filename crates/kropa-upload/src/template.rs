@@ -123,8 +123,12 @@ pub trait Env {
     ///
     /// # Errors
     /// Whatever the environment refuses (an unknown secret, a missing variable...).
-    fn call(&self, function: Function, args: &[String], regex: Option<&(String, Group)>)
-    -> Result<String, UploadError>;
+    fn call(
+        &self,
+        function: Function,
+        args: &[String],
+        regex: Option<&(String, Group)>,
+    ) -> Result<String, UploadError>;
 }
 
 impl Template {
@@ -312,9 +316,7 @@ fn parse_regex(arg: &str) -> Result<(String, Group), UploadError> {
         Some((head, tail))
             if !head.is_empty()
                 && !tail.is_empty()
-                && tail
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_') =>
+                && tail.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') =>
         {
             let group = tail
                 .parse::<usize>()
@@ -377,7 +379,8 @@ fn parse_nodes(source: &str, side: Side) -> Result<Vec<Node>, UploadError> {
                 }
             )));
         }
-        let close = matching_brace(bytes, i).ok_or_else(|| syntax(format!("{{{name}}}: missing '}}'")))?;
+        let close =
+            matching_brace(bytes, i).ok_or_else(|| syntax(format!("{{{name}}}: missing '}}'")))?;
         let inner = if delimiter == Some(b':') {
             &source[name_end + 1..close]
         } else {
@@ -421,9 +424,15 @@ fn build_call(
             regex: Some(regex),
         });
     }
-    let parts: Vec<&str> = if has_args { split_args(inner) } else { Vec::new() };
+    let parts: Vec<&str> = if has_args {
+        split_args(inner)
+    } else {
+        Vec::new()
+    };
     match function {
-        Function::Filename | Function::Response | Function::ResponseUrl => arity(0, 0, parts.len())?,
+        Function::Filename | Function::Response | Function::ResponseUrl => {
+            arity(0, 0, parts.len())?
+        }
         Function::Secret | Function::Var | Function::Header | Function::Base64 => {
             arity(1, 1, parts.len())?;
         }
@@ -432,7 +441,10 @@ fn build_call(
     }
     // The name of a secret, a variable or a header, and the path of a `{json:}`, are literal text:
     // a function inside them would let a response choose the secret that is read.
-    let literal = matches!(function, Function::Secret | Function::Var | Function::Header);
+    let literal = matches!(
+        function,
+        Function::Secret | Function::Var | Function::Header
+    );
     let args = parts
         .iter()
         .enumerate()
@@ -483,17 +495,26 @@ mod tests {
     }
 
     fn request(s: &str) -> String {
-        Template::parse(s, Side::Request).unwrap().render(&Fixed).unwrap()
+        Template::parse(s, Side::Request)
+            .unwrap()
+            .render(&Fixed)
+            .unwrap()
     }
 
     fn response(s: &str) -> String {
-        Template::parse(s, Side::Response).unwrap().render(&Fixed).unwrap()
+        Template::parse(s, Side::Response)
+            .unwrap()
+            .render(&Fixed)
+            .unwrap()
     }
 
     #[test]
     fn plain_text_and_unknown_braces_pass_through() {
         assert_eq!(request("hello"), "hello");
-        assert_eq!(request(r#"{"a": "{filename}", "n": {"b": 1}}"#), r#"{"a": "shot.png", "n": {"b": 1}}"#);
+        assert_eq!(
+            request(r#"{"a": "{filename}", "n": {"b": 1}}"#),
+            r#"{"a": "shot.png", "n": {"b": 1}}"#
+        );
         assert_eq!(request("{nope}{}"), "{nope}{}");
         assert_eq!(request("{filename"), "{filename");
     }
@@ -501,7 +522,10 @@ mod tests {
     #[test]
     fn calls_nest() {
         assert_eq!(request("Bearer {secret:token}"), "Bearer <secret token>");
-        assert_eq!(request("{base64:user:{secret:pw}}"), "dXNlcjo8c2VjcmV0IHB3Pg==");
+        assert_eq!(
+            request("{base64:user:{secret:pw}}"),
+            "dXNlcjo8c2VjcmV0IHB3Pg=="
+        );
         assert_eq!(request("{input}-{filename}"), "shot.png-shot.png");
         assert_eq!(request("{var:title}"), "<var title>");
     }
@@ -560,9 +584,21 @@ mod tests {
         assert_eq!(t.secrets(), ["a", "b"]);
         assert_eq!(t.vars(), ["v"]);
         assert!(!t.is_literal());
-        assert!(Template::parse("plain", Side::Request).unwrap().is_literal());
-        assert!(Template::parse("{filename}", Side::Request).unwrap().is_pure_call());
-        assert!(!Template::parse("x{filename}", Side::Request).unwrap().is_pure_call());
+        assert!(
+            Template::parse("plain", Side::Request)
+                .unwrap()
+                .is_literal()
+        );
+        assert!(
+            Template::parse("{filename}", Side::Request)
+                .unwrap()
+                .is_pure_call()
+        );
+        assert!(
+            !Template::parse("x{filename}", Side::Request)
+                .unwrap()
+                .is_pure_call()
+        );
         let r = Template::parse("{json:$.a.b} {header:Location}", Side::Response).unwrap();
         assert_eq!(r.json_paths(), ["$.a.b"]);
         assert_eq!(r.header_reads(), ["Location"]);

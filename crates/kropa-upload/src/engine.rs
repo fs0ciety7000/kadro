@@ -62,9 +62,19 @@ pub struct UploadInput {
 fn clean_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_control() || matches!(c, '/' | '\\') { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\') {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
-    if cleaned.is_empty() { "file".to_owned() } else { cleaned }
+    if cleaned.is_empty() {
+        "file".to_owned()
+    } else {
+        cleaned
+    }
 }
 
 /// Media type of a file name, by extension.
@@ -123,7 +133,8 @@ impl UploadInput {
         if !metadata.is_file() {
             return Err(io(std::io::Error::other("not a regular file")));
         }
-        let too_large = || UploadError::failed("file_too_large", "the file is larger than max_size");
+        let too_large =
+            || UploadError::failed("file_too_large", "the file is larger than max_size");
         if metadata.len() > max {
             return Err(too_large());
         }
@@ -271,7 +282,10 @@ impl Env for RequestEnv<'_> {
                 if from_user && self.sensitive_slot {
                     return Err(UploadError::security(
                         "secret_in_argument",
-                        format!("the variable {:?} feeds a slot of credentials: use {{secret:}}", args[0]),
+                        format!(
+                            "the variable {:?} feeds a slot of credentials: use {{secret:}}",
+                            args[0]
+                        ),
                     ));
                 }
                 Ok(value)
@@ -359,16 +373,20 @@ impl<'a> Uploader<'a> {
         for value in resolved.values.values() {
             known.add(value.expose());
         }
-        let answer = tokio::time::timeout(
-            compiled.timeout,
-            self.send(&compiled, &plan, input),
+        let answer = tokio::time::timeout(compiled.timeout, self.send(&compiled, &plan, input))
+            .await
+            .map_err(|_| UploadError::Network {
+                reason: "timeout",
+                detail: "the server did not answer in time".to_owned(),
+            })??;
+        interpret(
+            &compiled,
+            &answer,
+            input,
+            &var_source,
+            &known,
+            resolved.warnings,
         )
-        .await
-        .map_err(|_| UploadError::Network {
-            reason: "timeout",
-            detail: "the server did not answer in time".to_owned(),
-        })??;
-        interpret(&compiled, &answer, input, &var_source, &known, resolved.warnings)
     }
 
     fn resolve_secrets(&self, compiled: &Compiled) -> Result<Resolved, UploadError> {
@@ -549,8 +567,11 @@ impl<'a> Uploader<'a> {
                 url = next;
                 continue;
             }
-            let (headers, final_url, code) =
-                (response.headers().clone(), response.url().clone(), status.as_u16());
+            let (headers, final_url, code) = (
+                response.headers().clone(),
+                response.url().clone(),
+                status.as_u16(),
+            );
             let mut response = response;
             let mut body = Vec::new();
             while let Some(chunk) = response.chunk().await.map_err(|e| network_error(&e))? {
@@ -585,21 +606,26 @@ fn build_plan(
         body_text: None,
     };
     for (name, template) in &compiled.query {
-        plan.query
-            .push((name.clone(), render_slot(template, name, input, resolved, vars)?.0));
+        plan.query.push((
+            name.clone(),
+            render_slot(template, name, input, resolved, vars)?.0,
+        ));
     }
     for (name, template) in &compiled.headers {
         let (text, secret) = render_slot(template, name, input, resolved, vars)?;
         let header_name = HeaderName::from_bytes(name.as_bytes())
             .map_err(|_| UploadError::config(format!("header {name:?} is not valid")))?;
-        let mut value = HeaderValue::from_str(&text)
-            .map_err(|_| UploadError::config(format!("the value of the header {name:?} is not valid")))?;
+        let mut value = HeaderValue::from_str(&text).map_err(|_| {
+            UploadError::config(format!("the value of the header {name:?} is not valid"))
+        })?;
         value.set_sensitive(secret || is_sensitive_name(name));
         plan.headers.push((header_name, value));
     }
     for (name, template) in &compiled.fields {
-        plan.fields
-            .push((name.clone(), render_slot(template, name, input, resolved, vars)?.0));
+        plan.fields.push((
+            name.clone(),
+            render_slot(template, name, input, resolved, vars)?.0,
+        ));
     }
     if let Some(template) = &compiled.body_template {
         plan.body_text = Some(render_slot(template, "body", input, resolved, vars)?.0);
@@ -672,15 +698,16 @@ impl Env for ResponseEnv<'_> {
                 let path = normalize_json_path(args.last().map_or("", String::as_str));
                 let parsed;
                 let value = if args.len() == 2 {
-                    parsed = serde_json::from_str::<Value>(&args[0])
-                        .map_err(|_| UploadError::failed("bad_response", "the input of {json:} is not JSON"))?;
+                    parsed = serde_json::from_str::<Value>(&args[0]).map_err(|_| {
+                        UploadError::failed("bad_response", "the input of {json:} is not JSON")
+                    })?;
                     &parsed
                 } else {
                     self.body_json()?
                 };
-                let found = value
-                    .query(&path)
-                    .map_err(|_| UploadError::failed("bad_response", "the JSON path is not valid"))?;
+                let found = value.query(&path).map_err(|_| {
+                    UploadError::failed("bad_response", "the JSON path is not valid")
+                })?;
                 Ok(json_text(found.first().copied()))
             }
             Function::Regex => {
@@ -689,7 +716,9 @@ impl Env for ResponseEnv<'_> {
                     .size_limit(REGEX_SIZE_LIMIT)
                     .dfa_size_limit(REGEX_SIZE_LIMIT * 2)
                     .build()
-                    .map_err(|_| UploadError::config("a {regex:} pattern is invalid or too large"))?;
+                    .map_err(|_| {
+                        UploadError::config("a {regex:} pattern is invalid or too large")
+                    })?;
                 let text = self.text();
                 let found = re.captures(&text).and_then(|c| match group {
                     Group::Index(i) => c.get(*i),
@@ -697,9 +726,9 @@ impl Env for ResponseEnv<'_> {
                 });
                 Ok(found.map_or_else(String::new, |m| m.as_str().to_owned()))
             }
-            Function::Secret | Function::Base64 => {
-                Err(UploadError::config("function not allowed in a response template"))
-            }
+            Function::Secret | Function::Base64 => Err(UploadError::config(
+                "function not allowed in a response template",
+            )),
         }
     }
 }
@@ -712,7 +741,8 @@ fn is_hostile_char(c: char) -> bool {
 }
 
 fn validate_extracted_url(text: &str) -> Result<Url, UploadError> {
-    let invalid = || UploadError::failed("url_invalid", "the URL read from the answer is not usable");
+    let invalid =
+        || UploadError::failed("url_invalid", "the URL read from the answer is not usable");
     let text = text.trim();
     if text.chars().any(is_hostile_char) {
         return Err(invalid());
@@ -796,7 +826,11 @@ fn interpret(
         let source = from_template.unwrap_or_else(|| env.text());
         return Err(UploadError::Server {
             status: answer.status,
-            message: MaskedText::from_response(source.as_bytes(), known, crate::engine::MESSAGE_LIMIT),
+            message: MaskedText::from_response(
+                source.as_bytes(),
+                known,
+                crate::engine::MESSAGE_LIMIT,
+            ),
             retry: retry_of(answer.status),
         });
     }
@@ -808,7 +842,9 @@ fn interpret(
         ));
     }
     let url = check_output(&url_text, &validate_extracted_url(&url_text)?, known)?;
-    let mut optional = |template: &Option<Template>, code: &'static str| -> Result<Option<CheckedOutput>, UploadError> {
+    let mut optional = |template: &Option<Template>,
+                        code: &'static str|
+     -> Result<Option<CheckedOutput>, UploadError> {
         let Some(template) = template else {
             return Ok(None);
         };

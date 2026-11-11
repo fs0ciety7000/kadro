@@ -158,7 +158,10 @@ fn ask_on_terminal(prompt: &str) -> bool {
     if std::io::stdin().lock().read_line(&mut line).is_err() {
         return false;
     }
-    matches!(line.trim().to_lowercase().as_str(), "y" | "yes" | "o" | "oui")
+    matches!(
+        line.trim().to_lowercase().as_str(),
+        "y" | "yes" | "o" | "oui"
+    )
 }
 
 /// Like [`run_with`], with an injected capture backend (`None`: the platform has none) and the

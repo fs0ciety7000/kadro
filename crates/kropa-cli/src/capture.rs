@@ -23,8 +23,9 @@ use serde_json::{Value, json};
 use crate::args::{CaptureOpts, CopyTarget};
 use crate::errors::CliError;
 use crate::exec::Context;
-use crate::output::Session;
+use crate::output::{Session, error_document};
 use crate::target::{Target, TargetSpec, resolve_final};
+use crate::upload::{self, CopyChoice, Report};
 
 /// JSON schema of the result.
 pub const SCHEMA: &str = "kropa.capture/1";
@@ -181,9 +182,12 @@ fn document(
     path: &Path,
     size: u64,
     captured_at: &str,
+    report: Option<&Report>,
 ) -> Value {
     let send = &job.opts.send;
-    let upload = if send.no_upload {
+    let upload = if let Some(r) = report {
+        r.upload.clone()
+    } else if send.no_upload {
         Value::Null
     } else {
         json!({
@@ -200,10 +204,23 @@ fn document(
         ),
         None => ("none", false, None),
     };
+    let (clipboard, link, warnings) = match report {
+        Some(r) => (r.clipboard.clone(), r.link.clone(), r.warnings.clone()),
+        None => (
+            json!({
+                "requested": requested, "explicit": explicit, "status": "skipped", "reason": reason,
+            }),
+            Value::Null,
+            Vec::new(),
+        ),
+    };
+    let error = report
+        .and_then(|r| r.error.as_ref())
+        .map(|e| error_document(SCHEMA, e)["error"].clone());
     json!({
         "schema": SCHEMA,
-        "status": "ok",
-        "exit_code": 0,
+        "status": if error.is_some() { "partial" } else { "ok" },
+        "exit_code": report.and_then(|r| r.error.as_ref()).map_or(0, |e| e.code.code()),
         "capture": {
             "mode": job.mode.as_str(),
             "output": image.output,
@@ -220,12 +237,10 @@ fn document(
             "size": size,
         },
         "upload": upload,
-        "link": null,
-        "clipboard": {
-            "requested": requested, "explicit": explicit, "status": "skipped", "reason": reason,
-        },
-        "warnings": [],
-        "error": null,
+        "link": link,
+        "clipboard": clipboard,
+        "warnings": warnings,
+        "error": error,
     })
 }
 
@@ -237,6 +252,7 @@ pub fn run(
     job: &Job<'_>,
     backend: &dyn CaptureBackend,
     config: &Config,
+    config_dir: &Path,
     target: &Target,
     ctx: &Context<'_>,
     session: &mut Session<'_, '_>,
@@ -308,14 +324,33 @@ pub fn run(
             ("height", &image.height.to_string()),
         ],
     ));
+    // The file is saved; the upload, if asked for, comes after and never removes it.
+    let report = opts.send.upload.as_ref().map(|choice| {
+        let profile = choice
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .or_else(|| config.default_destination.clone())
+            .unwrap_or_default();
+        let delivery = upload::deliver(ctx, config_dir, &profile, &path, &opts.vars);
+        let copy = opts.send.copy.map(CopyChoice::from_target);
+        upload::report(&delivery, copy, loc, session)
+    });
+    if let Some(error) = report.as_ref().and_then(|r| r.error.as_ref()) {
+        session.error_message(error);
+    }
     if session.json {
         let at = captured_at.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string();
         let size = image.data.len() as u64;
-        session.document(&document(job, &image, &path, size, &at));
+        session.document(&document(job, &image, &path, size, &at, report.as_ref()));
+    } else if let Some(url) = report.as_ref().and_then(|r| r.url.as_ref()) {
+        session.result_checked(url);
     } else {
         session.result(&path.display().to_string());
     }
-    Ok(ExitCode::Ok)
+    Ok(report
+        .and_then(|r| r.error)
+        .map_or(ExitCode::Ok, |e| e.code))
 }
 
 #[cfg(test)]
@@ -472,6 +507,7 @@ mod tests {
                 &job,
                 backend,
                 &Config::default(),
+                Path::new("."),
                 target,
                 &ctx,
                 &mut session,

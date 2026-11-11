@@ -30,7 +30,9 @@ use crate::destination::{
 use crate::error::UploadError;
 use crate::origin::origin_of;
 use crate::secret::{MIN_SECRET_LEN, Placement, SecretValue};
-use crate::sensitive::{is_public_header, is_sensitive_name, looks_like_token_segment, split_scheme};
+use crate::sensitive::{
+    is_public_header, is_sensitive_name, looks_like_token_segment, split_scheme,
+};
 use crate::template::{Side, Template};
 
 /// Largest file imported.
@@ -134,8 +136,15 @@ impl ImportPlan {
             .iter()
             .position(|s| s.name == name)
             .ok_or_else(|| UploadError::import("import_invalid", "no such secret"))?;
-        let Some(value) = self.secrets[index].value.as_ref().map(|v| v.expose().to_owned()) else {
-            return Err(UploadError::import("import_invalid", "this secret has no value to keep"));
+        let Some(value) = self.secrets[index]
+            .value
+            .as_ref()
+            .map(|v| v.expose().to_owned())
+        else {
+            return Err(UploadError::import(
+                "import_invalid",
+                "this secret has no value to keep",
+            ));
         };
         let reference = format!("{{secret:{name}}}");
         let secret = self.secrets.remove(index);
@@ -204,7 +213,10 @@ fn preview_of(value: Option<&SecretValue>, slot: &Slot) -> String {
     if shown == 0 {
         "***".to_owned()
     } else {
-        format!("***{}", chars[chars.len() - shown..].iter().collect::<String>())
+        format!(
+            "***{}",
+            chars[chars.len() - shown..].iter().collect::<String>()
+        )
     }
 }
 
@@ -267,7 +279,13 @@ impl Builder {
     fn var_name(&mut self, hint: &str) -> String {
         let mut base: String = hint
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '_'
+                }
+            })
             .collect();
         base = base.trim_matches('_').to_owned();
         if base.is_empty() || base.starts_with(|c: char| c.is_ascii_digit()) {
@@ -333,7 +351,10 @@ impl Builder {
                 } else {
                     VarDecl {
                         prompt: Some(parts[0].to_owned()),
-                        default: parts.get(1).filter(|d| !d.is_empty()).map(|d| (*d).to_owned()),
+                        default: parts
+                            .get(1)
+                            .filter(|d| !d.is_empty())
+                            .map(|d| (*d).to_owned()),
                         choices: Vec::new(),
                     }
                 };
@@ -385,8 +406,13 @@ impl Builder {
     }
 }
 
-fn object_of_strings(value: Option<&Value>, field: &str) -> Result<Vec<(String, String)>, UploadError> {
-    let Some(value) = value else { return Ok(Vec::new()) };
+fn object_of_strings(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<Vec<(String, String)>, UploadError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
     if value.is_null() {
         return Ok(Vec::new());
     }
@@ -404,7 +430,10 @@ fn object_of_strings(value: Option<&Value>, field: &str) -> Result<Vec<(String, 
         .collect()
 }
 
-fn string_field<'a>(object: &'a serde_json::Map<String, Value>, key: &str) -> Result<Option<&'a str>, UploadError> {
+fn string_field<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<Option<&'a str>, UploadError> {
     match object.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s)),
@@ -445,7 +474,9 @@ fn check_url(raw: &str) -> Result<(Url, Vec<(String, String)>), UploadError> {
         return Err(invalid("RequestURL: user:password@ is refused"));
     }
     if url.fragment().is_some() {
-        return Err(invalid("RequestURL: a fragment makes no sense in a request"));
+        return Err(invalid(
+            "RequestURL: a fragment makes no sense in a request",
+        ));
     }
     if url
         .path_segments()
@@ -503,7 +534,10 @@ fn sxcu_destination(
         .filter(|k| !SXCU_FIELDS.contains(k))
         .collect();
     if !unknown.is_empty() {
-        return Err(refuse(format!("unsupported field(s): {}", unknown.join(", "))));
+        return Err(refuse(format!(
+            "unsupported field(s): {}",
+            unknown.join(", ")
+        )));
     }
     let mut notes = Vec::new();
     // `Version`: 12.3.1 and below are refused by ShareX itself; below 13.7.1 the functions are
@@ -513,7 +547,9 @@ fn sxcu_destination(
         .transpose()?;
     let legacy = version.is_some_and(|v| v < (13, 7, 1));
     if version.is_some_and(|v| v <= (12, 3, 1)) {
-        return Err(refuse("Version 12.3.1 and below are not supported (ShareX refuses them too)"));
+        return Err(refuse(
+            "Version 12.3.1 and below are not supported (ShareX refuses them too)",
+        ));
     }
     if legacy {
         notes.push(ImportNote {
@@ -522,7 +558,12 @@ fn sxcu_destination(
         });
     }
     let label = string_field(object, "Name")?
-        .map(|n| n.chars().filter(|c| !c.is_control()).take(100).collect::<String>())
+        .map(|n| {
+            n.chars()
+                .filter(|c| !c.is_control())
+                .take(100)
+                .collect::<String>()
+        })
         .filter(|n| !n.trim().is_empty());
     // Kinds: image and file uploaders only; text types are dropped, shorteners refused.
     let mut kinds = Vec::new();
@@ -536,7 +577,9 @@ fn sxcu_destination(
                     detail: part.to_owned(),
                 }),
                 "URLShortener" | "URLSharingService" => {
-                    return Err(refuse(format!("DestinationType {part} is out of scope in v1")));
+                    return Err(refuse(format!(
+                        "DestinationType {part} is out of scope in v1"
+                    )));
                 }
                 _ => return Err(refuse("DestinationType: unknown type")),
             }
@@ -547,8 +590,11 @@ fn sxcu_destination(
     } else {
         kinds = vec![MediaKind::Image, MediaKind::File];
     }
-    let method = string_field(object, "RequestMethod")?.unwrap_or("POST").to_ascii_uppercase();
-    let raw_url = string_field(object, "RequestURL")?.ok_or_else(|| invalid("RequestURL is missing"))?;
+    let method = string_field(object, "RequestMethod")?
+        .unwrap_or("POST")
+        .to_ascii_uppercase();
+    let raw_url =
+        string_field(object, "RequestURL")?.ok_or_else(|| invalid("RequestURL is missing"))?;
     let (url, url_query) = check_url(raw_url)?;
     let origin = origin_of(&url).ok_or_else(|| invalid("RequestURL: not a valid address"))?;
     let body = match string_field(object, "Body")? {
@@ -572,7 +618,9 @@ fn sxcu_destination(
     let headers = object_of_strings(object.get("Headers"), "Headers")?;
     let arguments = object_of_strings(object.get("Arguments"), "Arguments")?;
     if !arguments.is_empty() && !matches!(body, BodyKind::Multipart | BodyKind::Form) {
-        return Err(refuse("Arguments are only supported with MultipartFormData and FormURLEncoded bodies"));
+        return Err(refuse(
+            "Arguments are only supported with MultipartFormData and FormURLEncoded bodies",
+        ));
     }
     let query = builder.classify_map(&parameters, Slot::Query)?;
     let headers = builder.classify_map(&headers, Slot::Header)?;
@@ -590,7 +638,13 @@ fn sxcu_destination(
     };
     let convert = |key: &str| -> Result<Option<String>, UploadError> {
         Ok(string_field(object, key)?
-            .map(|t| if legacy { migrate_legacy(t) } else { t.to_owned() })
+            .map(|t| {
+                if legacy {
+                    migrate_legacy(t)
+                } else {
+                    t.to_owned()
+                }
+            })
             .filter(|t| !t.is_empty()))
     };
     let mut response_url = convert("URL")?;
@@ -600,10 +654,17 @@ fn sxcu_destination(
             response_url = Some("{responseurl}".to_owned());
         }
         Some("RedirectionURL") => {}
-        Some(_) => return Err(refuse("ResponseType: only Text and RedirectionURL are supported")),
+        Some(_) => {
+            return Err(refuse(
+                "ResponseType: only Text and RedirectionURL are supported",
+            ));
+        }
     }
     let mut destination = Destination {
-        id: id.map_or_else(|| slug(label.as_deref().unwrap_or("imported")), str::to_owned),
+        id: id.map_or_else(
+            || slug(label.as_deref().unwrap_or("imported")),
+            str::to_owned,
+        ),
         kind: DestinationType::Http,
         label,
         kinds,
@@ -654,9 +715,7 @@ fn finish(
             .secrets
             .insert(secret.name.clone(), SecretDecl::default());
     }
-    let compiled = destination
-        .compile()
-        .map_err(|e| refuse(e.to_string()))?;
+    let compiled = destination.compile().map_err(|e| refuse(e.to_string()))?;
     let url = compiled.url.clone();
     let https = url.scheme() == "https";
     if !https && !builder.secrets.is_empty() {
@@ -680,7 +739,11 @@ fn finish(
     notes.append(&mut builder.notes);
     Ok(ImportPlan {
         origin: compiled.origin().unwrap_or_default(),
-        host: url.host_str().unwrap_or_default().trim_end_matches('.').to_ascii_lowercase(),
+        host: url
+            .host_str()
+            .unwrap_or_default()
+            .trim_end_matches('.')
+            .to_ascii_lowercase(),
         https,
         destination,
         secrets: builder.secrets,
@@ -737,12 +800,16 @@ fn import_toml(text: &str, id: Option<&str>) -> Result<ImportPlan, UploadError> 
     } else {
         // A preset: its secrets are the ones it declares, placed where the preset puts them.
         for slot in compiled.secret_slots() {
-            builder.add_secret(slot.name.clone(), &match &slot.placement {
-                Placement::Header(n) => Slot::Header(n.clone()),
-                Placement::Query(n) => Slot::Query(n.clone()),
-                Placement::Form(n) => Slot::Form(n.clone()),
-                Placement::Body(_) => Slot::Body,
-            }, None)?;
+            builder.add_secret(
+                slot.name.clone(),
+                &match &slot.placement {
+                    Placement::Header(n) => Slot::Header(n.clone()),
+                    Placement::Query(n) => Slot::Query(n.clone()),
+                    Placement::Form(n) => Slot::Form(n.clone()),
+                    Placement::Body(_) => Slot::Body,
+                },
+                None,
+            )?;
         }
     }
     // Entries already declared and used keep their place; the declaration is rebuilt from use.
@@ -758,7 +825,11 @@ fn import_toml(text: &str, id: Option<&str>) -> Result<ImportPlan, UploadError> 
 /// [`UploadError::Config`] (`import_too_large`, `import_invalid`, `import_unsupported`) for a file that
 /// cannot be imported, [`UploadError::Security`] (`https_required`, `secret_in_path`) for one that
 /// the rules of `docs/security/secrets.md` refuse.
-pub fn import(bytes: &[u8], format: ImportFormat, id: Option<&str>) -> Result<ImportPlan, UploadError> {
+pub fn import(
+    bytes: &[u8],
+    format: ImportFormat,
+    id: Option<&str>,
+) -> Result<ImportPlan, UploadError> {
     if bytes.len() > MAX_IMPORT_SIZE {
         return Err(UploadError::import(
             "import_too_large",
@@ -769,7 +840,9 @@ pub fn import(bytes: &[u8], format: ImportFormat, id: Option<&str>) -> Result<Im
     if let Some(id) = id
         && !is_identifier(id)
     {
-        return Err(invalid("id: a profile name uses 1 to 64 letters, digits, '-' or '_'"));
+        return Err(invalid(
+            "id: a profile name uses 1 to 64 letters, digits, '-' or '_'",
+        ));
     }
     match format {
         ImportFormat::Sxcu => import_sxcu(text.trim_start_matches('\u{feff}'), id),

@@ -106,7 +106,10 @@ pub(crate) fn network_error(e: &reqwest::Error) -> UploadError {
     let (reason, detail) = if e.is_timeout() {
         ("timeout", "the server did not answer in time")
     } else if tls {
-        ("tls", "the TLS handshake failed: the certificate of the server could not be verified")
+        (
+            "tls",
+            "the TLS handshake failed: the certificate of the server could not be verified",
+        )
     } else if e.is_connect() {
         ("connect", "could not connect to the server")
     } else {

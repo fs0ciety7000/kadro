@@ -217,7 +217,10 @@ pub struct ResponseSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Statuses that mean success (`[200, 201]` by default).
-    #[serde(default = "default_success", skip_serializing_if = "is_default_success")]
+    #[serde(
+        default = "default_success",
+        skip_serializing_if = "is_default_success"
+    )]
     pub success_status: Vec<u16>,
 }
 
@@ -336,7 +339,11 @@ pub fn is_identifier(text: &str) -> bool {
 
 /// Parses `100MiB`, `512KiB`, `2GiB`, `5MB` or a number of bytes.
 pub(crate) fn parse_size(text: &str) -> Result<u64, UploadError> {
-    let bad = || UploadError::config(format!("max_size: {text:?} is not a size (expected for example 100MiB)"));
+    let bad = || {
+        UploadError::config(format!(
+            "max_size: {text:?} is not a size (expected for example 100MiB)"
+        ))
+    };
     let digits = text.bytes().take_while(u8::is_ascii_digit).count();
     let (number, unit) = text.split_at(digits);
     let number: u64 = number.parse().map_err(|_| bad())?;
@@ -352,14 +359,20 @@ pub(crate) fn parse_size(text: &str) -> Result<u64, UploadError> {
     };
     let size = number.checked_mul(factor).ok_or_else(bad)?;
     if size == 0 || size > MAX_MAX_SIZE {
-        return Err(UploadError::config("max_size: must be between 1 byte and 1GiB"));
+        return Err(UploadError::config(
+            "max_size: must be between 1 byte and 1GiB",
+        ));
     }
     Ok(size)
 }
 
 /// Parses `500ms`, `120s`, `2m`.
 pub(crate) fn parse_duration(text: &str) -> Result<Duration, UploadError> {
-    let bad = || UploadError::config(format!("timeout: {text:?} is not a duration (expected for example 120s)"));
+    let bad = || {
+        UploadError::config(format!(
+            "timeout: {text:?} is not a duration (expected for example 120s)"
+        ))
+    };
     let digits = text.bytes().take_while(u8::is_ascii_digit).count();
     let (number, unit) = text.split_at(digits);
     let number: u64 = number.parse().map_err(|_| bad())?;
@@ -497,7 +510,10 @@ fn compile_map(
             if k.is_empty() || k.chars().any(char::is_control) {
                 return Err(UploadError::config(format!("{what}: invalid name")));
             }
-            Ok((k.clone(), parse_template(v, Side::Request, &format!("{what} {k:?}"))?))
+            Ok((
+                k.clone(),
+                parse_template(v, Side::Request, &format!("{what} {k:?}"))?,
+            ))
         })
         .collect()
 }
@@ -592,7 +608,10 @@ impl Destination {
                     .url
                     .as_deref()
                     .ok_or_else(|| UploadError::config("a zipline destination needs url"))?;
-                Ok(zipline_spec(base, self.options.as_ref().unwrap_or(&ZiplineOptions::default()))?)
+                Ok(zipline_spec(
+                    base,
+                    self.options.as_ref().unwrap_or(&ZiplineOptions::default()),
+                )?)
             }
             DestinationType::Http => {
                 if self.url.is_some() || self.options.is_some() {
@@ -656,13 +675,17 @@ impl Destination {
                 || FORBIDDEN_REQUEST_HEADERS.contains(&lower.as_str())
                 || (lower == "content-type" && request.body == BodyKind::Multipart)
             {
-                return Err(UploadError::config(format!("header {name:?} is not allowed")));
+                return Err(UploadError::config(format!(
+                    "header {name:?} is not allowed"
+                )));
             }
         }
         match request.body {
             BodyKind::Multipart | BodyKind::Form => {}
             _ if !fields.is_empty() => {
-                return Err(UploadError::config("fields: only for multipart and form bodies"));
+                return Err(UploadError::config(
+                    "fields: only for multipart and form bodies",
+                ));
             }
             _ => {}
         }
@@ -674,14 +697,21 @@ impl Destination {
                 Some(parse_template(t, Side::Request, "body_template")?)
             }
             (None, BodyKind::Json | BodyKind::Xml) => {
-                return Err(UploadError::config("body_template: needed for json and xml bodies"));
+                return Err(UploadError::config(
+                    "body_template: needed for json and xml bodies",
+                ));
             }
             (Some(_), _) => {
-                return Err(UploadError::config("body_template: only for json and xml bodies"));
+                return Err(UploadError::config(
+                    "body_template: only for json and xml bodies",
+                ));
             }
             (None, _) => None,
         };
-        let file_field = request.file_field.clone().unwrap_or_else(|| "file".to_owned());
+        let file_field = request
+            .file_field
+            .clone()
+            .unwrap_or_else(|| "file".to_owned());
         if file_field.is_empty() || file_field.chars().any(char::is_control) {
             return Err(UploadError::config("file_field: invalid name"));
         }
@@ -759,7 +789,9 @@ fn compile_response(
     if spec.success_status.is_empty()
         || spec.success_status.iter().any(|s| !(100..=599).contains(s))
     {
-        return Err(UploadError::config("success_status: HTTP statuses from 100 to 599"));
+        return Err(UploadError::config(
+            "success_status: HTTP statuses from 100 to 599",
+        ));
     }
     // Headers that carry a secret in the request may not be read back (B1).
     let mut forbidden: BTreeSet<String> = FORBIDDEN_RESPONSE_HEADERS
@@ -771,9 +803,14 @@ fn compile_response(
             forbidden.insert(name.to_ascii_lowercase());
         }
     }
-    for template in [Some(&url), thumbnail_url.as_ref(), deletion_url.as_ref(), error.as_ref()]
-        .into_iter()
-        .flatten()
+    for template in [
+        Some(&url),
+        thumbnail_url.as_ref(),
+        deletion_url.as_ref(),
+        error.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
     {
         for header in template.header_reads() {
             if forbidden.contains(&header.to_ascii_lowercase())
@@ -803,7 +840,10 @@ fn compile_response(
 /// The request and response of a Zipline v4 server (`docs/uploads.md` section 1.1): multipart POST
 /// of the file in `file`, the token alone (without `Bearer`) in `Authorization`, the URL in
 /// `files[0].url`.
-fn zipline_spec(base: &str, options: &ZiplineOptions) -> Result<(RequestSpec, ResponseSpec), UploadError> {
+fn zipline_spec(
+    base: &str,
+    options: &ZiplineOptions,
+) -> Result<(RequestSpec, ResponseSpec), UploadError> {
     let base = Url::parse(base).map_err(|_| UploadError::config("url: not a valid address"))?;
     let mut address = base.as_str().trim_end_matches('/').to_owned();
     if base.query().is_some() || base.fragment().is_some() {
@@ -826,7 +866,11 @@ fn zipline_spec(base: &str, options: &ZiplineOptions) -> Result<(RequestSpec, Re
         headers.insert("x-zipline-original-name".to_owned(), "true".to_owned());
     }
     if let Some(folder) = &options.folder {
-        if folder.is_empty() || !folder.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+        if folder.is_empty()
+            || !folder
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
             return Err(UploadError::config("options.folder: a folder id"));
         }
         headers.insert("x-zipline-folder".to_owned(), folder.clone());
@@ -909,7 +953,10 @@ success_status = [200, 201]
     fn the_documented_example_loads() {
         let file = DestinationFile::parse(MAISON, "d.toml").unwrap();
         let compiled = file.destination[0].compile().unwrap();
-        assert_eq!(compiled.origin().as_deref(), Some("https://img.example.org:443"));
+        assert_eq!(
+            compiled.origin().as_deref(),
+            Some("https://img.example.org:443")
+        );
         let slots = compiled.secret_slots();
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].name, "token");
@@ -922,7 +969,10 @@ success_status = [200, 201]
         let d = Destination::zipline("z", "https://zipline.example.org/");
         let c = d.compile().unwrap();
         assert_eq!(c.url.as_str(), "https://zipline.example.org/api/upload");
-        assert_eq!(c.secret_slots()[0].placement, Placement::header("Authorization"));
+        assert_eq!(
+            c.secret_slots()[0].placement,
+            Placement::header("Authorization")
+        );
         assert_eq!(c.response.success_status, [200]);
         let (request, _) = d.expand().unwrap();
         assert_eq!(request.headers["Authorization"], "{secret:token}");
@@ -973,7 +1023,10 @@ success_status = [200, 201]
         );
         assert!(config_error(&text).contains("response"));
         // A user:password@ address, a query in the address.
-        let text = MAISON.replace("https://img.example.org/api", "https://u:p@img.example.org/api");
+        let text = MAISON.replace(
+            "https://img.example.org/api",
+            "https://u:p@img.example.org/api",
+        );
         assert!(config_error(&text).contains("user:password@"));
         let text = MAISON.replace("/api/upload\"", "/api/upload?key=abc\"");
         assert!(config_error(&text).contains("query"));
@@ -1001,7 +1054,11 @@ success_status = [200, 201]
             ("max_size = \"100MiB\"", "max_size = \"2TB\"", "max_size"),
             ("timeout  = \"120s\"", "timeout  = \"soon\"", "timeout"),
             ("method  = \"POST\"", "method  = \"DELETE\"", "method"),
-            ("success_status = [200, 201]", "success_status = [99]", "success_status"),
+            (
+                "success_status = [200, 201]",
+                "success_status = [99]",
+                "success_status",
+            ),
             ("{json:$.data.thumb}", "{json:$.data[}", "path"),
             ("{json:$.data.thumb}", "{regex:(unclosed}", "regex"),
             ("{json:$.data.thumb}", "{xml:/a}", "not supported"),
@@ -1017,7 +1074,10 @@ success_status = [200, 201]
 
     #[test]
     fn unknown_keys_and_duplicates_are_refused() {
-        assert!(config_error(&MAISON.replace("label   =", "color = 1\nlabel   =")).contains("unknown field"));
+        assert!(
+            config_error(&MAISON.replace("label   =", "color = 1\nlabel   ="))
+                .contains("unknown field")
+        );
         let twice = format!("{MAISON}\n{MAISON}");
         assert!(config_error(&twice).contains("twice"));
     }

@@ -672,9 +672,9 @@ fn parse_set(value: &str) -> Result<(String, String), ArgError> {
 fn parse_host(value: &str) -> Result<String, ArgError> {
     let ok = !value.is_empty()
         && value.len() <= 260
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b':' | b'[' | b']'))
+        && value.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b':' | b'[' | b']')
+        })
         && !value.starts_with(['.', '-']);
     if ok {
         Ok(value.to_owned())
@@ -760,8 +760,8 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        parse_delay, parse_fd, parse_host, parse_limit, parse_port, parse_presign, parse_profile, parse_set,
-        parse_since, parse_url, parse_var,
+        parse_delay, parse_fd, parse_host, parse_limit, parse_port, parse_presign, parse_profile,
+        parse_set, parse_since, parse_url, parse_var,
     };
 
     #[test]
@@ -817,10 +817,22 @@ mod tests {
 
     #[test]
     fn hosts() {
-        for ok in ["z.example.org", "z.example.org:8443", "[::1]:80", "localhost"] {
+        for ok in [
+            "z.example.org",
+            "z.example.org:8443",
+            "[::1]:80",
+            "localhost",
+        ] {
             assert!(parse_host(ok).is_ok(), "{ok}");
         }
-        for bad in ["", "https://z.example.org", "z.example.org/x", "u@z.example.org", "a b", "-x"] {
+        for bad in [
+            "",
+            "https://z.example.org",
+            "z.example.org/x",
+            "u@z.example.org",
+            "a b",
+            "-x",
+        ] {
             assert!(parse_host(bad).is_err(), "{bad}");
         }
     }

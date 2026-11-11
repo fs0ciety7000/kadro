@@ -52,7 +52,12 @@ fn refused(name: &str) -> UploadError {
 /// What the user would see and what would be stored, without any value.
 fn render(plan: &ImportPlan) -> String {
     let mut out = String::new();
-    writeln!(out, "origin: {} (host {}, https {})", plan.origin, plan.host, plan.https).unwrap();
+    writeln!(
+        out,
+        "origin: {} (host {}, https {})",
+        plan.origin, plan.host, plan.https
+    )
+    .unwrap();
     out.push_str("\n--- profile ---\n");
     out.push_str(&plan.destination.to_toml().unwrap());
     out.push_str("\n--- secrets ---\n");
@@ -65,7 +70,11 @@ fn render(plan: &ImportPlan) -> String {
             s.placement,
             s.origin,
             s.preview,
-            if s.value.is_some() { "value" } else { "to enter" }
+            if s.value.is_some() {
+                "value"
+            } else {
+                "to enter"
+            }
         )
         .unwrap();
     }
@@ -103,7 +112,10 @@ fn zipline_sxcu() {
     // The token goes to the store tied to the header it was found in.
     let p = plan("zipline.sxcu");
     assert_eq!(p.secrets.len(), 1);
-    assert_eq!(p.secrets[0].value.as_ref().unwrap().expose(), "ZIPLINE-FAKE-TOKEN-0123456789abcdef");
+    assert_eq!(
+        p.secrets[0].value.as_ref().unwrap().expose(),
+        "ZIPLINE-FAKE-TOKEN-0123456789abcdef"
+    );
     assert_eq!(p.secrets[0].origin, "https://zipline.example.org:443");
     assert!(p.host_matches("zipline.example.org"));
     assert!(p.host_matches("Zipline.Example.Org."));
@@ -233,10 +245,14 @@ fn bad_input_is_refused_without_quoting_it() {
     let two = format!(
         "{}\n{}",
         String::from_utf8(fixture("team.toml")).unwrap(),
-        String::from_utf8(fixture("team.toml")).unwrap().replace("\"team\"", "\"other\"")
+        String::from_utf8(fixture("team.toml"))
+            .unwrap()
+            .replace("\"team\"", "\"other\"")
     );
     assert_eq!(
-        import(two.as_bytes(), ImportFormat::Toml, None).unwrap_err().reason(),
+        import(two.as_bytes(), ImportFormat::Toml, None)
+            .unwrap_err()
+            .reason(),
         "import_invalid"
     );
 }
@@ -254,7 +270,13 @@ fn the_id_can_be_chosen() {
 #[test]
 fn a_value_can_be_taken_back_as_public() {
     let mut p = plan("xbackbone.sxcu");
-    let name = p.secrets.iter().find(|s| matches!(&s.slot, Slot::Form(n) if n == "token")).unwrap().name.clone();
+    let name = p
+        .secrets
+        .iter()
+        .find(|s| matches!(&s.slot, Slot::Form(n) if n == "token"))
+        .unwrap()
+        .name
+        .clone();
     let before = p.secrets.len();
     p.mark_public(&name).unwrap();
     assert_eq!(p.secrets.len(), before - 1);
@@ -265,12 +287,29 @@ fn a_value_can_be_taken_back_as_public() {
 
 #[test]
 fn an_imported_profile_loads_and_is_ready_for_the_store() {
-    for name in ["zipline.sxcu", "imgur.sxcu", "xbackbone.sxcu", "prompts.sxcu", "json-body.sxcu", "legacy.sxcu", "redirect.sxcu", "team.toml", "received.toml"] {
+    for name in [
+        "zipline.sxcu",
+        "imgur.sxcu",
+        "xbackbone.sxcu",
+        "prompts.sxcu",
+        "json-body.sxcu",
+        "legacy.sxcu",
+        "redirect.sxcu",
+        "team.toml",
+        "received.toml",
+    ] {
         let p = plan(name);
-        let compiled = p.destination.compile().unwrap_or_else(|e| panic!("{name}: {e}"));
+        let compiled = p
+            .destination
+            .compile()
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
         // Every secret slot of the profile has an entry in the plan, with the same place.
         for slot in compiled.secret_slots() {
-            let entry = p.secrets.iter().find(|s| s.name == slot.name).unwrap_or_else(|| panic!("{name}: {}", slot.name));
+            let entry = p
+                .secrets
+                .iter()
+                .find(|s| s.name == slot.name)
+                .unwrap_or_else(|| panic!("{name}: {}", slot.name));
             assert_eq!(entry.placement, slot.placement, "{name}: {}", slot.name);
             assert_eq!(Some(entry.origin.as_str()), compiled.origin().as_deref());
         }

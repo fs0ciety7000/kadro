@@ -266,7 +266,10 @@ mod tests {
                 },
                 ExitCode::Network,
             ),
-            (UploadError::failed("url_missing", "x"), ExitCode::UploadFailed),
+            (
+                UploadError::failed("url_missing", "x"),
+                ExitCode::UploadFailed,
+            ),
             (
                 UploadError::security("https_required", "x"),
                 ExitCode::SecurityRefused,

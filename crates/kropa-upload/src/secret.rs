@@ -330,7 +330,10 @@ mod tests {
             Placement::header("X-Api-Key"),
             "header:x-api-key".parse().unwrap()
         );
-        assert_eq!("query:key".parse::<Placement>().unwrap().to_string(), "query:key");
+        assert_eq!(
+            "query:key".parse::<Placement>().unwrap().to_string(),
+            "query:key"
+        );
         assert!("nothing".parse::<Placement>().is_err());
         assert!("header:".parse::<Placement>().is_err());
         assert_ne!(Placement::body("a"), Placement::body("b"));
