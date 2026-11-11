@@ -431,7 +431,7 @@ fn build_call(
     };
     match function {
         Function::Filename | Function::Response | Function::ResponseUrl => {
-            arity(0, 0, parts.len())?
+            arity(0, 0, parts.len())?;
         }
         Function::Secret | Function::Var | Function::Header | Function::Base64 => {
             arity(1, 1, parts.len())?;

@@ -156,6 +156,7 @@ fn send(
 }
 
 /// Sends `file` to `profile`.
+#[must_use]
 pub fn deliver(
     ctx: &Context<'_>,
     config_dir: &Path,
@@ -210,23 +211,20 @@ pub fn report(
         Err(e) => (None, Some(e)),
         Ok(outcome) => {
             let format = requested.format().unwrap_or(LinkFormat::Url);
-            match format_link(
+            if let Ok(text) = format_link(
                 format,
                 &outcome.url,
                 &delivery.file_name,
                 &SecretSet::loaded(),
             ) {
-                Ok(text) => {
-                    link = Some(text);
-                    (Some(outcome), None)
-                }
-                Err(_) => {
-                    refused = UploadError::Security {
-                        reason: "secret_in_output",
-                        detail: "the link holds a secret".to_owned(),
-                    };
-                    (None, Some(&refused))
-                }
+                link = Some(text);
+                (Some(outcome), None)
+            } else {
+                refused = UploadError::Security {
+                    reason: "secret_in_output",
+                    detail: "the link holds a secret".to_owned(),
+                };
+                (None, Some(&refused))
             }
         }
     };

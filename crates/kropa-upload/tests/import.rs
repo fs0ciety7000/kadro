@@ -6,6 +6,8 @@
 //! with their place and a masked preview, never a value: the tests also check that no secret of the
 //! fixtures appears in any snapshot.
 
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
+
 use std::fmt::Write as _;
 use std::path::PathBuf;
 

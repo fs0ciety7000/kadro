@@ -3,6 +3,13 @@
 //! `upload`, `dest list|show|test|import` and `capture --upload` end to end, in process, against
 //! `wiremock` servers on the loopback and an in-memory secret store. Nothing leaves the machine.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::struct_field_names,
+    clippy::too_many_lines,
+    clippy::case_sensitive_file_extension_comparisons
+)]
+
 use std::ffi::OsString;
 use std::path::Path;
 use std::sync::Arc;

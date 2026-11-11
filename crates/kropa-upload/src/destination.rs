@@ -11,10 +11,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use jsonpath_rust::JsonPath as _;
 use regex::RegexBuilder;
 use reqwest::header::{HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
+use serde_json_path::JsonPath;
 use url::Url;
 
 use crate::error::UploadError;
@@ -552,8 +552,7 @@ fn check_regex(pattern: &str) -> Result<(), UploadError> {
 }
 
 fn check_json_path(path: &str) -> Result<(), UploadError> {
-    serde_json::Value::Null
-        .query(&normalize_json_path(path))
+    JsonPath::parse(&normalize_json_path(path))
         .map(|_| ())
         .map_err(|_| UploadError::config("response: a {json:} path is not valid (RFC 9535)"))
 }

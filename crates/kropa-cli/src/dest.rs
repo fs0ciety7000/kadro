@@ -106,6 +106,7 @@ fn secret_state(ctx: &Context<'_>, profile: &str, name: &str) -> &'static str {
 ///
 /// # Errors
 /// [`CliError`] for an unknown profile.
+#[allow(clippy::too_many_lines)]
 pub fn show(
     id: &str,
     config: &Config,
@@ -373,6 +374,7 @@ fn read_import(path: &Path, loc: &Localizer) -> Result<Vec<u8>, CliError> {
 /// [`CliError`] for a file that cannot be imported, a host that is not the expected one, a
 /// declined confirmation, a secret to store before lot 1.8, or a profile that already exists.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn import_command(
     file: &Path,
     as_id: Option<&str>,

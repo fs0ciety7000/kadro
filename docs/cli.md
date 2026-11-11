@@ -286,7 +286,7 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 
 `deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
 `error.message` et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
-Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.queue.list/1`,
+Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.dest.show/1`, `kropa.dest.test/1`, `kropa.dest.import/1`, `kropa.queue.list/1`,
 `kropa.history.list/1`, `kropa.doctor/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
 `trycmd` du lot 1.3. Les erreurs d'une commande sans schéma propre (`dest add`, `edit`, erreurs d'usage...) portent
 `kropa.error/1`. Aucune erreur, de clap ou de Kropa, ne reprend une valeur saisie (elle peut être un secret) : seul le

@@ -194,7 +194,7 @@ fn sanitize_name(raw: &str) -> String {
         name = name.replace("--", "-");
     }
     if name.is_empty() {
-        name = "secret".to_owned();
+        "secret".clone_into(&mut name);
     }
     name.truncate(56);
     name.trim_end_matches('-').to_owned()
@@ -359,7 +359,9 @@ impl Builder {
                     }
                 };
                 self.vars.insert(var.clone(), decl);
-                out.push_str(&format!("{{var:{var}}}"));
+                out.push_str("{var:");
+                out.push_str(&var);
+                out.push('}');
                 last = whole.end();
             }
             out.push_str(&value[last..]);
@@ -649,11 +651,9 @@ fn sxcu_destination(
     };
     let mut response_url = convert("URL")?;
     match string_field(object, "ResponseType")? {
+        None | Some("Text" | "RedirectionURL") if response_url.is_some() => {}
         None | Some("Text") => {}
-        Some("RedirectionURL") if response_url.is_none() => {
-            response_url = Some("{responseurl}".to_owned());
-        }
-        Some("RedirectionURL") => {}
+        Some("RedirectionURL") => response_url = Some("{responseurl}".to_owned()),
         Some(_) => {
             return Err(refuse(
                 "ResponseType: only Text and RedirectionURL are supported",

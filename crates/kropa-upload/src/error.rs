@@ -245,6 +245,15 @@ impl UploadError {
     }
 }
 
+impl From<crate::secret::SecretError> for UploadError {
+    fn from(e: crate::secret::SecretError) -> Self {
+        match e {
+            crate::secret::SecretError::NotDelivered => Self::SecretStoreNotDelivered,
+            other => Self::SecretStore(other.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use kropa_core::ExitCode;
@@ -290,14 +299,5 @@ mod tests {
         };
         assert_eq!(net.retry(), Retry::Transient);
         assert_eq!(UploadError::config("x").retry(), Retry::Final);
-    }
-}
-
-impl From<crate::secret::SecretError> for UploadError {
-    fn from(e: crate::secret::SecretError) -> Self {
-        match e {
-            crate::secret::SecretError::NotDelivered => Self::SecretStoreNotDelivered,
-            other => Self::SecretStore(other.to_string()),
-        }
     }
 }

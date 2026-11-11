@@ -11,12 +11,12 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::path::Path;
 
-use jsonpath_rust::JsonPath as _;
 use regex::RegexBuilder;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, LOCATION};
 use reqwest::multipart::{Form, Part};
 use reqwest::{Method, RequestBuilder};
 use serde_json::Value;
+use serde_json_path::JsonPath;
 use url::Url;
 
 use crate::destination::{
@@ -393,7 +393,8 @@ impl<'a> Uploader<'a> {
         }
         // Transport first: no secret is even read for a request that could not carry it.
         let https = compiled.url.scheme() == "https";
-        if !https && !(LOOPBACK_HTTP_WITH_SECRET && is_loopback_literal(&compiled.url)) {
+        let loopback_ok = LOOPBACK_HTTP_WITH_SECRET && is_loopback_literal(&compiled.url);
+        if !(https || loopback_ok) {
             return Err(UploadError::security(
                 "https_required",
                 "a secret is used: the address must be https://",
@@ -698,10 +699,10 @@ impl Env for ResponseEnv<'_> {
                 } else {
                     self.body_json()?
                 };
-                let found = value.query(&path).map_err(|_| {
+                let found = JsonPath::parse(&path).map_err(|_| {
                     UploadError::failed("bad_response", "the JSON path is not valid")
                 })?;
-                Ok(json_text(found.first().copied()))
+                Ok(json_text(found.query(value).first()))
             }
             Function::Regex => {
                 let (pattern, group) = regex.ok_or_else(|| UploadError::config("regex"))?;
@@ -845,15 +846,14 @@ fn interpret(
         if text.trim().is_empty() {
             return Ok(None);
         }
-        match validate_extracted_url(&text) {
-            Ok(parsed) => check_output(&text, &parsed, known).map(Some),
-            Err(_) => {
-                warnings.push(UploadWarning {
-                    code,
-                    detail: String::new(),
-                });
-                Ok(None)
-            }
+        if let Ok(parsed) = validate_extracted_url(&text) {
+            check_output(&text, &parsed, known).map(Some)
+        } else {
+            warnings.push(UploadWarning {
+                code,
+                detail: String::new(),
+            });
+            Ok(None)
         }
     };
     let thumbnail_url = optional(&compiled.response.thumbnail_url, "thumbnail_url_invalid")?;

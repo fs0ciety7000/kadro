@@ -6,6 +6,12 @@
 //! only, see `Cargo.toml`) lets a secret travel there. A release build refuses (`https_required`),
 //! which `https_is_required_for_a_secret_off_the_loopback` and the unit tests of the policy cover.
 
+#![allow(
+    clippy::assertions_on_constants,
+    clippy::default_trait_access,
+    clippy::assert_is_empty
+)]
+
 use kropa_upload::destination::{Destination, DestinationFile};
 use kropa_upload::engine::{LOOPBACK_HTTP_WITH_SECRET, UploadInput, Uploader};
 use kropa_upload::error::{Retry, UploadError};
