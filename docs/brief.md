@@ -2,13 +2,13 @@
 
 > Nom de travail initial : Kadro (abandonné pour homonymie, voir `decisions.md`).
 
-Outil de capture d'écran et d'enregistrement pour **Linux et macOS**. Commande : `kropa`. Langage imposé : **Rust**.
+Outil de capture d'écran, d'annotation et de partage pour **Linux et macOS**. Commande : `kropa`. Langage imposé : **Rust**.
 
 ## Produit
 
 Kropa capture, annote et partage. Chaque capture est enregistrée en local (dossier par défaut modifiable). Particularité :
 envoi optionnel de chaque capture vers la destination choisie par l'utilisateur (Zipline auto-hébergé, S3 et compatibles,
-SFTP, Imgur, ou n'importe quelle API HTTP décrite par configuration, import ShareX `.sxcu`), puis copie automatique du
+SFTP, ou n'importe quelle API HTTP (Imgur via un modèle) décrite par configuration, import ShareX `.sxcu`), puis copie automatique du
 lien public (URL, Markdown ou HTML) dans le presse-papiers.
 
 - **Cible** : développeurs, admins système, rédacteurs de documentation, équipes support, souvent adeptes de
@@ -45,7 +45,7 @@ annotations rééditables après coup.
 **Après la capture** : miniature flottante glisser-déposable ; épinglage au-dessus des fenêtres ; enregistrement local ;
 historique avec recherche ; chaîne d'actions configurable ; suppression des métadonnées avant envoi.
 
-**Envoi** : Zipline, S3, SFTP, Imgur ; destination HTTP personnalisée + import `.sxcu` ; plusieurs profils, un par
+**Envoi** : Zipline, S3, SFTP (Imgur en modèle) ; destination HTTP personnalisée + import `.sxcu` ; plusieurs profils, un par
 défaut ; copie du lien (URL/Markdown/HTML) ; file d'attente avec reprise ; envoi par morceaux.
 
 **Transversal** : raccourcis globaux configurables ; CLI complète ; modèles de nom de fichier.
