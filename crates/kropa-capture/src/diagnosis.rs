@@ -130,7 +130,7 @@ pub const ALL_REASONS: [&str; 6] = [
 pub const ALL_FALLBACKS: [&str; 1] = ["capture_screen_instead"];
 
 /// Fact codes the backends emit.
-pub const ALL_FACT_KEYS: [&str; 23] = [
+pub const ALL_FACT_KEYS: [&str; 24] = [
     "desktop",
     "session_type",
     "wayland_display",
@@ -153,6 +153,7 @@ pub const ALL_FACT_KEYS: [&str; 23] = [
     "screen_recording",
     "app_bundle",
     "bundle_identifier",
+    "display_primary",
     "display",
 ];
 
