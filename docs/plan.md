@@ -64,9 +64,9 @@ Dépend de : rien. En parallèle : 0, D1.
 
 ## Lot D2 — Maquettes et `DESIGN.md` (avant toute interface)
 Dépend de : D1 pour le logo. En parallèle : lot 1. Bloque : 2.3, 2.4, 3.5, 3.6, 4.10, 4.11.
-- [ ] D2.1 Maquettes libadwaita et AppKit, clair/sombre, FR/EN : overlay (loupe, dimensions, clavier, multi-écran), éditeur (outils à une touche), notifications (« Lien copié », « Lien prêt, Copier », « Envoi échoué »), réglages (destinations, test, import `.sxcu`, raccourcis), coffre `age`, file d'attente, premier lancement et permissions, miniature (macOS, KDE) et variante notification (GNOME) ; puis `DESIGN.md`. Agent : `ui-designer`. Fin : fichiers dans `docs/design/`.
-- [ ] D2.2 Icônes d'outils (grille 20 px, trait 1,75 px). Agent : `ui-designer`.
-- [ ] D2.3 Critique et corrections. Agent : `design-critic`. Fin : aucun bloquant ; **[Utilisateur]** valide.
+- [x] D2.1 Maquettes libadwaita et AppKit, clair/sombre, FR/EN : overlay (loupe, dimensions, clavier, multi-écran), éditeur (outils à une touche), notifications (« Lien copié », « Lien prêt, Copier », « Envoi échoué »), réglages (destinations, test, import `.sxcu`, raccourcis), coffre `age`, file d'attente, premier lancement et permissions, miniature (macOS, KDE) et variante notification (GNOME) ; puis `DESIGN.md`. Agent : `ui-designer`. Fin : fichiers dans `docs/design/`.
+- [x] D2.2 Icônes d'outils (grille 20 px, trait 1,75 px). Agent : `ui-designer`.
+- [x] D2.3 Critique et corrections. Agent : `design-critic`. Fin : aucun bloquant ; **[Utilisateur]** valide.
 - [ ] D2.4 Chaînes FR et EN en `.ftl`. Agent : `copywriter`.
 
 ## Lot 1 — v0.1 Cœur scriptable (capture → fichier → envoi → lien)
@@ -103,6 +103,7 @@ Dépend de : 1 et D2.
 Dépend de : 2 et D2.2.
 - [ ] 3.1 `kropa-doc` : objets, styles, annuler/rétablir ; format `.kropa` v1 (ZIP ; jamais envoyé) ; `docs/format-kropa.md` ; fixtures figées. Agent : `backend-dev`.
 - [ ] 3.2 `kropa-render` : formes, crayon, texte, flou fort, pixellisation, masque, compteurs, surligneur ; export PNG sans métadonnées. Agent : `backend-dev`.
+- [ ] 3.2b Outil Recadrer (touche `C`) : recadrage non destructif dans `kropa-doc`, rendu et export. Agent : `backend-dev`.
 - [ ] 3.3 Instantanés d'image (Δ 3/255, 0,1 %) Linux et macOS. Agents : `qa-tester`, `devops`.
 - [ ] 3.4 Machine d'états de l'éditeur (raccourcis à une touche, Tab, Suppr, Ctrl+Z, Ctrl+U). Agent : `backend-dev`.
 - [ ] 3.5 Coquille éditeur GTK (AT-SPI). Agent : `linux-desktop-dev`.

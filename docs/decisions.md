@@ -29,6 +29,10 @@
   - **HTTP en bouclage avec un secret** : builds de test seulement.
   - **Ajouts à `cli.md`** (§ 9 de `security/secrets.md`) acceptés : `secrets allow`, `secrets use`, `secrets migrate`,
     `dest import --expect-host`, `error.reason`, refus de `--var` vers un secret.
+- Maquettes et `DESIGN.md` (D2) **validés** le 11/11/2026, avec : outil **Recadrer** (touche `C`) dans l'éditeur dès la
+  v1 (lot 3) ; sous macOS, **Dock et barre de menus visibles quand une fenêtre est ouverte** ; libellé unique
+  **« Remplacer le jeton… »** pour un jeton refusé ; Ctrl+A / ⌘A sélectionne l'écran actif ; AccentColor ambre
+  profond sous macOS (exception à reporter dans `brand.md`).
 - Tests manuels macOS : l'utilisateur dispose d'un Mac sous macOS 15 ou plus.
 - Licence : **GPL-3.0-or-later** (choix délégué ; aligné sur ShareX et Flameshot, garde ouverte une dépendance GPL
   future). Le reste du périmètre v1 proposé par Produit est
