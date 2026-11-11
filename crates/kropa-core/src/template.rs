@@ -120,7 +120,24 @@ impl NameTemplate {
         if !literal.is_empty() {
             parts.push(Part::Literal(literal));
         }
-        Ok(Self { source: source.to_owned(), parts })
+        let template = Self { source: source.to_owned(), parts };
+        template.check_sample()?;
+        Ok(template)
+    }
+
+    /// Renders with benign sample values so that a template whose literal text can never give a
+    /// safe name (`../x`, `a/b`, `CON`) is refused as soon as it is parsed.
+    fn check_sample(&self) -> Result<(), NameError> {
+        let sample = NameContext {
+            kind: Some("screen".into()),
+            output: Some("DP-1".into()),
+            host: Some("host".into()),
+            width: Some(1920),
+            height: Some(1080),
+            counter: 1,
+        };
+        let epoch = crate::FixedClock::new(jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC));
+        self.render(&sample, &epoch, "png").map(|_| ())
     }
 
     /// The template text as written.
@@ -147,7 +164,7 @@ impl NameTemplate {
             match part {
                 Part::Literal(text) => name.push_str(text),
                 Part::Date(fmt) | Part::Time(fmt) => {
-                    let text = jiff::fmt::strftime::format(fmt.as_str(), &now)
+                    let text = jiff::fmt::strtime::format(fmt.as_str(), &now)
                         .map_err(|e| NameError::Syntax(format!("date format {fmt:?}: {e}")))?;
                     name.push_str(&sanitize(&text));
                 }
@@ -240,7 +257,7 @@ fn check_format(variable: &str, fmt: &str) -> Result<String, NameError> {
         return Err(NameError::BadArgument { variable: variable.into(), reason: "empty format".into() });
     }
     let probe = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
-    jiff::fmt::strftime::format(fmt, &probe)
+    jiff::fmt::strtime::format(fmt, &probe)
         .map_err(|e| NameError::BadArgument { variable: variable.into(), reason: e.to_string() })?;
     Ok(fmt.to_owned())
 }
@@ -288,7 +305,7 @@ pub fn validate_file_name(name: &str) -> Result<(), NameError> {
     if name.starts_with(['.', ' ']) {
         return bad("leading dot or space");
     }
-    if name.ends_with(['.', ' ']) {
+    if name.ends_with(['.', ' ']) || name.contains(" .") {
         return bad("trailing dot or space");
     }
     let stem = name.split('.').next().unwrap_or(name).trim_end();
@@ -308,7 +325,7 @@ mod tests {
     use crate::{FixedClock, NameError};
 
     fn clock() -> FixedClock {
-        FixedClock::new("2026-11-11T09:08:07+01:00[Europe/Brussels]".parse().unwrap())
+        FixedClock::new("2026-11-11T09:08:07+01:00[+01:00]".parse().unwrap())
     }
 
     fn full_ctx() -> NameContext {

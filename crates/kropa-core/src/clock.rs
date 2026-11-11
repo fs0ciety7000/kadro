@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn fixed_clock_does_not_move() {
-        let at: jiff::Zoned = "2026-11-11T09:08:07+01:00[Europe/Brussels]".parse().unwrap();
+        let at: jiff::Zoned = "2026-11-11T09:08:07+01:00[+01:00]".parse().unwrap();
         let clock = FixedClock::new(at.clone());
         assert_eq!(clock.now(), at);
         assert_eq!(clock.now(), at);
