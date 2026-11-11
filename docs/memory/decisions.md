@@ -9,3 +9,5 @@
   décisions de `docs/plan.md` (object_store, IPC socket JSON-RPC, SQLite unique…).
 - **2026-11-11** — Binaires de l'interface : `kropa-gtk` sous Linux, `kropa-app` sous macOS (dans le `.app`). Raison :
   Cargo ne conditionne pas un binaire par OS ; deux binaires `kropa-app` dans le workspace entrent en collision.
+- **2026-11-11** — Langue : précédence `--lang` > `language` de la config > `LC_ALL`/`LC_MESSAGES`/`LANG` > `en`.
+  Raison : un réglage explicite de l'utilisateur prime sur l'environnement (revue de code 1.1-1.3, point 7).
