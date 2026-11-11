@@ -1,15 +1,13 @@
 # Revue du modèle de secrets — Kropa (S.2)
 
-> S.2, `security-reviewer`, 11/11/2026. Relu : `security/secrets.md`, `decisions.md`, `uploads.md` § 4 et 7,
-> `platform-macos.md` § 4, `platform-linux.md`, `cli.md`, `architecture.md` (IPC). Vérifié sur sources primaires
-> [1]–[8] (versions de S.1 confirmées sur crates.io). Aucune dépendance de stockage encore (`Cargo.lock`).
+> S.2, `security-reviewer`, 11/11/2026. Relu : `secrets.md`, `decisions.md`, `uploads.md`, `platform-*.md`, `cli.md`,
+> `architecture.md` (IPC) ; sources primaires [1]–[8], versions de S.1 confirmées sur crates.io ; aucun code de stockage.
 
 ## Verdict
 
-**Non validable en l'état : 2 bloquants**, 10 importants, 12 mineurs. Fondations saines : trousseau d'abord, `age`
-standard, origines dans la valeur protégée, aucune bascule silencieuse, ni argument ni variable, refus avant
-connexion. Les deux bloquants contournent par simple config la promesse « un secret ne va qu'à son origine, jamais
-dans le lien ». S.3 : corriger B1 et B2, puis chaque important avant son lot. Constat macOS de S.1 confirmé (§ macOS).
+**Non validable en l'état : 2 bloquants**, 10 importants, 12 mineurs. Fondations saines (trousseau d'abord, `age`
+standard, origines protégées, aucune bascule silencieuse, ni argument ni variable). Les bloquants contournent par simple
+config la promesse « un secret ne va qu'à son origine, jamais dans le lien ». S.3 : B1, B2, puis chaque important.
 
 ## Bloquants
 
@@ -27,10 +25,9 @@ mais « références toujours neuves » ne vise que `.sxcu`, et `ref = "<profil>
 secret d'un autre. L'origine ne fixe pas l'**emplacement** : une config tierce sur la même origine déplace
 `{secret:token}` vers la query (journaux du serveur et des proxys, puis B1) ou un champ stocké et affiché
 (`x-zipline-original-name`, titre). *Correction* : (1) références limitées au profil courant (`ref = "token"`) ;
-(2) import TOML aux règles de `.sxcu` (entrées neuves, valeurs en clair extraites, aucun écrasement de profil sans
-confirmation interactive) ; (3) emplacement (`header:Authorization`, `query:key`, `form:token`, `body`) stocké avec
-`origins` (§ 2.3), vérifié à la résolution, modifiable comme une origine. *Tests* : import visant `autre/token` →
-refus ; secret déplacé → zéro requête.
+(2) import TOML aux règles de `.sxcu` (entrées neuves, valeurs extraites, pas d'écrasement sans confirmation) ;
+(3) emplacement (`header:Authorization`, `query:key`, `form:token`, `body`) stocké avec `origins` (§ 2.3), vérifié à
+la résolution, modifiable comme une origine. *Tests* : import visant `autre/token` → refus ; secret déplacé → 0 requête.
 
 ## Importants
 
@@ -42,9 +39,8 @@ refus ; secret déplacé → zéro requête.
 - **I3. IPC : serveur non authentifié, repli non défini** (§ 1, avant 2.1/4.7). Un repli vers `/tmp` sans
   `XDG_RUNTIME_DIR` (su, cron, SSH) laisse un autre utilisateur squatter la socket et recevoir `secrets.unlock`. Le
   client vérifie `peer_cred().uid == getuid()` (tokio) et le dossier (propriétaire, `0700`, pas de lien) ; pas de repli
-  (code 14) ; un seul chemin macOS `0700` (`architecture.md` : `~/Library/Caches/`, à aligner) ; les droits du fichier
-  socket ne sont pas portables [8] ; ligne ≤ 64 Kio ; `secrets.*` jamais journalisé. *Test* : « namespace » est
-  inopérant (identifiants traduits vers l'espace du récepteur [8]) → identifiants injectés + CI `sudo -u nobody`.
+  (code 14) ; un chemin macOS `0700` (`architecture.md` : `Caches`, à aligner) ; ligne ≤ 64 Kio ; `secrets.*` jamais
+  journalisé. *Test* : « namespace » inopérant (UID traduit [8]) → UID injecté + CI `sudo -u nobody`, deux sens.
 - **I4. Bouclage HTTP exploitable** (§ 4, avant 1.7). Un autre utilisateur écoute un port libre de 127.0.0.1 quand le
   service est arrêté et reçoit le jeton en clair ; `localhost` passe par le résolveur. Exception réservée aux builds de
   test ; sinon option par profil, IP littérales seules, avertissement à chaque envoi.
@@ -62,9 +58,9 @@ refus ; secret déplacé → zéro requête.
   (`String`), `HeaderValue` (`Bytes`), rustls laissent des copies. Écrire « au mieux » ; tampons pré-alloués,
   désérialisation empruntée puis `SecretString` ; retirer `mlock` ; conseiller un swap chiffré.
 - **I9. Session du coffre mal bornée** (§ 3, avant 4.7). Si chaque envoi relance les 15 min, un envoi périodique garde le
-  coffre ouvert. logind `Lock` est une *demande* (`loginctl lock-session`), l'état est `LockedHint` (à vérifier par
-  bureau). Inactivité = aucune action humaine ; plafond 8 h ; verrou sur `LockedHint`, `PrepareForSleep` (inhibiteur
-  `sleep:delay`), fin de session. *Test* : bus D-Bus privé ; « inspection du tampon » → compteur de `Drop`.
+  coffre ouvert. logind `Lock` est une *demande*, l'état est `LockedHint` (à vérifier par bureau). Inactivité = aucune
+  action humaine ; plafond 8 h ; verrou sur `LockedHint`, `PrepareForSleep` (inhibiteur `sleep:delay`), fin de
+  session. *Test* : bus D-Bus privé ; « inspection du tampon » (irréaliste) → compteur de `Drop`.
 - **I10. Secret dans le chemin : § 4 contredit § 5** (avant 1.7). § 4 l'interdit, § 5 extrait des « segments de
   `RequestURL` » (webhooks). Refuser ces imports avec un message explicite, ou autoriser un segment sous B1.
 
@@ -72,8 +68,8 @@ refus ; secret déplacé → zéro requête.
 
 - M1. Sans clé, `object_store` passe à l'IMDS (`InstanceCredentialProvider`) [7] : refuser avant `build()` ;
   `with_http_connector` y branche le client unique. M2. `reqwest` lit `HTTP(S)_PROXY` : `.no_proxy()` ou doc.
-- M3. CA privée (Zipline auto-hébergé) : `rustls-platform-verifier` (0.7.1) ou `ca_file` par profil, jamais « ignorer ».
-- M4. Origine par `url::Url::origin()` (formes IPv4, ports par défaut, point final) ; `user:pass@` refusé.
+- M3. CA privée (Zipline maison) : `rustls-platform-verifier` (0.7.1) ou `ca_file` par profil, jamais « ignorer TLS ».
+  M4. Origine par `url::Url::origin()` (formes IPv4, ports par défaut, point final) ; `user:pass@` refusé.
 - M5. Réponse hostile : `regex` seul (linéaire, `size_limit`), XML sans DTD (`roxmltree`), `thumbnail_url` jamais
   téléchargée d'office, bidi et largeur nulle refusés dans l'URL.
 - M6. Coffre en `O_NOFOLLOW`, contrôle par `fstat` du descripteur et du dossier, `*.tmp` orphelins retirés ; SQLite
@@ -81,9 +77,9 @@ refus ; secret déplacé → zéro requête.
 - M7. `--password-fd`/`--secret-fd` : 4 Kio max, `CLOEXEC`, refus de 1, 2 et d'un fd à double usage, un seul `\n` final
   retiré. M8. `--var` d'un `{inputbox:}` d'authentification = secret en argument : le convertir à l'import.
 - M9. « Délai croissant » n'est pas une mitigation (attaque hors ligne) ; sérialiser les déverrouillages (256 Mio).
-- M10. « Pas de `Serialize` » contredit l'écriture du coffre (type privé) ; le magasin Apple fait recherche puis
+  M10. `unsafe_code = "deny"` : `prctl`, `setrlimit`, `flock` par `rustix` (1.1.6), pair par tokio.
+- M11. « Pas de `Serialize` » contredit l'écriture du coffre (type privé) ; le magasin Apple fait recherche puis
   modification [4], pas `SecItemUpdate` ; `cli.md` n'a ni `secrets allow`, ni `use`, ni `migrate` ; `allow` interactif.
-- M11. `unsafe_code = "deny"` : `prctl`, `setrlimit`, `flock` par `rustix` (1.1.6), pair par tokio.
 - M12. § 7 : la confirmation d'origine n'arrête pas un processus du même utilisateur (il appelle l'IPC) ; le dire.
   Dialogue : proposer de vider le presse-papiers s'il contient le jeton collé ; X11 : frappe lisible, à documenter.
 
@@ -95,8 +91,7 @@ tort l'absence d'invite. Source primaire, `securityd` `partitionIdForProcess` [5
 Development ; tout autre code signé, **ad hoc comme auto-signé**, reçoit `cdhash:<hash>`, qui change à chaque build.
 La DR stable valide l'ACL, la partition ne correspond plus → invite après chaque mise à jour, par élément et par
 binaire ; « Toujours autoriser » ajoute le nouveau cdhash. TCC ne lit que la DR : le certificat y garde son intérêt.
-Limites : code ouvert (branche `main`), pas un binaire 15/26/27 ; forme de l'invite (mot de passe ?) à relever en 1.6
-(builds N puis N+1 des deux binaires, partitions relevées avant/après). S.3 : corriger `platform-macos.md` § 4.4.
+Limites : code `main`, pas un binaire 15/26/27 ; à relever en 1.6 (N puis N+1, deux binaires). À corriger : § 4.4.
 
 ## Modèle de menaces : réalisme des tests
 
@@ -116,33 +111,27 @@ fichier piégé (age refuse avant calcul [2] ; ajouter `log2 N` = 21 et scrypt m
 | Coffre laissé ouvert | inspection mémoire irréaliste | compteur de `Drop`, signaux D-Bus simulés (I9) |
 | Invites Keychain ; `.sxcu` | protocole vague ; une fixture | deux binaires × deux builds ; jeton dans chemin, `Data` |
 
-Menaces absentes : phrase faible, écrivains concurrents, serveur IPC usurpé, port de bouclage squatté, trousseau qui
-bloque un script, emplacement déplacé, formes encodées dans les journaux, réponse XML piégée.
+À ajouter : phrase faible, écrivains concurrents, IPC usurpé, bouclage squatté, trousseau bloquant, emplacement déplacé.
 
 ## Réponses aux questions ouvertes
 
 1. **Keychain et auto-signé** : oui, invite à chaque mise à jour [5]. Coffre **pas** par défaut : il redemande sa phrase
    à chaque session, le Keychain une fois par mise à jour. Trousseau, un seul élément (Q5), notes de version.
-2. **Secret Service** : `rt-tokio-crypto-rust` (aes, cbc, hkdf, sha2 ; sans OpenSSL). Le magasin 1.0.1 impose
-   `EncryptionType::Dh` [3] : pas de repli `plain`, service sans DH = échec (à tester). Gain faible (bus du même
-   utilisateur, DH 1024 bits), coût nul : ne rien ajouter.
-3. **Facteur scrypt** : 18 fixe (256 Mio), oui ; la calibration donnerait 19–20 sur machine rapide (jusqu'à 1 Gio et
-   des secondes sur une lente). Plafond 20 suffisant ; au-delà, refus avec la commande de réécriture. La marge vient
-   surtout de la phrase (I1).
-4. **Phrase en mémoire** : ne pas la garder. Le résident garde les valeurs ; toute écriture (`set`, `remove`, `allow`,
-   `migrate`), rare, redemande la phrase. Repli si gênant : identité X25519 chiffrée par phrase (format age standard).
+2. **Secret Service** : `rt-tokio-crypto-rust` (sans OpenSSL). Le magasin 1.0.1 impose `EncryptionType::Dh` [3] : pas
+   de repli `plain`, service sans DH = échec (à tester). Gain faible (bus du même utilisateur, DH 1024 bits), coût nul.
+3. **Facteur scrypt** : 18 fixe (256 Mio), oui ; la calibration varie selon la machine (19–20 sur une rapide, jusqu'à
+   1 Gio). Plafond 20 suffisant ; au-delà, refus avec la commande de réécriture. La marge vient de la phrase (I1).
+4. **Phrase en mémoire** : ne pas la garder. Le résident garde les valeurs ; toute écriture, rare, redemande la phrase.
+   Repli si gênant : identité X25519 chiffrée par phrase (format age standard), gardée à la place de la phrase.
 5. **Granularité** : un seul élément (`kropa` / `store`) portant le même document JSON que le coffre, sur les deux OS :
    une invite par mise à jour et par binaire, un modèle, un verrou (I2). Coût : moins lisible dans Seahorse.
-6. **Origines S3** : lier au triplet (endpoint canonique, région, bucket) ; virtual-host et path-style en sont deux
-   formes. SigV4 n'envoie pas la clé secrète : le risque est l'usage des droits sur un autre bucket (écrasement), donc
-   changer bucket, région ou endpoint = même confirmation qu'une origine.
-7. **Entropie** : pas critère principal. Toute valeur d'en-tête, d'argument, de paramètre ou de corps est secrète sauf
-   liste blanche (`Accept`, `Content-Type`, `User-Agent`, gabarits purs), montrée masquée et reclassable ; avec `--yes`,
-   tout le reste va au magasin. Entropie (≥ 3,5 bits/car. sur ≥ 16) pour les segments de chemin seulement (I10).
+6. **Origines S3** : lier au triplet (endpoint canonique, région, bucket), virtual-host et path-style compris. SigV4
+   n'envoie pas la clé : le risque est l'écriture dans un autre bucket, donc changer le triplet = confirmation.
+7. **Entropie** : secondaire. Toute valeur d'en-tête, d'argument ou de corps est secrète sauf liste blanche (`Accept`,
+   `Content-Type`, gabarits purs), masquée et reclassable ; `--yes` range le reste. Entropie : segments de chemin (I10).
 8. **`PR_SET_DUMPABLE(0)`** : le garder dans `kropa-app` en release et dans `kropa` quand il tient un secret : il
    interdit aussi `ptrace` et `/proc/<pid>/mem` au même utilisateur non root [8]. Coût faible (ni core dump ni gdb sans
-   root, aucun rapport de plantage automatique). Désactivé sous `debug_assertions`, jamais par variable. macOS : le
-   runtime renforcé bloque déjà l'attache.
+   root, aucun rapport de plantage). Désactivé sous `debug_assertions`, jamais par variable ; macOS : runtime renforcé.
 
 ## Non vérifié
 
