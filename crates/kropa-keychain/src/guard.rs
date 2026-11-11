@@ -461,10 +461,8 @@ mod tests {
         // The build script signs with these identifiers: a drift would refuse every client.
         let script = include_str!("../../../scripts/bundle-macos.sh");
         assert!(script.contains(&format!("APP_ID=\"{BROKER_IDENTIFIER}\"")));
-        assert!(
-            script.contains(&format!("{CLIENT_IDENTIFIER}\""))
-                || script.contains("\"$APP_ID.app\"")
-        );
+        assert!(script.contains("CLIENT_ID=\"$APP_ID.app\""));
+        assert_eq!(CLIENT_IDENTIFIER, format!("{BROKER_IDENTIFIER}.app"));
     }
 
     #[test]

@@ -94,6 +94,11 @@ jobs:
           archs=$(lipo -archs "$app/Contents/MacOS/kropa")
           echo "architectures: $archs"
           case "$archs" in *arm64*x86_64* | *x86_64*arm64*) ;; *) echo "not a universal binary" >&2; exit 1 ;; esac
+          # kropa-app (the only client of the Keychain broker) is in the bundle, universal, signed apart.
+          archs=$(lipo -archs "$app/Contents/MacOS/kropa-app")
+          echo "kropa-app architectures: $archs"
+          case "$archs" in *arm64*x86_64* | *x86_64*arm64*) ;; *) echo "kropa-app is not a universal binary" >&2; exit 1 ;; esac
+          codesign --verify --strict --verbose=2 "$app/Contents/MacOS/kropa-app"
           "$app/Contents/MacOS/kropa" --json doctor > "$RUNNER_TEMP/doctor.json"
           cat "$RUNNER_TEMP/doctor.json"
           grep -q '"key":"app_bundle","state":"present"' "$RUNNER_TEMP/doctor.json"

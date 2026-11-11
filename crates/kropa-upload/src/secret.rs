@@ -5,7 +5,7 @@
 //! The real stores live in `kropa-store` (lot 1.8). Here lives the contract the upload engine needs
 //! from them ([`SecretSource`]), the one the `secrets` commands need ([`SecretStore`]), an in-memory
 //! implementation for tests ([`MemorySecretSource`]) and the refusal used where there is no store
-//! ([`UnavailableSecretSource`]: macOS until the Keychain broker of lot 1.8m).
+//! ([`UnavailableSecretSource`]: a platform that is neither Linux nor macOS, and tests).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -166,7 +166,7 @@ pub struct NewSecret {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum SecretError {
-    /// There is no secret store in this build (macOS until lot 1.8m).
+    /// There is no secret store in this build (a platform without one).
     #[error("the secret store is not available in this build")]
     NotDelivered,
     /// The store failed; the text never holds a secret.
@@ -243,7 +243,7 @@ pub enum StoreState {
     Ambiguous,
     /// The user refused access (macOS Keychain prompt).
     Denied,
-    /// This build has no store (macOS until lot 1.8m).
+    /// This build has no store (a platform without one).
     NotDelivered,
 }
 
@@ -274,7 +274,8 @@ pub struct ProfileCount {
 /// What `kropa secrets status` shows. Never a value, never a secret's name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreStatus {
-    /// Store in use: `keyring`, `keychain-broker`, `memory`.
+    /// Store in use: `keyring` (Linux), `keychain` (macOS, direct), `keychain-broker` (macOS, through
+    /// the broker), `memory`.
     pub store: &'static str,
     /// State.
     pub state: StoreState,
@@ -335,7 +336,7 @@ pub trait SecretStore: SecretSource {
     ) -> Result<(), SecretError>;
 }
 
-/// The source of a build without a store (macOS until lot 1.8m): nothing to read, and a clear error
+/// The source of a build without a store: nothing to read, and a clear error
 /// (exit 5) when a secret is needed.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableSecretSource;

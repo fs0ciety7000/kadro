@@ -109,6 +109,83 @@ script ni par l'assistant). `<CERT>` = nom du certificat dans le trousseau.
   entrée reste cochée (cas « entrée périmée » ci-dessus).
 - [ ] Noter le résultat dans `docs/decisions.md` (tâche 1.6).
 
+## Secrets : Keychain et courtier (lot 1.8m)
+
+> La CI `macos-15` prouve sans certificat : l'élément unique (clavier de test créé par l'API), le verrou, le protocole,
+> `LOCAL_PEERTOKEN` sur une `socketpair`, les exigences de code acceptées par le système, le refus du courtier réel par
+> un appelant non signé du projet. Elle ne dit **rien** de : l'invite Keychain réelle, un pair signé du certificat, le
+> runtime renforcé réel, « Refuser ». C'est cette liste. Prérequis : le certificat auto-signé de la tâche 1.6 (création
+> et garde de la clé : l'utilisateur) ; `<CERT>` = son nom.
+
+**Construire.** `scripts/bundle-macos.sh --sign "<CERT>" --hardened-runtime` (les deux binaires sont signés du même
+certificat, `kropa-app` à part).
+
+- [ ] `codesign -dv --verbose=4 target/bundle/Kropa.app/Contents/MacOS/kropa-app` : `Identifier=io.github.fs0ciety7000.Kropa.app`,
+  `flags=0x10000(runtime)`. Même chose pour le bundle (`Identifier=io.github.fs0ciety7000.Kropa`, `runtime`).
+  `codesign -d --entitlements - …` : **aucun** `get-task-allow`.
+- [ ] `codesign -dr - …/kropa-app` et `…/Kropa.app` : `certificate leaf = H"…"` **identique** aux deux, sans `cdhash`.
+
+**Une seule invite par mise à jour (le point de U1).** Mettre `kropa` du bundle dans le PATH. Retirer l'élément s'il existe :
+Accès au trousseau, chercher `io.github.fs0ciety7000.Kropa`, supprimer.
+
+- [ ] Avec un profil `zipline` à un secret et un profil à **deux** secrets : `kropa secrets set zipline token` puis
+  `kropa secrets set s3 access`, `kropa secrets set s3 secret`. Accès au trousseau : **un seul** élément
+  `io.github.fs0ciety7000.Kropa`, compte `store` (et non trois). Noter ce que macOS a demandé à chaque commande
+  (la création par `kropa` ne doit rien demander : il est le créateur).
+- [ ] `kropa secrets status` : `store: keychain (available)`, `zipline: 1`, `s3: 2`, aucune valeur.
+- [ ] `kropa upload …` vers une destination à secret : **aucune invite** (même binaire, même `cdhash`).
+- [ ] **Build 2** : modifier une chaîne, `scripts/bundle-macos.sh --sign "<CERT>" --hardened-runtime` au même endroit.
+  `kropa secrets status` : **une invite** « Kropa veut utiliser… » nommant `kropa` ; choisir « Toujours autoriser ».
+  Puis `kropa secrets status` et `kropa upload` : **aucune** invite. Noter si l'invite revient pour les 3 secrets (elle ne
+  doit pas : un seul élément). Si macOS en montre plusieurs, noter combien et pourquoi (décision U1 à revoir).
+- [ ] Contrôle d'accès de l'élément (Accès au trousseau, onglet « Contrôle d'accès ») : `kropa` listé ; `kropa-app` **absent**.
+  `kropa-app` ne lit jamais le Keychain.
+
+**Refus de l'invite.**
+
+- [ ] Après un build 3, `kropa secrets status` et **Refuser** à l'invite : code **4**, `error.reason` ou état
+  `keychain_denied`/`denied`, message avec le chemin dans Accès au trousseau, aucun repli vers un autre magasin. **Noter
+  l'`OSStatus` exact** (`kropa --json secrets status`, le champ `detail` ne cite que « refused ») : le code lit
+  `errSecUserCanceled` (-128) ou `errSecAuthFailed` (-25293) comme un refus, hypothèse à confirmer.
+- [ ] Trousseau de session verrouillé (`security lock-keychain login.keychain-db`), sans terminal (`kropa … </dev/null`
+  depuis `ssh localhost`) : code **7** `keyring_locked` en moins de 6 s, **aucune** boîte de dialogue.
+- [ ] Même commande avec un terminal : l'invite de déverrouillage du système s'affiche ; refuser → `keyring_locked`.
+
+**Courtier : appelant autorisé.** `…/Kropa.app/Contents/MacOS/kropa-app --keychain-status`
+
+- [ ] Sortie `store: keychain-broker`, `state: available`, les mêmes profils et nombres que `kropa secrets status`, code 0.
+  **Invite** : combien, et nomme-t-elle `kropa` (le courtier), pas `kropa-app` ? Une seule après une mise à jour, jamais
+  deux (CLI puis courtier). Noter.
+- [ ] `log stream --predicate 'subsystem == "com.apple.securityd"'` pendant la commande : requêtes présentes (le
+  courtier a bien lu le Keychain).
+
+**Courtier : appelants refusés (zéro requête à `securityd`).** Pour chaque cas, lancer `log stream --predicate 'subsystem == "com.apple.securityd"'` dans un
+autre terminal et vérifier **qu'aucune requête n'apparaît** pendant la commande.
+
+- [ ] `…/Kropa.app/Contents/MacOS/kropa __store-broker` depuis le Terminal : code **71**, `keychain broker refused: no_channel`
+  sur stderr, rien sur stdout.
+- [ ] Fd 3 forgé par un shell, `socketpair` de Python lancée par `python3` : `python3 -c "import socket,os,sys;
+  a,b=socket.socketpair();os.dup2(b.fileno(),3);os.execv('/…/Kropa.app/Contents/MacOS/kropa',['kropa','__store-broker'])"`
+  (le fd est fermé à l'`exec` si CLOEXEC : essayer aussi `os.set_inheritable(3, True)`) : code **75**
+  `peer_code_rejected` (le pair est `python3`, pas `kropa-app`), sans requête `securityd`.
+- [ ] Parent signé autrement : copier `kropa-app`, le re-signer **ad hoc** (`codesign --force --sign - copie`) et le lancer
+  en `--keychain-status` avec un `kropa` voisin copié aussi : `keychain_broker_refused` (75) ou `…_unavailable` (74 :
+  le broker lui-même n'est plus signé du certificat). Noter le code.
+- [ ] Parent signé du certificat **sans** runtime renforcé (build sans `--hardened-runtime` du seul `kropa-app`) :
+  refus 75 (`le pair n'est pas signé avec le runtime renforcé`).
+- [ ] Bundle signé **ad hoc** (`scripts/bundle-macos.sh`) : `kropa-app --keychain-status` donne
+  `keychain_broker_unavailable` (74) ; `kropa secrets status` (direct) fonctionne.
+- [ ] **Jeton périmé** (point 7 de § 2.2.1) : un programme qui crée la `socketpair`, lance `kropa __store-broker` puis fait
+  `exec` de `kropa-app` : le courtier doit refuser (`SecCodeCopyGuestWithAttributes` échoue sur le jeton). **S'il
+  accepte, le noter dans `decisions.md`** : le cas relève alors du § 7.
+- [ ] Processus parent mort avant la réponse : lancer `kropa-app --keychain-status` et le tuer (`kill -9`) pendant l'invite :
+  aucune écriture, aucun processus `kropa __store-broker` orphelin après 120 s (`pgrep -fl __store-broker`).
+
+**Concurrence.**
+
+- [ ] Deux `kropa secrets set` simultanés (deux terminaux) sur deux secrets : `kropa secrets status` en voit les deux.
+  Dossier `~/Library/Application Support/io.github.fs0ciety7000.Kropa/` en `0700`, `store.lock` en `0600`.
+
 ## Résultats
 
 À remplir : date, macOS, architecture, terminal utilisé, entrée listée par les Réglages (Kropa ou terminal), cases non

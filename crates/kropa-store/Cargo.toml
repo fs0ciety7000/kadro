@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 kropa-core.workspace = true
+kropa-keychain.workspace = true
 kropa-upload.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -19,6 +20,10 @@ zeroize.workspace = true
 # Linux: the Secret Service over D-Bus (GNOME Keyring, KWallet, KeePassXC), no C library.
 [target.'cfg(target_os = "linux")'.dependencies]
 secret-service.workspace = true
+
+# macOS: where the lock file of the Keychain store lives (`~/Library/Application Support`).
+[target.'cfg(target_os = "macos")'.dependencies]
+directories.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

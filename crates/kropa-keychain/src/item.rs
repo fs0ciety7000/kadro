@@ -195,6 +195,32 @@ pub trait ItemStore: Send + Sync {
     fn set_interactive(&self, _interactive: bool) {}
 }
 
+impl<T: ItemStore + ?Sized> ItemStore for Box<T> {
+    fn read(&self, profile: &str, name: Option<&str>) -> Result<Vec<Item>, Failure> {
+        (**self).read(profile, name)
+    }
+
+    fn list(&self) -> Result<Vec<ItemName>, Failure> {
+        (**self).list()
+    }
+
+    fn create(&self, profile: &str, name: &str, document: &[u8]) -> Result<(), Failure> {
+        (**self).create(profile, name, document)
+    }
+
+    fn replace(&self, profile: &str, name: &str, document: &[u8]) -> Result<(), Failure> {
+        (**self).replace(profile, name, document)
+    }
+
+    fn remove(&self, profile: &str, name: &str) -> Result<bool, Failure> {
+        (**self).remove(profile, name)
+    }
+
+    fn set_interactive(&self, interactive: bool) {
+        (**self).set_interactive(interactive);
+    }
+}
+
 /// The key of the entry `<profile>/<name>` in the store document.
 #[must_use]
 pub fn account(profile: &str, name: &str) -> String {

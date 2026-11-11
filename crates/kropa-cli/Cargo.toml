@@ -38,6 +38,10 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 trycmd.workspace = true
 wiremock.workspace = true
 
+# macOS: the real broker is started by the real client in `tests/macos.rs`.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+kropa-keychain.workspace = true
+
 # The fake screenshot portal of `tests/portal.rs`: a D-Bus service on a private bus.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 kropa-capture = { workspace = true, features = ["test-support"] }

@@ -33,6 +33,7 @@ build:   cargo build --workspace --locked
 │   ├── kropa-capture        # backends de capture Linux et macOS
 │   ├── kropa-upload         # destinations, client HTTP unique, S3, SFTP
 │   ├── kropa-store          # SQLite (historique, file), secrets
+│   ├── kropa-keychain       # Keychain macOS (un élément), courtier `kropa __store-broker`, protocole (lot 1.8m)
 │   ├── kropa-i18n           # Fluent FR/EN
 │   ├── kropa-cli            # paquet `kropa` : la CLI
 │   ├── kropa-gtk            # interface Linux (binaire kropa-gtk)
@@ -59,7 +60,8 @@ build:   cargo build --workspace --locked
 10. Local d'abord : aucune requête réseau non configurée, aucune télémétrie. Un seul client HTTP, construit par
     `kropa-upload`. Horloge injectable dans le code testé.
 11. Toute chaîne visible passe par Fluent (`kropa-i18n`), en français et en anglais.
-12. `unsafe` interdit hors du code macOS (`kropa-macos`, backend macOS de `kropa-capture`), et toujours justifié.
+12. `unsafe` interdit hors du code macOS (`kropa-macos`, backend macOS de `kropa-capture`, modules `system`, `spawn` et
+    `apple` de `kropa-keychain`), et toujours justifié (`// SAFETY:`).
 
 ## Sécurité
 

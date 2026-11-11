@@ -131,13 +131,16 @@ impl BrokerClient {
         drop(line);
         let mut answer = Zeroizing::new(Vec::with_capacity(4096));
         let read = Read::take(&mut channel, MAX_REPLY_LEN as u64 + 1).read_to_end(&mut answer);
+        let timed_out = matches!(
+            &read,
+            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut)
+        );
+        if timed_out {
+            // A broker that does not answer is not waited for: it is stopped.
+            let _ = child.kill();
+        }
         let status = reap(&mut child);
-        if let Err(error) = &read
-            && matches!(
-                error.kind(),
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-            )
-        {
+        if timed_out {
             return Err(Failure::new(
                 FailureKind::Timeout,
                 "the Keychain broker did not answer in time",

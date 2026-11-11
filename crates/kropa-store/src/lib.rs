@@ -8,10 +8,10 @@
 //! [`SecretStore`](kropa_upload::secret::SecretStore) to manage). [`open_system_store`] gives the
 //! one of the platform:
 //!
-//! - Linux: [`SecretServiceStore`], the Secret Service over D-Bus.
-//! - macOS: the Keychain, **only through a broker** (decision U1, `docs/security/secrets.md`
-//!   section 2.2): [`KeychainBroker`] is the contract, its implementation is lot 1.8m. Until then
-//!   the store refuses with exit 5 ([`UnavailableSecretSource`](kropa_upload::secret::UnavailableSecretSource)).
+//! - Linux: [`SecretServiceStore`], the Secret Service over D-Bus (one item per secret).
+//! - macOS: [`KeychainStore`] over the classic file keychain, **one single item** that holds every
+//!   entry (so that an update costs one Keychain prompt, not one per secret). `kropa-app` reaches it
+//!   through the broker, see [`broker`].
 //!
 //! There is never a silent switch from a store to another: the one that is chosen answers, or
 //! fails with a reason.
@@ -20,19 +20,52 @@
 
 pub mod broker;
 pub mod document;
+pub mod keychain_store;
 #[cfg(target_os = "linux")]
 pub mod secret_service;
 
-pub use broker::KeychainBroker;
+pub use broker::{KeychainBroker, open_broker_store};
+pub use keychain_store::KeychainStore;
+pub use kropa_keychain::BROKER_ARGUMENT;
 #[cfg(target_os = "linux")]
 pub use secret_service::{SERVICE, SecretServiceStore, Timeouts};
+
+#[cfg(target_os = "macos")]
+pub use broker::run_broker;
+#[cfg(target_os = "macos")]
+pub use kropa_keychain::item::SERVICE;
 
 use std::sync::Arc;
 
 use kropa_core::Clock;
 use kropa_upload::secret::SecretStore;
 
+/// The Keychain of the user, as an item store: the real one, or, when the home folder is unknown
+/// (so that the lock file has no place), one that says so on every call.
+#[cfg(target_os = "macos")]
+fn macos_backend() -> Box<dyn kropa_keychain::item::ItemStore> {
+    use kropa_keychain::item::{Failure, FailureKind, SERVICE};
+    use kropa_keychain::memory::MemoryItemStore;
+
+    match directories::BaseDirs::new() {
+        Some(dirs) => Box::new(kropa_keychain::FileKeychain::user_default(
+            dirs.data_dir().join(SERVICE).join("store.lock"),
+        )),
+        None => {
+            let unusable = MemoryItemStore::new();
+            unusable.fail_with(Failure::new(
+                FailureKind::Unavailable,
+                "the home folder of the user is unknown",
+            ));
+            Box::new(unusable)
+        }
+    }
+}
+
 /// The secret store of this platform. Opens nothing yet: each call connects by itself.
+///
+/// On macOS this is the direct path of `kropa` (the command line); `kropa-app` uses
+/// [`open_broker_store`].
 #[must_use]
 pub fn open_system_store(
     clock: Arc<dyn Clock + Send + Sync>,
@@ -41,9 +74,13 @@ pub fn open_system_store(
     {
         Box::new(SecretServiceStore::new(clock))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
-        // Lot 1.8m brings the Keychain broker of macOS; nothing is simulated until then.
+        Box::new(KeychainStore::new(macos_backend(), clock, "keychain"))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        // No store on this platform; nothing is simulated.
         let _ = clock;
         Box::new(kropa_upload::secret::UnavailableSecretSource)
     }

@@ -116,3 +116,79 @@ fn nothing_is_written_when_the_capture_does_not_happen() {
     let files = std::fs::read_dir(&work).expect("read dir").count();
     assert_eq!(files, 0, "no file after a failure");
 }
+
+#[test]
+fn secrets_status_reads_the_keychain_and_never_says_not_delivered() {
+    // The Keychain of the runner or of the Mac of whoever runs the tests: whatever its state, the
+    // report is a report (exit 0) and says it is the Keychain. It never prompts: no terminal here.
+    let output = kropa(&["--lang", "en", "--json", "secrets", "status"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let doc = json_of(&output);
+    assert_eq!(doc["schema"], "kropa.secrets.status/1");
+    assert_eq!(doc["store"], "keychain");
+    let state = doc["state"].as_str().expect("state");
+    assert!(
+        ["available", "locked", "unavailable", "denied", "ambiguous"].contains(&state),
+        "{state}"
+    );
+}
+
+#[test]
+fn the_broker_mode_refuses_from_a_shell_before_any_keychain_access() {
+    // Started like this, from a test process, the broker has no socket on fd 3: the launch checks
+    // refuse it (status 71, `no_channel`), with the reason on stderr and nothing on stdout.
+    let output = Command::new(env!("CARGO_BIN_EXE_kropa"))
+        .arg("__store-broker")
+        .env_clear()
+        .output()
+        .expect("run kropa");
+    assert_eq!(output.status.code(), Some(71), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("keychain broker refused: no_channel"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn the_broker_is_not_a_command_and_takes_no_arguments() {
+    // `__store-broker` with anything else is an ordinary unknown command.
+    let output = kropa(&["__store-broker", "extra"]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+}
+
+#[test]
+fn a_caller_that_is_not_kropa_app_gets_nothing_from_the_real_broker() {
+    // This test process starts the real `kropa __store-broker` on a real socket pair, as `kropa-app`
+    // would. The binary is signed ad hoc (the linker does it), not with a project certificate, so the
+    // broker serves nobody: `keychain_broker_unavailable`. Were it signed with the certificate, this
+    // test process would still not be `kropa-app`: `keychain_broker_refused`. Either way, no entry.
+    use kropa_keychain::client::{BrokerClient, Timeouts};
+    use kropa_keychain::item::{FailureKind, ItemStore};
+
+    let client = BrokerClient::new(env!("CARGO_BIN_EXE_kropa"))
+        .for_tests(&["__store-broker"], Timeouts::default());
+    let error = client.read("zipline", None).unwrap_err();
+    assert!(
+        matches!(
+            error.kind,
+            FailureKind::BrokerUnavailable | FailureKind::BrokerRefused
+        ),
+        "{error:?}"
+    );
+    assert_eq!(client.list().unwrap_err().kind, error.kind);
+}
+
+#[test]
+fn the_client_does_not_even_start_a_broker_it_cannot_verify() {
+    // Without `for_tests` the client checks the signature of the broker's binary first, and this
+    // test binary is not signed with the project certificate to say what it must.
+    use kropa_keychain::client::BrokerClient;
+    use kropa_keychain::item::{FailureKind, ItemStore};
+
+    let client = BrokerClient::new(env!("CARGO_BIN_EXE_kropa"));
+    let error = client.list().unwrap_err();
+    assert_eq!(error.kind, FailureKind::BrokerUnavailable);
+    assert!(error.detail.contains("disabled"), "{}", error.detail);
+}

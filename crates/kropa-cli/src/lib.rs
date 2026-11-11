@@ -146,8 +146,8 @@ pub fn run_with(
 
 /// What the commands need from outside the process, injectable for tests.
 pub struct Services<'a> {
-    /// Where secrets are read and written: the system keyring on Linux, nothing (exit 5) on macOS
-    /// until the Keychain broker of lot 1.8m.
+    /// Where secrets are read and written: the system keyring on Linux, the Keychain on macOS
+    /// (read directly by `kropa`; `kropa-app` goes through the broker).
     pub secrets: &'a dyn SecretStore,
     /// Where the value of a secret is read from (terminal, stdin, descriptor).
     pub input: &'a dyn SecretInput,

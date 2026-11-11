@@ -144,6 +144,12 @@ accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets �
   (aucune invite Keychain, phrase de passe à chaque session du résident). Le chemin direct de `kropa` (CLI) est
   inchangé : il lit l'élément lui-même.
 
+- **Lot 1.8m : un seul élément Keychain sous macOS** (`kSecClassGenericPassword`, service
+  `io.github.fs0ciety7000.Kropa`, compte `store`) qui contient le document v2 de **toutes** les entrées `<profil>/<nom>`,
+  lu-modifié-écrit sous `store.lock` par le seul binaire qui touche le Keychain. Raison : l'ACL d'un élément est liée au
+  `cdhash` du binaire, donc un élément par secret coûterait **une invite par élément** après chaque mise à jour (S3 :
+  deux) et non une (U1). L'interface `SecretStore` reste par entrée, comme sous Linux (qui garde un élément par secret :
+  le Secret Service n'a pas cette ACL, voir `secret_service.rs`).
 - Mitigations communes : un seul élément ; **modification en place** (le magasin Apple fait recherche puis
   modification [4], jamais suppression/recréation qui réinitialise l'ACL) ; notes de version qui annoncent l'invite.
   Jamais d'ajout de `unsigned:` ni de `apple-tool:` (partition de `security(1)` [11]), jamais de
@@ -194,6 +200,34 @@ que le chemin direct impose à un binaire inconnu.
    fait `exec` de `kropa-app` » n'est plus couvert et relève du § 7) ; l'exigence avec feuille auto-signée est acceptée par `SecCodeCheckValidity` ; l'invite Keychain
    nomme `kropa` et ne revient qu'une fois par mise à jour ; `kropa __store-broker` lancé depuis Terminal (avec ou sans
    fd 3 forgé) → refus et **aucune** requête à `securityd` (`log stream --predicate 'subsystem == "com.apple.securityd"'`).
+
+**Mise en œuvre du lot 1.8m** (`crates/kropa-keychain`, `crates/kropa-store/src/broker.rs`) : le courtier est `kropa
+__store-broker` (binaire `kropa`, seul à lire le Keychain, identifiant = l'ID d'application) ; le client est `kropa-app`
+(identifiant `<ID>.app`, signé à part par `scripts/bundle-macos.sh`) ; la CLI `kropa` lit le Keychain **directement**
+(même code, même `cdhash`, donc même invite, sans courtier : un courtier pour la CLI n'apporterait rien et n'existerait
+pas avec une signature ad hoc). Écarts et précisions :
+
+- L'exigence imposée au pair est **dérivée de la signature du courtier** (`identifier "<ID>.app" and certificate leaf =
+  H"<SHA-1 de sa propre feuille>"`), car l'empreinte n'est pas connue à la compilation ; le contrôle « le courtier est
+  signé du même certificat » précède donc celui du pair. Une signature **ad hoc ou absente** (DR = `cdhash`) fait que le
+  courtier **refuse tout** (statut 74) : il n'y a pas de mode affaibli, un identifiant ad hoc se donne à n'importe quel
+  binaire.
+- Vérifié en plus du § 2.2.1 : le pair porte le **runtime renforcé** (drapeau `CS_RUNTIME` de sa signature, lu par
+  `SecCodeCopySigningInformation`) ; échec de lecture = refus. `LOCAL_PEERTOKEN` est recoupé avec `LOCAL_PEERPID`.
+- Le client **vérifie le binaire du courtier** (même certificat, identifiant `kropa`) avant de le lancer ; un client non
+  signé du certificat ne lance pas de courtier (`keychain_broker_unavailable`).
+- `fork`+`exec` (`Command` + `pre_exec`) à la place de `posix_spawn` ; fd 3, fd 0-2 sur `/dev/null`, environnement vidé,
+  répertoire `/`. Les autres descripteurs ne sont pas fermés (ceux de Rust sont `CLOEXEC`). Refus = statut de sortie
+  70-80 (la sortie d'erreur du courtier est `/dev/null` quand `kropa-app` le lance).
+- Lecture-modification-écriture sous `flock` de `store.lock` (`~/Library/Application Support/<ID>/`, `0700`/`0600`,
+  `O_NOFOLLOW`, propriétaire vérifié sur le descripteur) ; l'élément est modifié en place, et reste vide (jamais
+  supprimé) quand la dernière entrée part.
+- **Non vérifié** (à faire sur le Mac, `docs/testing/manual-macos.md`) : tout ce qui exige un certificat (pair signé,
+  runtime renforcé réel, nombre d'invites), le statut renvoyé quand l'utilisateur presse « Refuser » (lu comme
+  `errSecUserCanceled` ou `errSecAuthFailed`), le jeton périmé après `exec`. **Prouvé par la CI macOS** (sans
+  certificat) : `LOCAL_PEERTOKEN` sur une `socketpair` rend le créateur et `SecCodeCopyGuestWithAttributes` sait le
+  retrouver ; les exigences construites sont acceptées par `SecRequirementCreateWithString` ; un binaire ad hoc n'a pas
+  de certificat à épingler ; le courtier réel refuse un appelant non signé du projet.
 
 ### 2.3 Document stocké (trousseau et coffre)
 

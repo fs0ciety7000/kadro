@@ -1568,6 +1568,7 @@ dependencies = [
  "kropa-capture",
  "kropa-core",
  "kropa-i18n",
+ "kropa-keychain",
  "kropa-store",
  "kropa-upload",
  "rustix",
@@ -1645,6 +1646,11 @@ dependencies = [
 [[package]]
 name = "kropa-macos"
 version = "0.0.1"
+dependencies = [
+ "kropa-core",
+ "kropa-store",
+ "kropa-upload",
+]
 
 [[package]]
 name = "kropa-render"
@@ -1654,7 +1660,9 @@ version = "0.0.1"
 name = "kropa-store"
 version = "0.0.1"
 dependencies = [
+ "directories",
  "kropa-core",
+ "kropa-keychain",
  "kropa-upload",
  "secret-service",
  "serde",

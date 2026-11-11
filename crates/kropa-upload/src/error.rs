@@ -30,6 +30,9 @@ pub const ALL_REASONS: &[&str] = &[
     "keyring_timeout",
     "keyring_ambiguous",
     "keyring_unavailable",
+    "keychain_denied",
+    "keychain_broker_refused",
+    "keychain_broker_unavailable",
     "timeout",
     "connect",
     "tls",
@@ -92,7 +95,8 @@ pub enum UploadError {
     /// The store failed (exit 7).
     #[error("{detail}")]
     SecretStore {
-        /// `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable` or
+        /// `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`,
+        /// `keychain_denied` (exit 4), `keychain_broker_refused`, `keychain_broker_unavailable` or
         /// `secret_store_error`.
         reason: &'static str,
         /// What happened; never a secret.
@@ -182,6 +186,11 @@ impl UploadError {
         match self {
             Self::Config { .. } => ExitCode::Config,
             Self::Variable { .. } => ExitCode::Usage,
+            // The user refused the Keychain prompt: a permission refused, like the portal or TCC.
+            Self::SecretStore {
+                reason: "keychain_denied",
+                ..
+            } => ExitCode::PermissionDenied,
             Self::SecretMissing { .. } | Self::SecretStore { .. } => ExitCode::SecretUnavailable,
             Self::SecretStoreNotDelivered => ExitCode::Unsupported,
             Self::Network { .. } => ExitCode::Network,
@@ -275,6 +284,13 @@ mod tests {
 
     use super::{ALL_REASONS, Retry, UploadError};
 
+    fn store_error(reason: &'static str) -> UploadError {
+        UploadError::SecretStore {
+            reason,
+            detail: "d".into(),
+        }
+    }
+
     #[test]
     fn exit_codes_follow_the_spec() {
         let cases = [
@@ -299,6 +315,16 @@ mod tests {
                 ExitCode::SecurityRefused,
             ),
             (UploadError::SecretStoreNotDelivered, ExitCode::Unsupported),
+            (store_error("keychain_denied"), ExitCode::PermissionDenied),
+            (
+                store_error("keychain_broker_refused"),
+                ExitCode::SecretUnavailable,
+            ),
+            (
+                store_error("keychain_broker_unavailable"),
+                ExitCode::SecretUnavailable,
+            ),
+            (store_error("keyring_locked"), ExitCode::SecretUnavailable),
         ];
         for (error, code) in cases {
             assert_eq!(error.exit_code(), code, "{error}");
