@@ -10,6 +10,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/fs0ciety7000/kropa"
 
 [workspace.dependencies]
+ashpd = { version = "0.14.0", default-features = false, features = ["async-io", "screenshot"] }
 clap = { version = "4.6.7", features = ["derive", "string"] }
 directories = "6.0.0"
 fluent-bundle = "0.16.0"
