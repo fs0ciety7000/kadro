@@ -65,7 +65,11 @@ fn arg_help(loc: &Localizer, path: &[String], id: &str) -> Option<String> {
 
 fn localize_arg(arg: Arg, path: &[String], loc: &Localizer) -> Arg {
     let id = arg.get_id().to_string();
-    let mut arg = arg.hide_possible_values(true);
+    let mut arg = arg;
+    if arg.get_action().takes_values() {
+        // The values are listed in the Fluent help text; clap's own list is not translatable.
+        arg = arg.hide_possible_values(true);
+    }
     if let Some(help) = arg_help(loc, path, &id) {
         arg = arg.help(help);
     }
