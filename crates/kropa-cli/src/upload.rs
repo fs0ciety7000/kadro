@@ -403,10 +403,18 @@ mod tests {
             let loc = Localizer::new(lang).unwrap();
             for reason in ALL_REASONS {
                 let id = format!("error-upload-{}", reason.replace('_', "-"));
-                assert_ne!(loc.message(&id), id, "{lang:?}: {id}");
+                assert_ne!(
+                    loc.message_args(&id, &[("detail", "d"), ("status", "500")]),
+                    id,
+                    "{lang:?}: {id}"
+                );
             }
             for id in ["error-upload-http-status", "error-upload-http-status-bare"] {
-                assert_ne!(loc.message(id), id, "{lang:?}: {id}");
+                assert_ne!(
+                    loc.message_args(id, &[("detail", "d"), ("status", "500")]),
+                    id,
+                    "{lang:?}: {id}"
+                );
             }
         }
     }

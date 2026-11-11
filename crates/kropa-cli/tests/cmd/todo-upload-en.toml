@@ -1,6 +1,6 @@
 bin.name = "kropa"
 args = ["--lang", "en", "upload", "shot.png", "--to", "zipline"]
-status.code = 5
+status.code = 6
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"
 env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
