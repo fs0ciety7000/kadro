@@ -151,7 +151,7 @@ mod tests {
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&amp;"), "{html}");
         assert!(html.contains("&quot;&gt;&lt;script&gt;"), "{html}");
-        assert!(html.contains("&#39;2&#39;"), "{html}");
+        assert!(html.contains("%272%27"), "{html}");
     }
 
     #[test]

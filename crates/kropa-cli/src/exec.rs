@@ -14,6 +14,7 @@ use std::time::Duration;
 use kropa_capture::{CaptureBackend, CaptureMode};
 use kropa_core::{CONFIG_FILE, Clock, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
+use kropa_upload::secret::SecretSource;
 use serde_json::json;
 
 use crate::args::{
@@ -21,20 +22,25 @@ use crate::args::{
     SecretsCommand,
 };
 use crate::capture::{self, Job};
+use crate::dest;
 use crate::doctor;
 use crate::errors::CliError;
 use crate::output::Session;
 use crate::secret_args::{set_carries_secret, url_carries_secret, var_carries_secret};
 use crate::target::{Target, TargetSpec, resolve_target};
+use crate::upload;
 
 /// Version of the JSON schema of the errors that no command schema covers (usage errors).
 pub const ERROR_SCHEMA: &str = "kropa.error/1";
 
 /// JSON schemas this binary speaks (`docs/cli.md` section 4).
-pub const SCHEMAS: [&str; 9] = [
+pub const SCHEMAS: [&str; 12] = [
     "kropa.capture/1",
     "kropa.upload/1",
     "kropa.dest.list/1",
+    "kropa.dest.show/1",
+    "kropa.dest.test/1",
+    "kropa.dest.import/1",
     "kropa.queue.list/1",
     "kropa.history.list/1",
     "kropa.doctor/1",
@@ -58,6 +64,10 @@ pub struct Context<'a> {
     pub backend: Option<&'a dyn CaptureBackend>,
     /// Waits for `--delay`; replaced by a recorder in tests.
     pub sleep: &'a dyn Fn(Duration),
+    /// Where secrets are read and written (lot 1.8 brings the real store).
+    pub secrets: &'a dyn SecretSource,
+    /// Answers a yes/no question put to the user on a terminal.
+    pub confirm: &'a dyn Fn(&str) -> bool,
 }
 
 /// Command path used for the schema name: `capture`, `dest.list`, `secrets.status`...
@@ -140,9 +150,6 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
                 CaptureCommand::Area { opts, .. } => (Some("2.5"), opts),
             };
             let mut lots: Vec<&'static str> = base.into_iter().collect();
-            if opts.send.upload.is_some() {
-                lots.push("1.7");
-            }
             if opts.edit {
                 lots.push("3.7");
             }
@@ -151,12 +158,12 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
             }
             lots
         }
-        Command::Upload(_) => vec!["1.7"],
+        Command::Upload(_) => Vec::new(),
         Command::Dest { action } => match action {
             DestCommand::List
             | DestCommand::Show { .. }
             | DestCommand::Test { .. }
-            | DestCommand::Import { .. } => vec!["1.7"],
+            | DestCommand::Import { .. } => Vec::new(),
             _ => vec!["2.6"],
         },
         Command::Secrets { action } => match action {
@@ -229,11 +236,41 @@ fn run_command(
     }
     let target = check_inputs(&cli.command, &config, ctx, session)?;
     check_interaction(&cli.command, session.interactive, loc)?;
-    if lots_of(&cli.command).is_empty()
-        && let Command::Capture { mode } = &cli.command
-        && let (Some(backend), Some(target), Some(job)) = (ctx.backend, &target, job_of(mode))
-    {
-        return capture::run(&job, backend, &config, target, ctx, session);
+    if !lots_of(&cli.command).is_empty() {
+        return Err(unsupported(&cli.command, loc));
+    }
+    match &cli.command {
+        Command::Capture { mode } => {
+            if let (Some(backend), Some(target), Some(job)) = (ctx.backend, &target, job_of(mode)) {
+                let dir = upload::config_dir_of(config_dir_arg, loc)?;
+                return capture::run(&job, backend, &config, &dir, target, ctx, session);
+            }
+        }
+        Command::Upload(args) => {
+            let dir = upload::config_dir_of(config_dir_arg, loc)?;
+            return upload::run(args, &config, &dir, ctx, session);
+        }
+        Command::Dest { action } => {
+            let dir = upload::config_dir_of(config_dir_arg, loc)?;
+            match action {
+                DestCommand::List => return dest::list(&config, &dir, ctx, session),
+                DestCommand::Show { id } => return dest::show(id, &config, &dir, ctx, session),
+                DestCommand::Test { id, yes } => return dest::test(id, *yes, &dir, ctx, session),
+                DestCommand::Import { file, as_id, yes, expect_host } => {
+                    return dest::import_command(
+                        file,
+                        as_id.as_deref(),
+                        *yes,
+                        expect_host.as_deref(),
+                        &dir,
+                        ctx,
+                        session,
+                    );
+                }
+                _ => {}
+            }
+        }
+        _ => {}
     }
     Err(unsupported(&cli.command, loc))
 }
@@ -482,6 +519,17 @@ fn check_interaction(cmd: &Command, interactive: bool, loc: &Localizer) -> Resul
             &[],
         ));
     }
+    if let Command::Dest {
+        action: DestCommand::Import { expect_host: None, .. },
+    } = cmd
+    {
+        return Err(CliError::new(
+            ExitCode::InteractionRequired,
+            loc,
+            "error-import-host-required",
+            &[],
+        ));
+    }
     let source = match cmd {
         Command::Dest {
             action: DestCommand::Add(a),
@@ -540,6 +588,9 @@ mod tests {
                 "kropa.capture/1",
                 "kropa.upload/1",
                 "kropa.dest.list/1",
+                "kropa.dest.show/1",
+                "kropa.dest.test/1",
+                "kropa.dest.import/1",
                 "kropa.queue.list/1",
                 "kropa.history.list/1",
                 "kropa.doctor/1",

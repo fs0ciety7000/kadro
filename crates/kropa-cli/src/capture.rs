@@ -459,6 +459,8 @@ mod tests {
                 host: Some("laptop".into()),
                 backend: Some(backend),
                 sleep: &sleep,
+                secrets: &kropa_upload::secret::UnavailableSecretSource,
+                confirm: &|_| false,
             };
             let opts = opts(extra);
             let job = Job {

@@ -11,12 +11,14 @@
 pub mod args;
 pub mod capture;
 pub mod command;
+pub mod dest;
 pub mod doctor;
 pub mod errors;
 pub mod exec;
 pub mod output;
 pub mod secret_args;
 pub mod target;
+pub mod upload;
 
 use std::ffi::OsString;
 use std::io::IsTerminal;
@@ -27,6 +29,7 @@ use clap::{ColorChoice, FromArgMatches, ValueEnum};
 use kropa_capture::CaptureBackend;
 use kropa_core::{Clock, Config, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
+use kropa_upload::secret::{SecretSource, UnavailableSecretSource};
 
 pub use output::Io;
 
@@ -138,6 +141,26 @@ pub fn run_with(
     )
 }
 
+/// What the commands need from outside the process, injectable for tests.
+pub struct Services<'a> {
+    /// Where secrets are read and written. Until lot 1.8 the real one refuses.
+    pub secrets: &'a dyn SecretSource,
+    /// Answers a yes/no question put to the user on a terminal.
+    pub confirm: &'a dyn Fn(&str) -> bool,
+}
+
+/// Asks on the terminal: the prompt on stderr, the answer on stdin (`y`, `yes`, `o`, `oui`).
+fn ask_on_terminal(prompt: &str) -> bool {
+    use std::io::{BufRead as _, Write as _};
+    let _ = write!(std::io::stderr(), "{prompt} ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().lock().read_line(&mut line).is_err() {
+        return false;
+    }
+    matches!(line.trim().to_lowercase().as_str(), "y" | "yes" | "o" | "oui")
+}
+
 /// Like [`run_with`], with an injected capture backend (`None`: the platform has none) and the
 /// function that waits for `--delay`.
 #[must_use]
@@ -150,7 +173,27 @@ pub fn run_with_backend(
     backend: Option<&dyn CaptureBackend>,
     sleep: &dyn Fn(Duration),
 ) -> ExitCode {
-    match run_inner(args, lookup, io, clock, host, backend, sleep) {
+    let services = Services {
+        secrets: &UnavailableSecretSource,
+        confirm: &ask_on_terminal,
+    };
+    run_with_services(args, lookup, io, clock, host, backend, sleep, &services)
+}
+
+/// Like [`run_with_backend`], with the secret store and the confirmation injected.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_services(
+    args: &[OsString],
+    lookup: &dyn Fn(&str) -> Option<String>,
+    io: &mut Io<'_>,
+    clock: &dyn Clock,
+    host: Option<String>,
+    backend: Option<&dyn CaptureBackend>,
+    sleep: &dyn Fn(Duration),
+    services: &Services<'_>,
+) -> ExitCode {
+    match run_inner(args, lookup, io, clock, host, backend, sleep, services) {
         Ok(code) => code,
         Err(e) => {
             // The localizer itself is broken: the only message possible is an English one.
@@ -160,6 +203,7 @@ pub fn run_with_backend(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_inner(
     args: &[OsString],
     lookup: &dyn Fn(&str) -> Option<String>,
@@ -168,6 +212,7 @@ fn run_inner(
     host: Option<String>,
     backend: Option<&dyn CaptureBackend>,
     sleep: &dyn Fn(Duration),
+    services: &Services<'_>,
 ) -> Result<ExitCode, I18nError> {
     let lang = negotiated_language(args, lookup);
     let loc = Localizer::new(lang)?;
@@ -187,6 +232,8 @@ fn run_inner(
         host,
         backend,
         sleep,
+        secrets: services.secrets,
+        confirm: services.confirm,
     };
     Ok(exec::execute(&cli, &ctx, &mut session))
 }

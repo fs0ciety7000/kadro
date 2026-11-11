@@ -14,3 +14,4 @@ pub mod origin;
 pub mod secret;
 pub mod sensitive;
 pub mod template;
+pub use error::UploadError;
