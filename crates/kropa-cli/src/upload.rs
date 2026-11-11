@@ -16,7 +16,7 @@ use kropa_upload::destination::Destination;
 use kropa_upload::engine::{UploadInput, UploadOutcome, Uploader};
 use kropa_upload::http::block_on;
 use kropa_upload::links::{LinkFormat, format_link};
-use kropa_upload::masked::{CheckedOutput, SecretSet};
+use kropa_upload::masked::{CheckedOutput, MaskedText, SecretSet};
 use kropa_upload::profiles::{find, load_destinations};
 use serde_json::{Value, json};
 
@@ -204,59 +204,49 @@ pub fn report(
     session: &mut Session<'_, '_>,
 ) -> Report {
     let requested = copy.unwrap_or(CopyChoice::None);
-    let explicit = copy.is_some();
-    let mut warnings = Vec::new();
-    let failed = |error: &UploadError, message: Option<String>| {
-        let _ = message;
-        error
-    };
-    let mut outcome_error: Option<UploadError> = None;
+    let refused;
     let mut link: Option<CheckedOutput> = None;
-    let mut url: Option<&UploadOutcome> = None;
-    match &delivery.result {
+    let (outcome, error): (Option<&UploadOutcome>, Option<&UploadError>) = match &delivery.result {
+        Err(e) => (None, Some(e)),
         Ok(outcome) => {
             let format = requested.format().unwrap_or(LinkFormat::Url);
             match format_link(format, &outcome.url, &delivery.file_name, &SecretSet::loaded()) {
                 Ok(text) => {
                     link = Some(text);
-                    url = Some(outcome);
+                    (Some(outcome), None)
                 }
                 Err(_) => {
-                    outcome_error = Some(UploadError::Security {
+                    refused = UploadError::Security {
                         reason: "secret_in_output",
                         detail: "the link holds a secret".to_owned(),
-                    });
+                    };
+                    (None, Some(&refused))
                 }
             }
         }
-        Err(error) => outcome_error = Some(failed(error, None).clone_for_report()),
-    }
-    let error_ref: Option<&UploadError> = match (&delivery.result, &outcome_error) {
-        (Err(e), _) => Some(e),
-        (Ok(_), Some(e)) => Some(e),
-        _ => None,
     };
-    if let Some(e) = error_ref {
-        if e.server_message().is_some_and(kropa_upload::masked::MaskedText::was_masked) {
+    let mut warnings = Vec::new();
+    if let Some(e) = error {
+        if e.server_message().is_some_and(MaskedText::was_masked) {
             warnings.push(warning("secret_echoed", loc, ""));
         }
         if e.is_secret_in_output() {
             warnings.push(warning("uploaded_link_withheld", loc, ""));
         }
     }
-    if let Some(outcome) = url {
+    if let Some(outcome) = outcome {
         for w in &outcome.warnings {
             warnings.push(warning(w.code, loc, &w.detail));
         }
         warnings.push(warning("metadata_not_stripped", loc, ""));
     }
-    let wants_copy = url.is_some() && requested != CopyChoice::None;
+    let wants_copy = outcome.is_some() && requested != CopyChoice::None;
     if wants_copy {
         warnings.push(warning("clipboard_unavailable", loc, ""));
     }
     let clipboard = json!({
         "requested": requested.as_str(),
-        "explicit": explicit,
+        "explicit": copy.is_some(),
         "status": if wants_copy { "unavailable" } else { "skipped" },
         "reason": if wants_copy {
             Some("clipboard_not_delivered")
@@ -266,13 +256,12 @@ pub fn report(
             None
         },
     });
-    // stderr: what happened, the link when it cannot be copied, and the warnings.
     for w in &warnings {
         if let Some(message) = w["message"].as_str() {
             session.note(message);
         }
     }
-    let (upload, link_json) = if let (Some(outcome), Some(text)) = (url, &link) {
+    let (upload, link_json) = if let (Some(outcome), Some(text)) = (outcome, &link) {
         session.note(&loc.message_args("note-uploaded", &[("profile", &delivery.profile)]));
         if matches!(requested, CopyChoice::Markdown | CopyChoice::Html) {
             session.note(&loc.message_args(
@@ -290,11 +279,11 @@ pub fn report(
             json!({ "format": requested.format().unwrap_or(LinkFormat::Url).as_str(), "text": text.as_str() }),
         )
     } else {
-        let message = error_ref.map(|e| cli_error(e, loc).message);
         (
             json!({
                 "status": "failed", "destination": delivery.profile, "job_id": null,
-                "error": message, "url": null, "thumbnail_url": null, "deletion_url": null,
+                "error": error.map(|e| cli_error(e, loc).message),
+                "url": null, "thumbnail_url": null, "deletion_url": null,
             }),
             Value::Null,
         )
@@ -304,23 +293,8 @@ pub fn report(
         link: link_json,
         clipboard,
         warnings,
-        error: error_ref.map(|e| cli_error(e, loc)),
-        url: url.map(|o| o.url.clone()),
-    }
-}
-
-trait CloneForReport {
-    fn clone_for_report(&self) -> UploadError;
-}
-
-impl CloneForReport for &UploadError {
-    fn clone_for_report(&self) -> UploadError {
-        // Only used to keep the borrow checker out of the way: the report reads the error again from
-        // the delivery.
-        UploadError::Variable {
-            reason: "invalid_variable",
-            detail: String::new(),
-        }
+        error: error.map(|e| cli_error(e, loc)),
+        url: outcome.map(|o| o.url.clone()),
     }
 }
 
@@ -354,12 +328,7 @@ pub fn run(
     let file = file_member(&args.file);
     if let Some(error) = report.error {
         // The file was not changed. When the answer held the secret, stdout gets the local path.
-        let withheld = delivery
-            .result
-            .as_ref()
-            .err()
-            .is_some_and(UploadError::is_secret_in_output)
-            || report.url.is_none() && delivery.result.is_ok();
+        let withheld = error.reason.as_deref() == Some("secret_in_output");
         if withheld && !session.json {
             session.result(&args.file.display().to_string());
         }
