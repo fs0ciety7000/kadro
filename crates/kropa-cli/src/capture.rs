@@ -5,8 +5,8 @@
 //! The order is chosen so that the user is never asked for something that cannot work: what the
 //! backend can never do (one screen, a format it does not produce) fails first; then the permission
 //! the platform asks for up front; only then comes the delay, the portal dialog, the picture and the
-//! file. Nothing is written when the capture failed,
-//! and the success message is only printed once the file is on disk.
+//! file. Nothing is written when the capture failed, and the success message is only printed once
+//! the file is on disk.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -341,6 +341,8 @@ mod tests {
     /// A backend that answers what the test tells it to, and remembers what it was asked.
     struct Fake {
         answer: Result<CapturedImage, CaptureError>,
+        /// What `authorize` answers (the permission asked for up front).
+        authorization: Result<(), CaptureError>,
         calls: RefCell<u32>,
     }
 
@@ -352,7 +354,15 @@ mod tests {
         fn with(answer: Result<CapturedImage, CaptureError>) -> Self {
             Self {
                 answer,
+                authorization: Ok(()),
                 calls: RefCell::new(0),
+            }
+        }
+
+        fn unauthorized(error: CaptureError) -> Self {
+            Self {
+                authorization: Err(error),
+                ..Self::ok(1, 1)
             }
         }
     }
@@ -399,6 +409,9 @@ mod tests {
                 return Err(CaptureError::Unsupported(Unsupported::OutputNotIsolable));
             }
             Ok(())
+        }
+        fn authorize(&self, _request: &CaptureRequest<'_>) -> Result<(), CaptureError> {
+            self.authorization.clone()
         }
         fn capture(&self, request: &CaptureRequest<'_>) -> Result<CapturedImage, CaptureError> {
             self.check(request)?;
@@ -590,6 +603,28 @@ mod tests {
                 "no file after a failure"
             );
         }
+    }
+
+    #[test]
+    fn a_missing_permission_is_reported_before_the_delay() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = file_target(dir.path(), "x.png");
+        let backend = Fake::unauthorized(CaptureError::PermissionDenied(
+            Denial::ScreenRecordingDenied,
+        ));
+        let out = go(
+            &backend,
+            CaptureMode::Screen,
+            &target,
+            &["--delay", "30"],
+            false,
+        );
+        let err = out.result.unwrap_err();
+        assert_eq!(err.code, ExitCode::PermissionDenied);
+        assert_eq!(err.reason.as_deref(), Some("screen_recording_denied"));
+        assert_eq!(out.slept.len(), 0, "no wait for a capture that cannot happen");
+        assert_eq!(out.calls, 0);
+        assert!(!dir.path().join("x.png").exists());
     }
 
     #[test]

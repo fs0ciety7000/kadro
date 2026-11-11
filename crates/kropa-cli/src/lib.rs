@@ -327,6 +327,100 @@ mod tests {
         assert_eq!(v["error"]["code"], "usage");
     }
 
+    const SENTINEL: &str = "sk-live-SENTINEL123";
+
+    /// No error, whatever its kind, text or JSON, may repeat what the user typed: it may be a secret.
+    #[test]
+    fn no_error_repeats_a_typed_value() {
+        let cases: &[&[&str]] = &[
+            &["secrets", "set", "zipline", "TOKEN", SENTINEL],
+            &["dest", "add", "z", "--type", "zipline", "--url", SENTINEL],
+            &["dest", "edit", "z", "--url", SENTINEL],
+            &["dest", "edit", "z", "--set", SENTINEL],
+            &["dest", "edit", "z", "--set", "token=sk-live-SENTINEL123"],
+            &["dest", "edit", "z", "--url", "https://h.example.org/?k=sk-live-SENTINEL123"],
+            &["capture", "screen", "--var", SENTINEL],
+            &["capture", "screen", "--var", "h=sk-live-SENTINEL123"],
+            &["capture", "screen", "--copy", SENTINEL],
+            &["capture", "screen", "--delay", SENTINEL],
+            &["capture", "screen", "--name", "{sk-live-SENTINEL123}"],
+            &["capture", "screen", "--name", "x:sk-live-SENTINEL123"],
+            &["capture", "screen", "--bogus=sk-live-SENTINEL123"],
+            &["capture", "screen", "-zsk-live-SENTINEL123"],
+            &["capture", "output", "a", SENTINEL],
+            &["capture", SENTINEL],
+            &["upload", "--to", SENTINEL, "f.png"],
+            &["history", "list", "--limit", SENTINEL],
+            &["history", "list", "--since", SENTINEL],
+            &["dest", "add", "z", "--type", SENTINEL],
+            &["dest", "add", "z", "--type", "s3", "--presign", SENTINEL],
+            &["dest", "add", "z", "--type", "s3", "--port", SENTINEL],
+            &["queue", "retry", SENTINEL, "--failed"],
+            &["--color", SENTINEL, "version"],
+            &["--lang", SENTINEL, "version"],
+            &["--config", "", SENTINEL],
+            &["--password-fd", SENTINEL, "version"],
+            &["version", SENTINEL],
+            &[SENTINEL],
+        ];
+        for lang in ["en", "fr"] {
+            for json in [false, true] {
+                for case in cases {
+                    let mut argv = vec!["kropa", "--lang", lang];
+                    if json {
+                        argv.push("--json");
+                    }
+                    argv.extend_from_slice(case);
+                    let r = run(&argv, false);
+                    assert_ne!(r.code, ExitCode::Ok, "{argv:?}");
+                    assert!(!r.out.contains("SENTINEL"), "{argv:?}\n{}", r.out);
+                    assert!(!r.err.contains("SENTINEL"), "{argv:?}\n{}", r.err);
+                    if json {
+                        let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+                        assert_eq!(v["status"], "error", "{argv:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn language_comes_from_option_then_configuration_then_environment() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.toml"), "language = \"fr\"\n").unwrap();
+        let config = dir.path().to_str().unwrap();
+        let fr_env = |name: &str| (name == "LANG").then(|| "fr_FR.UTF-8".to_owned());
+        let en_env = |name: &str| (name == "LANG").then(|| "en_US.UTF-8".to_owned());
+        let error_of = |list: &[&str], lookup: &dyn Fn(&str) -> Option<String>| {
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let clock = FixedClock::new("2026-11-11T14:03:22+01:00[+01:00]".parse().unwrap());
+            let mut io = Io {
+                out: &mut out,
+                err: &mut err,
+                stdin_is_tty: false,
+            };
+            let _ = run_with(&args(list), lookup, &mut io, &clock, None);
+            String::from_utf8(err).unwrap()
+        };
+        // The configuration wins over the environment.
+        let from_config = error_of(&["kropa", "--config", config, "nope"], &en_env);
+        assert!(from_config.contains("sous-commande inconnue"), "{from_config}");
+        // `--lang` wins over the configuration.
+        let from_option = error_of(&["kropa", "--config", config, "--lang", "en", "nope"], &fr_env);
+        assert!(from_option.contains("unrecognized subcommand"), "{from_option}");
+        // No configuration: the environment.
+        let empty = tempfile::tempdir().unwrap();
+        let from_env = error_of(
+            &["kropa", "--config", empty.path().to_str().unwrap(), "nope"],
+            &fr_env,
+        );
+        assert!(from_env.contains("sous-commande inconnue"), "{from_env}");
+        // A configuration that does not parse does not decide the language.
+        std::fs::write(dir.path().join("config.toml"), "language = [").unwrap();
+        let broken = error_of(&["kropa", "--config", config, "nope"], &en_env);
+        assert!(broken.contains("unrecognized subcommand"), "{broken}");
+    }
+
     #[test]
     fn unsupported_commands_say_so() {
         let r = run(&["kropa", "--lang", "en", "queue", "list"], false);

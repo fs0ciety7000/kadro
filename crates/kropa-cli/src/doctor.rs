@@ -27,6 +27,20 @@ const PENDING: [(&str, &str, &str); 4] = [
     ("outputs", "2.5", "doctor-pending-outputs"),
 ];
 
+/// What is still missing from the report: the screens are no longer pending once the backend lists
+/// them (macOS).
+fn pending(
+    diagnosis: &Diagnosis,
+) -> impl Iterator<Item = (&'static str, &'static str, &'static str)> {
+    let lists_screens = diagnosis
+        .facts
+        .iter()
+        .any(|fact| fact.key == "display" || fact.key == "display_primary");
+    PENDING
+        .into_iter()
+        .filter(move |(item, _, _)| !(lists_screens && *item == "outputs"))
+}
+
 /// Where things are, and whether the configuration reads.
 struct Paths {
     config_file: Option<PathBuf>,
@@ -90,8 +104,7 @@ fn document(diagnosis: &Diagnosis, paths: &Paths) -> Value {
         })
     })
     .collect();
-    let pending: Vec<Value> = PENDING
-        .iter()
+    let pending: Vec<Value> = pending(diagnosis)
         .map(|(item, lot, _)| json!({ "item": item, "lot": lot }))
         .collect();
     json!({
@@ -204,7 +217,7 @@ fn render(diagnosis: &Diagnosis, paths: &Paths, loc: &Localizer, session: &mut S
     ));
 
     section(session, "doctor-section-pending");
-    for (_, _, id) in PENDING {
+    for (_, _, id) in pending(diagnosis) {
         session.result(&format!("  {}", loc.message(id)));
     }
 }
@@ -234,7 +247,7 @@ mod tests {
     };
     use kropa_i18n::{Lang, Localizer};
 
-    use super::{PENDING, Paths, document, fluent_id, render};
+    use super::{PENDING, Paths, document, fluent_id, pending, render};
     use crate::output::{Io, Session};
 
     fn diagnosis() -> Diagnosis {
@@ -302,6 +315,15 @@ mod tests {
             doc["not_available_yet"].as_array().unwrap().len(),
             PENDING.len()
         );
+    }
+
+    #[test]
+    fn screens_are_not_pending_once_the_backend_lists_them() {
+        let mut d = diagnosis();
+        assert!(pending(&d).any(|(item, _, _)| item == "outputs"));
+        d.facts.push(Fact::new("display", FactValue::Text("DELL".into())));
+        assert!(pending(&d).all(|(item, _, _)| item != "outputs"));
+        assert_eq!(pending(&d).count(), PENDING.len() - 1);
     }
 
     #[test]
