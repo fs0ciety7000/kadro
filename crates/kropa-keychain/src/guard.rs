@@ -64,6 +64,48 @@ impl ProjectCertificate {
     }
 }
 
+/// The code-signing identifier of `kropa` (the broker): the application ID, which `codesign` gives
+/// the bundle and its main executable (`scripts/bundle-macos.sh`).
+pub const BROKER_IDENTIFIER: &str = "io.github.fs0ciety7000.Kropa";
+
+/// The code-signing identifier of `kropa-app` (the client of the broker), signed on its own by
+/// `scripts/bundle-macos.sh`.
+pub const CLIENT_IDENTIFIER: &str = "io.github.fs0ciety7000.Kropa.app";
+
+/// The code requirement a peer must satisfy: this identifier, and the leaf certificate of the
+/// project.
+fn requirement(identifier: &str, certificate: &ProjectCertificate) -> String {
+    format!(
+        "identifier \"{identifier}\" and certificate leaf = H\"{}\"",
+        certificate.hex()
+    )
+}
+
+/// The requirement `kropa-app` must satisfy to be served.
+#[must_use]
+pub fn client_requirement(certificate: &ProjectCertificate) -> String {
+    requirement(CLIENT_IDENTIFIER, certificate)
+}
+
+/// The requirement the broker binary must satisfy for the client to start it.
+#[must_use]
+pub fn broker_requirement(certificate: &ProjectCertificate) -> String {
+    requirement(BROKER_IDENTIFIER, certificate)
+}
+
+/// The leaf certificate named by a designated requirement of the form
+/// `... certificate leaf = H"<40 hex digits>" ...`, which is what a signature made with a
+/// certificate that no anchor vouches for (the self-signed certificate of the project) gives. An ad
+/// hoc signature (`cdhash H"..."`) and any other form give `None`.
+#[must_use]
+pub fn certificate_from_requirement(text: &str) -> Option<ProjectCertificate> {
+    const MARK: &str = "certificate leaf = H\"";
+    let start = text.find(MARK)? + MARK.len();
+    let digits = &text[start..];
+    let end = digits.find('"')?;
+    ProjectCertificate::from_hex(&digits[..end])
+}
+
 /// A fact that could not be established; the text is fixed and never holds data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
@@ -383,6 +425,35 @@ mod tests {
         }
         assert_eq!(Refusal::from_exit_code(0), None);
         assert_eq!(Refusal::from_exit_code(1), None);
+    }
+
+    #[test]
+    fn the_certificate_is_read_from_a_designated_requirement() {
+        let hex = "0123456789abcdef0123456789abcdef01234567";
+        let dr = format!("identifier \"io.github.fs0ciety7000.Kropa\" and certificate leaf = H\"{hex}\"");
+        assert_eq!(certificate_from_requirement(&dr).unwrap().hex(), hex);
+        for other in [
+            format!("cdhash H\"{hex}\""),
+            "anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\"".to_owned(),
+            "identifier \"x\" and certificate leaf = H\"abc\"".to_owned(),
+            String::new(),
+        ] {
+            assert!(certificate_from_requirement(&other).is_none(), "{other}");
+        }
+    }
+
+    #[test]
+    fn the_requirements_name_the_right_identifier_and_the_certificate() {
+        let c = ProjectCertificate::from_hex(&"ab".repeat(20)).unwrap();
+        assert_eq!(
+            client_requirement(&c),
+            format!("identifier \"io.github.fs0ciety7000.Kropa.app\" and certificate leaf = H\"{}\"", "ab".repeat(20))
+        );
+        assert!(broker_requirement(&c).starts_with("identifier \"io.github.fs0ciety7000.Kropa\" and"));
+        // The build script signs with these identifiers: a drift would refuse every client.
+        let script = include_str!("../../../scripts/bundle-macos.sh");
+        assert!(script.contains(&format!("APP_ID=\"{BROKER_IDENTIFIER}\"")));
+        assert!(script.contains(&format!("{CLIENT_IDENTIFIER}\"")) || script.contains("\"$APP_ID.app\""));
     }
 
     #[test]

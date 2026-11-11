@@ -18,8 +18,7 @@ use serde_json::value::RawValue;
 use zeroize::Zeroizing;
 
 use crate::item::{
-    Failure, FailureKind, Item, ItemName, MAX_DOCUMENT_LEN, MAX_STORE_LEN, check_document,
-    check_part, split_account,
+    Failure, FailureKind, Item, ItemName, MAX_STORE_LEN, check_document, check_part, split_account,
 };
 use crate::wire::WriteMode;
 
@@ -201,13 +200,6 @@ pub fn delete(
         .map(|(k, v)| (&**k, *v))
         .collect();
     serialize(entries, whole.len()).map(Some)
-}
-
-/// Whether `document` could be one entry of a store: used to refuse a write before it reaches the
-/// Keychain.
-#[must_use]
-pub fn fits(document: &[u8]) -> bool {
-    document.len() <= MAX_DOCUMENT_LEN
 }
 
 #[cfg(test)]

@@ -31,8 +31,15 @@ pub const CHANNEL_FD: RawFd = 3;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemFacts;
 
+/// The effective user ID of this process.
+#[must_use]
+pub fn effective_uid() -> u32 {
+    // SAFETY: `geteuid` takes no argument, cannot fail and touches no memory.
+    unsafe { libc::geteuid() }
+}
+
 /// `getsockopt` of a plain integer option.
-fn int_option(fd: RawFd, level: libc::c_int, name: libc::c_int) -> io::Result<libc::c_int> {
+pub(crate) fn int_option(fd: RawFd, level: libc::c_int, name: libc::c_int) -> io::Result<libc::c_int> {
     let mut value: libc::c_int = 0;
     let mut len = libc::socklen_t::try_from(size_of::<libc::c_int>())
         .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
