@@ -57,7 +57,10 @@ Dépend de : rien. En parallèle : 0, S, 1.
 Dépend de : rien. En parallèle : 0, D1.
 - [x] S.1 `docs/security/secrets.md` : trousseau (Secret Service, Keychain et ACL liées à la signature) ; repli `age` (scrypt, `zeroize`, `0600`, écriture atomique) ; bascule jamais silencieuse ; origines autorisées stockées avec le secret ; `{secret:}`, redirections, HTTPS, import `.sxcu`, journaux expurgés, `--password-fd`, mode non interactif ; modèle de menaces. Agent : `architect`.
 - [x] S.2 Revue. Agent : `security-reviewer`. Fin : points classés bloquants ou non.
-- [ ] S.3 Corrections, puis **[Utilisateur]** validation.
+- [x] S.3 Corrections ; contre-revue : **aucun bloquant ouvert** (11/11/2026) ; décisions U1-U4 tranchées (`decisions.md`).
+- [ ] S.4 Avant 1.8 : préciser N1 (type `MaskedText`, masquage avant coupe de l'extrait) et N3 (méthode de vérification du
+  parent par le courtier Keychain macOS) dans `docs/security/secrets.md` ; reporter les ajouts acceptés dans `docs/cli.md`.
+  Agent : `architect`. Constats faibles N2, N4-N6 traités à l'implémentation (1.7, 1.8).
 
 ## Lot D2 — Maquettes et `DESIGN.md` (avant toute interface)
 Dépend de : D1 pour le logo. En parallèle : lot 1. Bloque : 2.3, 2.4, 3.5, 3.6, 4.10, 4.11.
