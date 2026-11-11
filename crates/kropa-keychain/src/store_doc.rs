@@ -66,7 +66,10 @@ fn parse(bytes: &[u8]) -> Result<Whole<'_>, Failure> {
     Ok(whole)
 }
 
-fn serialize(entries: BTreeMap<&str, &RawValue>, capacity: usize) -> Result<Zeroizing<Vec<u8>>, Failure> {
+fn serialize(
+    entries: BTreeMap<&str, &RawValue>,
+    capacity: usize,
+) -> Result<Zeroizing<Vec<u8>>, Failure> {
     let mut out = Zeroizing::new(Vec::with_capacity(capacity));
     serde_json::to_writer(
         &mut *out,
@@ -108,11 +111,7 @@ pub fn names(whole: &[u8]) -> Result<Vec<ItemName>, Failure> {
 ///
 /// # Errors
 /// [`FailureKind::StoreError`] when the document is not a version 2 document.
-pub fn entries_of(
-    whole: &[u8],
-    profile: &str,
-    name: Option<&str>,
-) -> Result<Vec<Item>, Failure> {
+pub fn entries_of(whole: &[u8], profile: &str, name: Option<&str>) -> Result<Vec<Item>, Failure> {
     let whole = parse(whole)?;
     let mut out = Vec::new();
     for (key, raw) in &whole.entries {
@@ -166,7 +165,10 @@ pub fn insert(
     let exists = current.entries.contains_key(key.as_str());
     match (mode, exists) {
         (WriteMode::Create, true) => {
-            return Err(Failure::new(FailureKind::Exists, "the entry already exists"));
+            return Err(Failure::new(
+                FailureKind::Exists,
+                "the entry already exists",
+            ));
         }
         (WriteMode::Replace, false) => return Err(Failure::new(FailureKind::Missing, name)),
         _ => {}
@@ -218,9 +220,15 @@ mod tests {
     fn store(parts: &[(&str, &str, &str)]) -> Vec<u8> {
         let mut whole = EMPTY.to_vec();
         for (p, n, v) in parts {
-            whole = insert(&whole, p, n, &entry(&format!("{p}/{n}"), v), WriteMode::Create)
-                .unwrap()
-                .to_vec();
+            whole = insert(
+                &whole,
+                p,
+                n,
+                &entry(&format!("{p}/{n}"), v),
+                WriteMode::Create,
+            )
+            .unwrap()
+            .to_vec();
         }
         whole
     }
@@ -233,12 +241,19 @@ mod tests {
 
     #[test]
     fn entries_are_added_and_cut_out_one_by_one() {
-        let whole = store(&[("zipline", "token", "AAAA-1"), ("s3", "access", "BBBB-2"), ("s3", "secret", "CCCC-3")]);
+        let whole = store(&[
+            ("zipline", "token", "AAAA-1"),
+            ("s3", "access", "BBBB-2"),
+            ("s3", "secret", "CCCC-3"),
+        ]);
         let s3 = entries_of(&whole, "s3", None).unwrap();
         assert_eq!(s3.len(), 2);
         let text = String::from_utf8_lossy(&s3[0].document).into_owned();
         assert!(text.starts_with(r#"{"v":2,"entries":{"s3/"#), "{text}");
-        assert!(!text.contains("AAAA") && !text.contains("zipline"), "{text}");
+        assert!(
+            !text.contains("AAAA") && !text.contains("zipline"),
+            "{text}"
+        );
         let one = entries_of(&whole, "s3", Some("secret")).unwrap();
         assert_eq!(one.len(), 1);
         assert!(String::from_utf8_lossy(&one[0].document).contains("CCCC-3"));
@@ -260,9 +275,19 @@ mod tests {
         assert_eq!(again.unwrap_err().kind, FailureKind::Exists);
         let missing = insert(&whole, "p", "m", &entry("p/m", "X"), WriteMode::Replace);
         assert_eq!(missing.unwrap_err().kind, FailureKind::Missing);
-        let replaced = insert(&whole, "p", "n", &entry("p/n", "ZZZZ-9"), WriteMode::Replace).unwrap();
+        let replaced = insert(
+            &whole,
+            "p",
+            "n",
+            &entry("p/n", "ZZZZ-9"),
+            WriteMode::Replace,
+        )
+        .unwrap();
         let text = String::from_utf8_lossy(&replaced).into_owned();
-        assert!(text.contains("ZZZZ-9") && !text.contains("AAAA-1"), "{text}");
+        assert!(
+            text.contains("ZZZZ-9") && !text.contains("AAAA-1"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -292,7 +317,11 @@ mod tests {
 
     #[test]
     fn a_bad_store_document_is_refused_without_quoting_it() {
-        for bad in [&b"hunter2-hunter2"[..], br#"{"v":3,"entries":{}}"#, br#"{"v":2,"entries":"hunter2"}"#] {
+        for bad in [
+            &b"hunter2-hunter2"[..],
+            br#"{"v":3,"entries":{}}"#,
+            br#"{"v":2,"entries":"hunter2"}"#,
+        ] {
             let e = names(bad).unwrap_err();
             assert!(!e.detail.contains("hunter2"), "{}", e.detail);
         }
@@ -300,7 +329,7 @@ mod tests {
 
     #[test]
     fn a_value_with_escapes_survives_a_round_trip_byte_for_byte() {
-        let doc = br#"{"v":2,"entries":{"p/n":{"origins":[],"placements":[],"value":"a\"b\\cé\/\n"}}}"#;
+        let doc = br#"{"v":2,"entries":{"p/n":{"origins":[],"placements":[],"value":"a\"b\\c\u00e9\/\n"}}}"#;
         let whole = insert(EMPTY, "p", "n", doc, WriteMode::Create).unwrap();
         let back = entries_of(&whole, "p", Some("n")).unwrap();
         assert_eq!(&**back[0].document, &doc[..]);

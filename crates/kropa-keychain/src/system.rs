@@ -14,9 +14,7 @@ use std::mem::{MaybeUninit, size_of};
 use std::os::fd::{FromRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 
-use crate::guard::{
-    ChannelState, LaunchFacts, PeerToken, ProjectCertificate, Unverified,
-};
+use crate::guard::{ChannelState, LaunchFacts, PeerToken, ProjectCertificate, Unverified};
 
 /// `AF_UNIX` as the type of `ss_family` (1 on every system we run on, so the cast cannot truncate).
 #[allow(clippy::cast_possible_truncation)]
@@ -39,7 +37,11 @@ pub fn effective_uid() -> u32 {
 }
 
 /// `getsockopt` of a plain integer option.
-pub(crate) fn int_option(fd: RawFd, level: libc::c_int, name: libc::c_int) -> io::Result<libc::c_int> {
+pub(crate) fn int_option(
+    fd: RawFd,
+    level: libc::c_int,
+    name: libc::c_int,
+) -> io::Result<libc::c_int> {
     let mut value: libc::c_int = 0;
     let mut len = libc::socklen_t::try_from(size_of::<libc::c_int>())
         .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
@@ -75,8 +77,8 @@ pub fn channel_state(fd: RawFd) -> ChannelState {
     if stat.st_mode & libc::S_IFMT != libc::S_IFSOCK {
         return ChannelState::NotAConnectedUnixStream;
     }
-    let is_stream = int_option(fd, libc::SOL_SOCKET, libc::SO_TYPE)
-        .is_ok_and(|t| t == libc::SOCK_STREAM);
+    let is_stream =
+        int_option(fd, libc::SOL_SOCKET, libc::SO_TYPE).is_ok_and(|t| t == libc::SOCK_STREAM);
     if !is_stream {
         return ChannelState::NotAConnectedUnixStream;
     }

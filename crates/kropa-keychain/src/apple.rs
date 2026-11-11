@@ -51,11 +51,7 @@ unsafe extern "C" {
         flags: u32,
         requirement: *mut CFTypeRef,
     ) -> i32;
-    fn SecRequirementCopyString(
-        requirement: CFTypeRef,
-        flags: u32,
-        text: *mut CFStringRef,
-    ) -> i32;
+    fn SecRequirementCopyString(requirement: CFTypeRef, flags: u32, text: *mut CFStringRef) -> i32;
     fn SecCodeCopySigningInformation(
         code: *const c_void,
         flags: u32,
@@ -190,7 +186,9 @@ pub(crate) fn check_peer(
     code.check_validity(Flags::STRICT_VALIDATE, &requirement)
         .map_err(|_| Unverified("the code of the peer does not satisfy the requirement"))?;
     if !has_hardened_runtime(&code)? {
-        return Err(Unverified("the peer is not signed with the hardened runtime"));
+        return Err(Unverified(
+            "the peer is not signed with the hardened runtime",
+        ));
     }
     Ok(())
 }

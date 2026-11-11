@@ -11,9 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use zeroize::Zeroizing;
 
-use crate::item::{
-    Failure, FailureKind, Item, ItemName, ItemStore, check_document, check_part,
-};
+use crate::item::{Failure, FailureKind, Item, ItemName, ItemStore, check_document, check_part};
 
 /// A keychain in memory.
 #[derive(Default)]
@@ -141,7 +139,10 @@ impl ItemStore for MemoryItemStore {
             .entry((profile.to_owned(), name.to_owned()))
             .or_default();
         if !slot.is_empty() {
-            return Err(Failure::new(FailureKind::Exists, "the entry already exists"));
+            return Err(Failure::new(
+                FailureKind::Exists,
+                "the entry already exists",
+            ));
         }
         slot.push(document.to_vec());
         Ok(())
@@ -199,9 +200,15 @@ mod tests {
     fn create_replace_read_remove() {
         let s = MemoryItemStore::new();
         s.create("p", "n", b"one").unwrap();
-        assert_eq!(s.create("p", "n", b"x").unwrap_err().kind, FailureKind::Exists);
+        assert_eq!(
+            s.create("p", "n", b"x").unwrap_err().kind,
+            FailureKind::Exists
+        );
         s.replace("p", "n", b"two").unwrap();
-        assert_eq!(s.replace("p", "m", b"x").unwrap_err().kind, FailureKind::Missing);
+        assert_eq!(
+            s.replace("p", "m", b"x").unwrap_err().kind,
+            FailureKind::Missing
+        );
         let items = s.read("p", None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(&**items[0].document, b"two");
@@ -215,7 +222,10 @@ mod tests {
         let s = MemoryItemStore::new();
         s.create("p", "n", b"one").unwrap();
         s.duplicate("p", "n", b"other");
-        assert_eq!(s.read("p", Some("n")).unwrap_err().kind, FailureKind::Ambiguous);
+        assert_eq!(
+            s.read("p", Some("n")).unwrap_err().kind,
+            FailureKind::Ambiguous
+        );
         assert_eq!(s.list().unwrap().len(), 2);
     }
 

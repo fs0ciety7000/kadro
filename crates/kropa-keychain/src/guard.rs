@@ -273,8 +273,9 @@ mod tests {
     use std::cell::RefCell;
 
     use super::{
-        ChannelState, LaunchFacts, PeerToken, ProjectCertificate, Refusal, Unverified,
-        check_launch,
+        BROKER_IDENTIFIER, CLIENT_IDENTIFIER, ChannelState, LaunchFacts, PeerToken,
+        ProjectCertificate, Refusal, Unverified, broker_requirement, certificate_from_requirement,
+        check_launch, client_requirement,
     };
 
     /// Facts that say what the test tells them, and note what was asked of them.
@@ -430,7 +431,9 @@ mod tests {
     #[test]
     fn the_certificate_is_read_from_a_designated_requirement() {
         let hex = "0123456789abcdef0123456789abcdef01234567";
-        let dr = format!("identifier \"io.github.fs0ciety7000.Kropa\" and certificate leaf = H\"{hex}\"");
+        let dr = format!(
+            "identifier \"io.github.fs0ciety7000.Kropa\" and certificate leaf = H\"{hex}\""
+        );
         assert_eq!(certificate_from_requirement(&dr).unwrap().hex(), hex);
         for other in [
             format!("cdhash H\"{hex}\""),
@@ -447,20 +450,30 @@ mod tests {
         let c = ProjectCertificate::from_hex(&"ab".repeat(20)).unwrap();
         assert_eq!(
             client_requirement(&c),
-            format!("identifier \"io.github.fs0ciety7000.Kropa.app\" and certificate leaf = H\"{}\"", "ab".repeat(20))
+            format!(
+                "identifier \"io.github.fs0ciety7000.Kropa.app\" and certificate leaf = H\"{}\"",
+                "ab".repeat(20)
+            )
         );
-        assert!(broker_requirement(&c).starts_with("identifier \"io.github.fs0ciety7000.Kropa\" and"));
+        assert!(
+            broker_requirement(&c).starts_with("identifier \"io.github.fs0ciety7000.Kropa\" and")
+        );
         // The build script signs with these identifiers: a drift would refuse every client.
         let script = include_str!("../../../scripts/bundle-macos.sh");
         assert!(script.contains(&format!("APP_ID=\"{BROKER_IDENTIFIER}\"")));
-        assert!(script.contains(&format!("{CLIENT_IDENTIFIER}\"")) || script.contains("\"$APP_ID.app\""));
+        assert!(
+            script.contains(&format!("{CLIENT_IDENTIFIER}\""))
+                || script.contains("\"$APP_ID.app\"")
+        );
     }
 
     #[test]
     fn a_certificate_is_forty_hex_digits() {
         assert!(ProjectCertificate::from_hex(&"AB".repeat(20)).is_some());
         assert_eq!(
-            ProjectCertificate::from_hex(&"AB".repeat(20)).unwrap().hex(),
+            ProjectCertificate::from_hex(&"AB".repeat(20))
+                .unwrap()
+                .hex(),
             "ab".repeat(20)
         );
         for bad in ["", "ab", &"zz".repeat(20), &"ab".repeat(21)] {

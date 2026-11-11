@@ -111,7 +111,10 @@ impl BrokerClient {
             request,
         })?;
         let arguments: Vec<&str> = self.arguments.iter().map(String::as_str).collect();
-        let Spawned { mut child, mut channel } = spawn_with_channel(&self.broker, &arguments)
+        let Spawned {
+            mut child,
+            mut channel,
+        } = spawn_with_channel(&self.broker, &arguments)
             .map_err(|e| unavailable(format!("cannot start the Keychain broker: {}", e.kind())))?;
         let timeout = if interactive {
             self.timeouts.prompt
@@ -166,7 +169,10 @@ fn no_answer(status: Option<i32>) -> Failure {
         ),
         Some(refusal) => Failure::new(
             FailureKind::BrokerRefused,
-            format!("the Keychain broker refused this caller ({})", refusal.reason()),
+            format!(
+                "the Keychain broker refused this caller ({})",
+                refusal.reason()
+            ),
         ),
         None => unavailable(match status {
             Some(code) => format!("the Keychain broker ended without an answer (status {code})"),
@@ -283,14 +289,21 @@ mod tests {
     fn an_unchecked_client_is_never_the_default() {
         // On this OS the real check is either the macOS one (not signed: unavailable) or "macOS only".
         let client = BrokerClient::new("/bin/true");
-        assert_eq!(client.list().unwrap_err().kind, FailureKind::BrokerUnavailable);
+        assert_eq!(
+            client.list().unwrap_err().kind,
+            FailureKind::BrokerUnavailable
+        );
     }
 
     #[test]
     fn exit_statuses_become_failures() {
         let refused = no_answer(Some(i32::from(Refusal::PeerCodeRejected.exit_code())));
         assert_eq!(refused.kind, FailureKind::BrokerRefused);
-        assert!(refused.detail.contains("peer_code_rejected"), "{}", refused.detail);
+        assert!(
+            refused.detail.contains("peer_code_rejected"),
+            "{}",
+            refused.detail
+        );
         let unsigned = no_answer(Some(i32::from(Refusal::BrokerNotProjectSigned.exit_code())));
         assert_eq!(unsigned.kind, FailureKind::BrokerUnavailable);
         assert_eq!(no_answer(Some(0)).kind, FailureKind::BrokerUnavailable);

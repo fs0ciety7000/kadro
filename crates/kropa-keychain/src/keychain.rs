@@ -30,7 +30,7 @@
 //! `errSecUserCanceled` or `errSecAuthFailed`); the manual list of `docs/testing/manual-macos.md`
 //! records it.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -247,11 +247,9 @@ impl ItemStore for FileKeychain {
             check_part("name", name)?;
         }
         let (profile, name) = (profile.to_owned(), name.map(str::to_owned));
-        self.run(false, move |target| {
-            match load(target.keychain.as_ref())? {
-                None => Ok(Vec::new()),
-                Some((document, _)) => store_doc::entries_of(&document, &profile, name.as_deref()),
-            }
+        self.run(false, move |target| match load(target.keychain.as_ref())? {
+            None => Ok(Vec::new()),
+            Some((document, _)) => store_doc::entries_of(&document, &profile, name.as_deref()),
         })
     }
 
@@ -320,7 +318,7 @@ impl ItemStore for FileKeychain {
 
 /// The path of a lock file for tests.
 #[cfg(test)]
-fn lock_in(dir: &Path) -> PathBuf {
+fn lock_in(dir: &std::path::Path) -> PathBuf {
     dir.join("Kropa").join("store.lock")
 }
 
@@ -346,16 +344,22 @@ mod tests {
     }
 
     fn entry(key: &str, value: &str) -> Vec<u8> {
-        format!(r#"{{"v":2,"entries":{{"{key}":{{"origins":[],"placements":[],"value":"{value}"}}}}}}"#)
-            .into_bytes()
+        format!(
+            r#"{{"v":2,"entries":{{"{key}":{{"origins":[],"placements":[],"value":"{value}"}}}}}}"#
+        )
+        .into_bytes()
     }
 
     #[test]
     fn entries_round_trip_and_stay_apart_by_profile() {
         let (_dir, _kc, store) = temporary();
         assert!(store.read("zipline", None).unwrap().is_empty());
-        store.create("zipline", "token", &entry("zipline/token", "AAAA-1")).unwrap();
-        store.create("s3", "access", &entry("s3/access", "BBBB-2")).unwrap();
+        store
+            .create("zipline", "token", &entry("zipline/token", "AAAA-1"))
+            .unwrap();
+        store
+            .create("s3", "access", &entry("s3/access", "BBBB-2"))
+            .unwrap();
         let zipline = store.read("zipline", None).unwrap();
         assert_eq!(zipline.len(), 1);
         assert!(String::from_utf8_lossy(&zipline[0].document).contains("AAAA-1"));
@@ -388,12 +392,18 @@ mod tests {
     fn create_replace_and_missing_have_the_semantics_of_the_linux_store() {
         let (_dir, _kc, store) = temporary();
         assert_eq!(
-            store.replace("p", "n", &entry("p/n", "AAAA-1")).unwrap_err().kind,
+            store
+                .replace("p", "n", &entry("p/n", "AAAA-1"))
+                .unwrap_err()
+                .kind,
             FailureKind::Missing
         );
         store.create("p", "n", &entry("p/n", "AAAA-1")).unwrap();
         assert_eq!(
-            store.create("p", "n", &entry("p/n", "BBBB-2")).unwrap_err().kind,
+            store
+                .create("p", "n", &entry("p/n", "BBBB-2"))
+                .unwrap_err()
+                .kind,
             FailureKind::Exists
         );
         store.replace("p", "n", &entry("p/n", "BBBB-2")).unwrap();
@@ -430,7 +440,9 @@ mod tests {
                 std::thread::spawn(move || {
                     for n in 0..8 {
                         let name = format!("t{t}n{n}");
-                        store.create("p", &name, &entry(&format!("p/{name}"), "AAAA-1")).unwrap();
+                        store
+                            .create("p", &name, &entry(&format!("p/{name}"), "AAAA-1"))
+                            .unwrap();
                     }
                 })
             })

@@ -313,7 +313,10 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(&**items[0].document, b"mine");
         let text = String::from_utf8_lossy(&reply);
-        assert!(!text.contains("theirs") && !text.contains("prefix"), "{text}");
+        assert!(
+            !text.contains("theirs") && !text.contains("prefix"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -352,7 +355,7 @@ mod tests {
             request: Request::Status,
         })
         .unwrap();
-        exchange(&Facts::good(), &store, &request);
+        let _ = exchange(&Facts::good(), &store, &request);
         assert!(store.interactive());
     }
 
@@ -436,7 +439,13 @@ mod tests {
         let (mut client, mut server) = UnixStream::pair().unwrap();
         client.write_all(&line(Request::Status)).unwrap();
         client.shutdown(std::net::Shutdown::Write).unwrap();
-        serve_admitted(&mut server, Admitted { parent: 500 }, &Facts::good(), &store).unwrap();
+        serve_admitted(
+            &mut server,
+            Admitted { parent: 500 },
+            &Facts::good(),
+            &store,
+        )
+        .unwrap();
         let mut reply = Vec::new();
         client.read_to_end(&mut reply).unwrap();
         assert!(matches!(decode_reply(&reply).unwrap(), Reply::Names(_)));

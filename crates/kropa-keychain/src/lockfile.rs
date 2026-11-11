@@ -54,7 +54,10 @@ mod tests {
         let path = dir.path().join("Kropa").join("store.lock");
         let _lock = acquire(&path).unwrap();
         let file_mode = std::fs::metadata(&path).unwrap().permissions().mode();
-        let dir_mode = std::fs::metadata(path.parent().unwrap()).unwrap().permissions().mode();
+        let dir_mode = std::fs::metadata(path.parent().unwrap())
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(file_mode & 0o777, 0o600);
         assert_eq!(dir_mode & 0o777, 0o700);
     }

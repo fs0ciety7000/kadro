@@ -403,7 +403,10 @@ pub fn encode_reply(reply: &Reply) -> Zeroizing<Vec<u8>> {
             out.items = Some(list);
         }
         Reply::Names(names) => {
-            capacity += names.iter().map(|n| n.profile.len() + n.name.len() + 32).sum::<usize>();
+            capacity += names
+                .iter()
+                .map(|n| n.profile.len() + n.name.len() + 32)
+                .sum::<usize>();
             out.names = Some(
                 names
                     .iter()
@@ -424,7 +427,9 @@ pub fn encode_reply(reply: &Reply) -> Zeroizing<Vec<u8>> {
     // Writing into a Vec cannot fail, and the types above always serialize.
     if serde_json::to_writer(&mut *line, &out).is_err() {
         line.clear();
-        line.extend_from_slice(br#"{"v":1,"ok":false,"kind":"store_error","detail":"reply not encodable"}"#);
+        line.extend_from_slice(
+            br#"{"v":1,"ok":false,"kind":"store_error","detail":"reply not encodable"}"#,
+        );
     }
     line.push(b'\n');
     line
@@ -458,7 +463,10 @@ pub fn decode_reply(bytes: &[u8]) -> Result<Reply, Failure> {
         if raw.removed.is_some() || raw.items.is_some() || raw.names.is_some() {
             return Err(bad());
         }
-        return Ok(Reply::Failed(Failure::new(kind, raw.detail.unwrap_or_default())));
+        return Ok(Reply::Failed(Failure::new(
+            kind,
+            raw.detail.unwrap_or_default(),
+        )));
     }
     if raw.kind.is_some() || raw.detail.is_some() {
         return Err(bad());
@@ -516,7 +524,9 @@ mod tests {
             name: Some("token".into()),
         });
         assert!(e.interactive);
-        assert!(matches!(e.request, Request::Read { ref profile, name: Some(ref n) } if profile == "zipline" && n == "token"));
+        assert!(
+            matches!(e.request, Request::Read { ref profile, name: Some(ref n) } if profile == "zipline" && n == "token")
+        );
 
         let e = round_trip(Request::Write {
             profile: "p".into(),
@@ -535,7 +545,10 @@ mod tests {
             name: "n".into(),
         });
         assert!(matches!(e.request, Request::Remove { .. }));
-        assert!(matches!(round_trip(Request::Status).request, Request::Status));
+        assert!(matches!(
+            round_trip(Request::Status).request,
+            Request::Status
+        ));
     }
 
     #[test]
@@ -573,7 +586,10 @@ mod tests {
             parse_request(b"{\"v\":1,\"op\":\"dump\"}\n").unwrap_err(),
             BadRequest::UnknownOperation
         );
-        assert_eq!(parse_request(b"not json\n").unwrap_err(), BadRequest::Malformed);
+        assert_eq!(
+            parse_request(b"not json\n").unwrap_err(),
+            BadRequest::Malformed
+        );
     }
 
     #[test]
