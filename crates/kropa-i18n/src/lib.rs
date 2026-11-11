@@ -181,12 +181,13 @@ mod tests {
     }
 
     fn ids(source: &str) -> BTreeSet<String> {
-        let res = FluentResource::try_new(source.to_owned()).expect("valid ftl");
-        res.entries()
-            .filter_map(|e| match e {
-                fluent_syntax::ast::Entry::Message(m) => Some(m.id.name.to_owned()),
-                _ => None,
-            })
+        // Also checks that the resource parses.
+        FluentResource::try_new(source.to_owned()).expect("valid ftl");
+        source
+            .lines()
+            .filter_map(|l| l.split_once(" = ").map(|(id, _)| id))
+            .filter(|id| id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+            .map(str::to_owned)
             .collect()
     }
 
