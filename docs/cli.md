@@ -1,6 +1,7 @@
 # Kropa : spécification de la ligne de commande v1
 
-> État : **proposition à valider** (tâche 0.6 de `docs/plan.md`). Rédigée par `architect` d'après `decisions.md`
+> État : **validée** le 11/11/2026 (`decisions.md`), avec les ajouts de sécurité de `security/secrets.md` § 9 (U4),
+> reportés en S.4. Tâche 0.6 de `docs/plan.md`, rédigée par `architect` d'après `decisions.md`
 > (prioritaire), `plan.md`, `product.md` (P4, P5), `uploads.md` et `architecture.md`. Les exemples sont en anglais,
 > comme la CLI avec `LANG=en`. Contrat stable à partir de la v1.0 (SemVer, `quality-release.md` § 4.1).
 
@@ -15,13 +16,15 @@
    sans couleur ni décoration ; progression, avertissements et erreurs vont sur stderr. `--quiet` coupe stderr sauf
    les erreurs.
 4. **Pas d'interaction si stdin n'est pas un TTY** : aucune invite, aucune confirmation implicite. Ce qui exigerait
-   une réponse échoue avec le code 12, sauf option explicite (`--yes`, `--secret-stdin`, `--password-fd`, `--var`).
+   une réponse échoue avec le code 12, sauf option explicite (`--yes`, `--expect-host`, `--secret-stdin`,
+   `--secret-fd`, `--password-fd`, `--var`). Quelques confirmations de sécurité ne s'accordent **jamais** sans TTY,
+   même avec `--yes` : changement d'origine ou d'emplacement d'un secret (`secrets allow`, `dest edit`).
    `--no-input` force ce comportement même sur un TTY. Les dialogues graphiques (overlay de sélection, portail,
    TCC) ne sont pas des interactions stdin : ils restent possibles.
 5. **Aucun secret en argument ni en variable d'environnement** : jeton saisi masqué sur le TTY, lu sur stdin avec
    `--secret-stdin`, ou sur un descripteur avec `--secret-fd N` ; phrase de passe du coffre `age` par invite TTY ou
    `--password-fd N`. Une option du type `--token=…` n'existe pas ; une valeur ressemblant à un secret dans un argument
-   (`--header 'Authorization: …'`) est refusée (code 11).
+   (`--header 'Authorization: …'`) est refusée (code 11), comme un `--var` qui alimenterait un emplacement de secret.
 6. **Langue** : `--lang fr|en`, sinon `LC_ALL`, `LC_MESSAGES`, `LANG` ; repli `en`. Seules les chaînes humaines
    changent : JSON, codes d'erreur et noms d'options sont invariants.
 7. **Aucune variable d'environnement propre à Kropa** (règle du projet). Seules les conventions standard sont lues :
@@ -45,8 +48,14 @@
 | `--no-input` | Interdit toute invite, même sur un TTY. |
 | `--color <auto\|always\|never>` | Couleur sur stderr ; `auto` respecte `NO_COLOR` et l'absence de TTY. |
 | `--config <dossier>` | Dossier de configuration (tests, profils séparés). |
-| `--password-fd <N>` | Phrase de passe du coffre `age` lue sur le descripteur N, pour cette commande seulement. |
+| `--password-fd <N>` | Phrase de passe du coffre `age` lue sur le descripteur N, pour cette commande seulement (lot 2.8). |
 | `-h, --help`, `-V, --version` | Aide ; version courte (lot 0.3). |
+
+**Descripteurs** (`--password-fd`, `--secret-fd`, et stdin pour `--secret-stdin`) : lecture jusqu'à EOF ou `\n`,
+**4 Kio au plus** (au-delà : code 2, rien lu n'est gardé) ; un seul `\n` final retiré ; descripteur passé `CLOEXEC`
+puis fermé. Refusés (code 2) : fd 1 et 2, un même fd pour la phrase et le secret, fd 0 quand stdin porte déjà un
+fichier. Limites actives dès l'arrivée de chaque option (1.8 pour `secrets set`, 2.6 pour `dest add`, 2.8 pour
+`--password-fd`).
 
 ## 2. Commandes v1
 
@@ -72,7 +81,7 @@ kropa capture area   [--last] [OPTIONS]
 | `--no-upload` | N'envoie pas, même si la config active l'envoi automatique. Exclusif avec `--upload`. |
 | `--copy <url\|markdown\|html\|image\|none>` | Ce qui va au presse-papiers. Défaut : format de lien du profil si envoi, sinon `image` si la config le prévoit, sinon `none`. |
 | `--edit` | Ouvre l'éditeur avant l'enregistrement final et l'envoi (lot 3.7). |
-| `--var <NOM=VALEUR>` | Valeur d'une variable `{inputbox}` / `{select}` d'un profil importé de `.sxcu`. |
+| `--var <NOM=VALEUR>` | Valeur d'une variable `{inputbox}` / `{select}` d'un profil importé de `.sxcu`. Refusé (code 11, `secret_in_argument`) si la variable alimente un emplacement de secret : un `{inputbox}` d'authentification devient un secret à l'import (lot 1.7). |
 
 L'enregistrement local a toujours lieu avant l'envoi ; un échec d'envoi ne supprime jamais le fichier.
 
@@ -89,11 +98,12 @@ kropa capture output DP-1 --no-upload --json | jq -r .file.path
 
 `kropa upload <FICHIER> [--to <PROFIL>] [--copy url|markdown|html|none] [--var NOM=VALEUR] [--yes]`
 
-Envoie un fichier existant vers `--to` ou le profil par défaut. Les métadonnées sont retirées de la copie envoyée
+Envoie un fichier existant vers `--to` ou le profil par défaut (`--var` : mêmes règles que `capture`). Les
+métadonnées sont retirées de la copie envoyée
 (lot 4.8), le fichier d'origine n'est jamais modifié. stdout : l'URL. `--yes` saute la confirmation d'un format
 inconnu envoyé tel quel (`uploads.md` § 6). Exemple : `kropa upload ./diagram.png --to zipline --copy markdown`.
 
-### 2.3 `dest` : destinations (lot 1.7 : `list`, `show`, `test`, `import` ; lot 2.6 : le reste)
+### 2.3 `dest` : destinations (lot 1.7 : `list`, `show`, `test`, `import` et `--expect-host` ; lot 2.6 : le reste)
 
 ```
 kropa dest list | show <ID>
@@ -102,7 +112,7 @@ kropa dest edit <ID> [--url URL] [--set CLÉ=VALEUR]…     # sans option : ouvr
 kropa dest test <ID> [--yes]
 kropa dest remove <ID> [--yes]
 kropa dest set-default <ID> | --none
-kropa dest import <FICHIER.sxcu|FICHIER.toml> [--id ID] [--yes]
+kropa dest import <FICHIER.sxcu|FICHIER.toml> [--id ID] [--yes --expect-host HÔTE]
 kropa dest export [<ID>…]
 ```
 
@@ -112,38 +122,62 @@ kropa dest export [<ID>…]
   `--public-base-url`, `--presign <DURÉE>` ≤ 7 j, lot 2.7 ; SFTP : `--host`, `--port`, `--user`, `--remote-dir`,
   `--public-url`, lot 4.9). Le secret est demandé masqué sur le TTY ; sans TTY, `--secret-stdin` ou `--secret-fd`
   sinon code 12. Il est stocké lié à l'origine de `--url`.
-- `edit` : changer l'URL d'un profil qui a un secret exige une confirmation interactive, **jamais** accordée par
-  `--yes` ni sans TTY (code 12) ; le secret n'est pas transporté vers la nouvelle origine sans elle.
+- `edit` : changer l'URL d'un profil qui a un secret, ou déplacer un `{secret:}` vers un autre emplacement (en-tête,
+  query, champ, corps), exige une confirmation interactive, **jamais** accordée par `--yes` ni sans TTY (code 12) ;
+  sans elle, l'autorisation ne suit pas (voir `secrets allow`).
 - `test` : envoie une image témoin de 1×1 **après confirmation** (`--yes` sans TTY) ; affiche statut, en-têtes
   filtrés, URL extraite et lien formaté.
 - `remove` : supprime le profil et ses secrets après confirmation (`--yes` sans TTY).
-- `import` : résumé (hôte, champs, secrets détectés et masqués) puis confirmation ; les secrets en clair vont au
-  magasin, le TOML ne garde que `{secret:…}` ; refus explicite des champs non pris en charge (`uploads.md` § 2.4).
+- `import` : `.sxcu` et `.toml` suivent **les mêmes règles** (`security/secrets.md` § 5). Résumé (origine, HTTPS ou
+  non, emplacements, secrets détectés et masqués, query signalée) puis confirmation ; les secrets vont au magasin en
+  entrées **neuves** du profil importé, le TOML ne garde que `{secret:…}` ; refus explicite des champs non pris en
+  charge (`uploads.md` § 2.4). Sans TTY : `--yes` **et** `--expect-host <HÔTE>` exigés (code 12 sinon ; code 11 si
+  l'hôte du fichier diffère). `id` déjà pris (config ou magasin) : refusé, sauf `--id` ou confirmation interactive de
+  remplacement (les secrets du profil remplacé sont supprimés). Jeton dans le chemin de l'URL, ou import `http://`
+  avec secret : refusé (code 11).
 - `export` : TOML des profils sur stdout, références de secrets seulement, jamais les valeurs.
 
 ```sh
 kropa dest add zipline --type zipline --url https://zipline.example.org    # token prompted, hidden
 printf '%s' "$TOKEN" | kropa dest add team --type zipline --url https://z.team.example --secret-stdin
 kropa dest import ./xbackbone.sxcu && kropa dest test xbackbone
+kropa dest import ./team.toml --yes --expect-host z.team.example --no-input    # CI provisioning
 ```
 
-### 2.4 `secrets` (lot 1.8 : `status`, `set`, `remove` ; lot 2.8 : `unlock`, `lock`)
+### 2.4 `secrets` (lot 1.8 : `status`, `set`, `remove`, `allow` ; lot 2.8 : `unlock`, `lock`, `use`, `migrate`)
 
 ```
 kropa secrets status | lock
 kropa secrets set <PROFIL> <NOM> [--secret-stdin|--secret-fd N]
 kropa secrets remove <PROFIL> <NOM> [--yes]
+kropa secrets allow <PROFIL> <NOM> (--origin <URL> | --placement <P>)
+kropa secrets use keyring|vault
+kropa secrets migrate --to vault|keyring [--yes]
 kropa secrets unlock [--password-fd N]
 ```
 
 - `status` : magasin actif (trousseau ou coffre `age`) et pourquoi, état du coffre (verrouillé, ouvert, durée
   restante), secrets référencés mais absents. La bascule n'est jamais silencieuse.
-- `set` : remplace la valeur (origines autorisées reprises du profil). `remove` : supprime l'entrée.
+- `set` : remplace la valeur ; une entrée existante garde ses origines et emplacements. Pour une entrée neuve, ou
+  vide (créée par un import), les origines et emplacements tirés du profil sont **montrés et confirmés** (sans TTY :
+  `--yes`). Avec le coffre, toute écriture (`set`, `remove`, `allow`, `migrate`) redemande la phrase de passe, même
+  coffre déverrouillé. `remove` : supprime l'entrée.
+- `allow` : autorise le secret pour une nouvelle origine (`--origin`, triplet endpoint/région/bucket pour S3) ou un
+  nouvel emplacement (`--placement header:<Nom>|query:<clé>|form:<champ>|body`), après avoir montré l'ancien et le
+  nouveau. **Interactif seulement** : sans TTY ou avec `--no-input`, code 12 ; `--yes` est sans effet. Hôte ou chemin
+  de l'URL refusés comme emplacement (code 11).
+- `use` : choisit le magasin (`secrets.store`), sans rien copier ; le magasin choisi n'est jamais changé
+  automatiquement. `migrate` : copie toutes les entrées vers l'autre magasin, relit, puis supprime la source après
+  confirmation (`--yes` sans TTY) ; s'arrête sans rien supprimer à la première erreur.
 - `unlock` : ouvre le coffre `age` dans `kropa-app` pour la durée de session (lot 4.7) ; sans `kropa-app`, il est
   lancé. `lock` : verrouille immédiatement. Sur trousseau seul, les deux répondent « sans objet » (code 0, statut
   `not_applicable`).
 
-Exemple : `kropa secrets unlock --password-fd 3 3< <(pass show kropa/vault)`.
+```sh
+kropa secrets unlock --password-fd 3 3< <(pass show kropa/vault)
+kropa secrets allow zipline token --origin https://zipline.new.example.org    # interactive confirmation
+kropa secrets use vault && kropa secrets migrate --to vault
+```
 
 ### 2.5 `queue` (lot 4.5)
 
@@ -196,19 +230,20 @@ téléchargement. Échec réseau : code 8.
 | 4 | `permission_denied` | Refus du portail Screenshot, permission TCC absente, accès au trousseau refusé par l'utilisateur. |
 | 5 | `unsupported` | Fonction indisponible sur cette plateforme ou ce bureau (ex. `capture output <nom>` impossible à isoler). |
 | 6 | `config` | Config ou destination invalide, profil ou id inconnu, aucun profil par défaut avec `--upload`. |
-| 7 | `secret_unavailable` | Coffre verrouillé, phrase de passe fausse, secret référencé absent, trousseau inaccessible. |
+| 7 | `secret_unavailable` | Coffre verrouillé, phrase de passe fausse, secret référencé absent, trousseau inaccessible, verrouillé sans interaction possible (aucune invite affichée), délai dépassé, élément en double, courtier Keychain refusé (macOS). |
 | 8 | `network` | DNS, connexion, délai, TLS : le fichier est conservé ; à partir du lot 4, la tâche est mise en file (`upload.job_id`). |
 | 9 | `upload_failed` | Le serveur a répondu mais l'envoi a échoué : statut HTTP d'erreur, URL non extraite, réponse > 1 Mio. |
 | 10 | `capture_failed` | Échec de capture hors permission (écran introuvable, pas de session graphique, `--last` sans zone). |
-| 11 | `security_refused` | Origine non autorisée pour un secret, HTTPS exigé, redirection vers une autre origine, secret en argument. |
+| 11 | `security_refused` | Origine ou emplacement non autorisé pour un secret, HTTPS exigé, redirection vers une autre origine, secret en argument ou dans un `--var`, secret renvoyé dans le lien ou la sortie, phrase de passe faible, hôte d'import différent de `--expect-host`. |
 | 12 | `interaction_required` | Une réponse est nécessaire mais stdin n'est pas un TTY ou `--no-input` est actif. |
 | 13 | — | Réservé (non utilisé : une copie impossible donne un avertissement et le code 0, voir § 5). |
-| 14 | `daemon_unavailable` | `kropa-app` injoignable ou version IPC incompatible (`hello`). |
+| 14 | `daemon_unavailable` | `kropa-app` injoignable, version IPC incompatible (`hello`), dossier d'exécution absent ou non sûr (pas de repli vers `/tmp`). |
 | 15 | `io` | Fichier introuvable ou illisible, écriture impossible, fichier existant sans `--force`. |
 | 130 | — | Interruption (SIGINT). |
 
 Quand plusieurs étapes échouent, le code est celui de la **première** étape en échec dans l'ordre capture →
-enregistrement → envoi → copie ; les suivantes figurent dans le JSON.
+enregistrement → envoi → copie ; les suivantes figurent dans le JSON. Les sous-causes ne créent pas de code : elles
+vont dans `error.reason` (§ 4).
 
 ## 4. Schéma JSON de `capture` et `upload`
 
@@ -240,9 +275,12 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `capture.mode` | `screen`, `output`, `area`. `backend` : `portal-screenshot`, `kde-screenshot2`, `wlr-screencopy`, `x11`, `screencapturekit`. |
 | `upload.status` | `done`, `queued` (lot 4, `job_id` renseigné), `failed`, `skipped` (pas d'envoi demandé). `upload` vaut `null` avec `--no-upload`. |
 | `clipboard.status` | `copied`, `pending` (notification « Lien prêt, Copier » en attente d'un clic), `unavailable`, `failed`, `skipped`. |
-| `error` | `null` ou `{ "code": "network", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
+| `error` | `null` ou `{ "code": "security_refused", "reason": "origin_not_allowed", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
+| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. |
+| `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
-`deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
+`deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux. `error.message`
+et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
 Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.queue.list/1`,
 `kropa.history.list/1`, `kropa.doctor/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
 `trycmd` du lot 1.3 et dans la référence CLI du lot 5.6.
@@ -262,7 +300,7 @@ sur stdout. Que la copie ait été demandée par la config ou explicitement par 
 avertissement sur stderr et `clipboard.status` dans le JSON (décision de l'utilisateur du 11/11/2026). Un clic ultérieur sur « Copier » ne change pas
 le code déjà rendu.
 
-## 6. Arbitrages faits (à valider)
+## 6. Arbitrages (validés le 11/11/2026)
 
 1. **Noms fixés par le plan appliqués** : `capture screen|output|area` (pas `region`), `--upload[=profil]` et
    `--no-upload` (pas `--profile`), `--copy url|markdown|html|none` (pas `--link-format` ni `--no-clipboard`).
@@ -283,6 +321,9 @@ le code déjà rendu.
 11. **`--var`** retenu pour les variables `{inputbox}` / `{select}` des `.sxcu` (`uploads.md` § 2.4).
 12. **`--password-fd` global**, utilisable par toute commande qui lit un secret, en plus de `secrets unlock`.
 13. **`capture output` sans nom** = écran principal (pas l'écran sous le pointeur, inconnu sous GNOME Wayland).
+14. **Ajouts de sécurité** (S.4, `security/secrets.md` § 9, validés U4) : `secrets allow` (1.8, interactif seulement),
+    `secrets use` et `secrets migrate` (2.8), `dest import --expect-host` (1.7), `error.reason` (1.7), limites des
+    descripteurs (avec chaque option), refus de `--var` vers un secret (1.7). Aucun nouveau code de sortie.
 
 ## 7. Questions ouvertes
 

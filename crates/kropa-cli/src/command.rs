@@ -129,27 +129,27 @@ fn localize(mut cmd: Command, path: &[String], loc: &Localizer) -> Command {
 
 /// Help layout with localised headings; sections that would be empty are left out.
 fn help_template(cmd: &Command, loc: &Localizer) -> String {
-    let mut t = format!(
+    let mut parts = vec![format!(
         "{{about}}\n\n{} {{usage}}\n",
         loc.message("cli-usage-heading")
-    );
+    )];
     if cmd.get_subcommands().next().is_some() {
-        t.push_str(&format!(
+        parts.push(format!(
             "\n{}\n{{subcommands}}\n",
             loc.message("cli-commands-heading")
         ));
     }
     if cmd.get_positionals().next().is_some() {
-        t.push_str(&format!(
+        parts.push(format!(
             "\n{}\n{{positionals}}\n",
             loc.message("cli-arguments-heading")
         ));
     }
-    t.push_str(&format!(
+    parts.push(format!(
         "\n{}\n{{options}}\n",
         loc.message("cli-options-heading")
     ));
-    t
+    parts.concat()
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ use kropa_i18n::Lang;
 /// Longest delay accepted by `--delay`, in seconds.
 pub const MAX_DELAY_SECS: f64 = 60.0;
 /// Longest pre-signed URL lifetime accepted by `--presign`.
-pub const MAX_PRESIGN: Duration = Duration::from_secs(7 * 24 * 3600);
+pub const MAX_PRESIGN: Duration = Duration::from_hours(7 * 24);
 
 /// A refused argument value. `id` is the Fluent message that explains why; `detail` fills `$detail`.
 #[derive(Debug, Clone)]
@@ -318,7 +318,7 @@ pub enum DestCommand {
         id: String,
     },
     /// Add a destination.
-    Add(DestAddArgs),
+    Add(Box<DestAddArgs>),
     /// Edit a destination.
     Edit {
         /// Profile identifier.

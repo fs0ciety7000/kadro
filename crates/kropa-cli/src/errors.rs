@@ -2,6 +2,8 @@
 
 //! Run-time errors of the CLI and localisation of clap's usage errors.
 
+use std::fmt::Write as _;
+
 use clap::error::{ContextKind, ContextValue, ErrorKind};
 use kropa_core::{CoreError, ExitCode};
 use kropa_i18n::Localizer;
@@ -121,7 +123,6 @@ fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
             loc.message("error-missing-subcommand")
         }
         ErrorKind::NoEquals => loc.message_args("error-no-equals", &[("arg", &arg)]),
-        ErrorKind::InvalidUtf8 => return None,
         ErrorKind::TooFewValues | ErrorKind::WrongNumberOfValues => {
             loc.message_args("error-missing-value", &[("arg", &arg)])
         }
@@ -138,7 +139,7 @@ pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> Option<String>
     for kind in [ContextKind::SuggestedSubcommand, ContextKind::SuggestedArg] {
         let tip = ctx(err, kind);
         if !tip.is_empty() {
-            out.push_str(&format!("\n  {} '{tip}'\n", loc.message("error-tip")));
+            let _ = write!(out, "\n  {} '{tip}'\n", loc.message("error-tip"));
         }
     }
     let usage = ctx(err, ContextKind::Usage);
@@ -148,9 +149,9 @@ pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> Option<String>
         .unwrap_or(usage.trim())
         .trim();
     if !usage.is_empty() {
-        out.push_str(&format!("\n{} {usage}\n", loc.message("cli-usage-heading")));
+        let _ = write!(out, "\n{} {usage}\n", loc.message("cli-usage-heading"));
     }
-    out.push_str(&format!("\n{}\n", loc.message("error-hint")));
+    let _ = write!(out, "\n{}\n", loc.message("error-hint"));
     Some(out)
 }
 
