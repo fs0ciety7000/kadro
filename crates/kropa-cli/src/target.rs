@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use kropa_core::{
-    Clock, Config, CoreError, ExitCode, NameContext, NameError, NameTemplate, validate_file_name,
+    Clock, Config, CoreError, ExitCode, NameContext, NameError, NameTemplate, path_taken,
 };
 use kropa_i18n::Localizer;
 
@@ -113,8 +113,7 @@ fn resolve(
                     &[],
                 ));
             }
-            let file_name = path.file_name().and_then(std::ffi::OsStr::to_str);
-            validate_file_name(file_name.unwrap_or_default()).map_err(|e| name_error(e, loc))?;
+            check_explicit_file(path).map_err(|e| name_error(e, loc))?;
             return existing_check(path.to_owned(), spec.force, loc);
         }
         Some(path) => path.to_owned(),
@@ -137,18 +136,38 @@ fn resolve(
     };
     match template.render_unique(&dir, &ctx, clock, ext) {
         Ok(path) => existing_check(path, spec.force, loc),
-        Err(NameError::MissingVariable(v))
+        Err(CoreError::Name(NameError::MissingVariable(v)))
             if matches!(v, "w" | "h")
                 || (v == "output" && spec.mode == "output" && spec.connector.is_none()) =>
         {
             Ok(Target::Deferred(dir))
         }
-        Err(e) => Err(name_error(e, loc)),
+        Err(e) => Err(CliError::from_core(&e, loc)),
     }
 }
 
+/// A file name the user gave in full with `--output` is theirs: it is refused only when it cannot
+/// name a file at all (nothing, `/`, `..`, a NUL byte). Unlike a generated name it may start with a
+/// dot, hold a colon or any text; being valid UTF-8 is not required either.
+fn check_explicit_file(path: &Path) -> Result<(), NameError> {
+    let Some(name) = path.file_name() else {
+        return Err(NameError::UnsafeName("the path has no file name"));
+    };
+    if name.is_empty() {
+        return Err(NameError::UnsafeName("empty name"));
+    }
+    if name.as_encoded_bytes().contains(&0) {
+        return Err(NameError::UnsafeName("NUL byte in the file name"));
+    }
+    Ok(())
+}
+
+/// Refuses an existing target unless `--force`. This check is only there to answer early and
+/// clearly: what really protects a file is the write, which opens it with `create_new` (`O_EXCL`)
+/// when there is no `--force`, and replaces it atomically (temporary file, then rename) with it.
+/// A path that cannot be inspected is an error, not a free path.
 fn existing_check(path: PathBuf, force: bool, loc: &Localizer) -> Result<Target, CliError> {
-    if !force && path.try_exists().unwrap_or(true) {
+    if !force && path_taken(&path).map_err(|e| CliError::from_core(&e, loc))? {
         return Err(io_error(loc, "error-file-exists", &path));
     }
     Ok(Target::File(path))
@@ -215,6 +234,46 @@ mod tests {
         );
         let e = resolve(&spec(Some(&file), Some("x"))).unwrap_err();
         assert_eq!(e.code, ExitCode::Usage);
+    }
+
+    #[test]
+    fn an_explicit_file_name_is_only_refused_when_it_cannot_name_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in [".hidden.png", "a:b.png", "x y .png", "é\u{202E}.png", "..png"] {
+            let file = dir.path().join(name);
+            assert_eq!(
+                resolve(&spec(Some(&file), None)).unwrap(),
+                Target::File(file.clone()),
+                "{name:?}"
+            );
+        }
+        let nul = dir.path().join("a\0b.png");
+        assert_eq!(resolve(&spec(Some(&nul), None)).unwrap_err().code, ExitCode::Usage);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_name_that_is_not_utf8_is_accepted_for_an_explicit_file() {
+        use std::os::unix::ffi::OsStringExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mut raw = dir.path().as_os_str().to_owned().into_vec();
+        raw.extend_from_slice(b"/caf\xe9.png");
+        let file = PathBuf::from(std::ffi::OsString::from_vec(raw));
+        assert_eq!(
+            resolve(&spec(Some(&file), None)).unwrap(),
+            Target::File(file.clone())
+        );
+    }
+
+    #[test]
+    fn a_path_that_cannot_be_inspected_is_an_io_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("plain");
+        std::fs::write(&plain, b"x").unwrap();
+        // `plain/shot.png`: a file in the middle of the path, neither free nor taken.
+        let e = resolve(&spec(Some(&plain.join("shot.png")), None)).unwrap_err();
+        assert_eq!(e.code, ExitCode::Io);
+        assert!(!e.message.contains("already exists"), "{}", e.message);
     }
 
     #[test]

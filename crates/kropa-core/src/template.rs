@@ -22,7 +22,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::{Clock, NameError};
+use crate::{Clock, CoreError, NameError};
 
 const DEFAULT_DATE: &str = "%Y-%m-%d";
 const DEFAULT_TIME: &str = "%H-%M-%S";
@@ -151,9 +151,7 @@ impl NameTemplate {
             height: Some(1080),
             counter: 1,
         };
-        let epoch =
-            crate::FixedClock::new(jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC));
-        self.render(&sample, &epoch, "png").map(|_| ())
+        self.render(&sample, &Epoch, "png").map(|_| ())
     }
 
     /// The template text as written.
@@ -171,7 +169,8 @@ impl NameTemplate {
     /// Renders the file name `<template>.<ext>`.
     ///
     /// # Errors
-    /// [`NameError`] if a variable has no value, or if the result is not a safe file name.
+    /// [`NameError`] if a variable has no value, or if the result is not a safe file name (a template
+    /// that renders an empty text, or ends with a dot, which would meet the extension, is refused).
     pub fn render(
         &self,
         ctx: &NameContext,
@@ -202,6 +201,14 @@ impl NameTemplate {
                 Part::Host => name.push_str(&sanitize(required(ctx.host.as_deref(), "host")?)),
             }
         }
+        if name.is_empty() {
+            return Err(NameError::UnsafeName("empty name"));
+        }
+        if name.ends_with('.') {
+            return Err(NameError::UnsafeName(
+                "the template ends with a dot, which would meet the extension",
+            ));
+        }
         name.push('.');
         name.push_str(ext);
         validate_file_name(&name)?;
@@ -209,30 +216,64 @@ impl NameTemplate {
     }
 
     /// Renders the target path under `dir`. When the template has `{n}`, the counter is increased
-    /// from `ctx.counter` until the path does not exist yet; otherwise the first rendering is returned
-    /// and the caller decides what to do if the file exists (`--force`).
+    /// from `ctx.counter` until the path is free (see [`path_taken`]); otherwise the first rendering
+    /// is returned and the caller decides what to do if the file exists (`--force`).
+    ///
+    /// The answer is advisory: another process can create the file right after. Whoever writes must
+    /// open it with `create_new` (`O_EXCL`), which is what makes "never overwrite" true.
     ///
     /// # Errors
-    /// [`NameError`] as [`NameTemplate::render`], or [`NameError::Exhausted`].
+    /// [`CoreError::Name`] as [`NameTemplate::render`], or [`NameError::Exhausted`];
+    /// [`CoreError::Io`] if the folder cannot be inspected (permission, a file where a folder is
+    /// expected...): that is reported, not turned into 100 000 attempts.
     pub fn render_unique(
         &self,
         dir: &Path,
         ctx: &NameContext,
         clock: &dyn Clock,
         ext: &str,
-    ) -> Result<PathBuf, NameError> {
+    ) -> Result<PathBuf, CoreError> {
         let mut ctx = ctx.clone();
         if !self.has_counter() {
             return Ok(dir.join(self.render(&ctx, clock, ext)?));
         }
         for _ in 0..MAX_COUNTER_TRIES {
             let path = dir.join(self.render(&ctx, clock, ext)?);
-            if !path.try_exists().unwrap_or(true) {
+            if !path_taken(&path)? {
                 return Ok(path);
             }
-            ctx.counter = ctx.counter.checked_add(1).ok_or(NameError::Exhausted)?;
+            ctx.counter = ctx
+                .counter
+                .checked_add(1)
+                .ok_or(CoreError::Name(NameError::Exhausted))?;
         }
-        Err(NameError::Exhausted)
+        Err(CoreError::Name(NameError::Exhausted))
+    }
+}
+
+/// The clock of the check that a template can give a safe name: always midnight, 1970-01-01 UTC.
+struct Epoch;
+
+impl Clock for Epoch {
+    fn now(&self) -> jiff::Zoned {
+        jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC)
+    }
+}
+
+/// Whether something already sits at `path`, without following a final symbolic link: a dangling
+/// link counts as taken (opening it for writing would write where it points).
+///
+/// # Errors
+/// [`CoreError::Io`] for any failure other than "not found" (permission denied, a file in the middle
+/// of the path...): such a path is neither free nor taken, and the caller must say so.
+pub fn path_taken(path: &Path) -> Result<bool, CoreError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(CoreError::Io {
+            path: path.to_owned(),
+            source,
+        }),
     }
 }
 
@@ -293,12 +334,26 @@ fn check_format(variable: &str, fmt: &str) -> Result<String, NameError> {
     Ok(fmt.to_owned())
 }
 
-/// Replaces separators, reserved characters and control characters of a substituted value by `_`.
+/// Characters that draw nothing or reorder the text around them: zero-width spaces and joiners,
+/// direction marks and overrides (`U+202E` makes `gnp.exe` read `exe.png`), line and paragraph
+/// separators, isolates, the word joiners and the byte order mark. A file name must show what it is.
+fn is_invisible(c: char) -> bool {
+    matches!(c,
+        '\u{200B}'..='\u{200F}'
+        | '\u{2028}'..='\u{202E}'
+        | '\u{2060}'..='\u{2064}'
+        | '\u{2066}'..='\u{2069}'
+        | '\u{061C}'
+        | '\u{FEFF}')
+}
+
+/// Replaces separators, reserved characters and control or invisible characters of a substituted
+/// value by `_`.
 fn sanitize(value: &str) -> String {
     value
         .chars()
         .map(|c| {
-            if c.is_control() || FORBIDDEN.contains(&c) {
+            if c.is_control() || is_invisible(c) || FORBIDDEN.contains(&c) {
                 '_'
             } else {
                 c
@@ -319,7 +374,8 @@ fn validate_extension(ext: &str) -> Result<(), NameError> {
 
 /// Checks that `name` is a single, portable path component: it cannot leave the folder it is joined to.
 ///
-/// Refused: empty names, more than 255 bytes, control characters, `/ \ < > : " | ? *`, any `..`,
+/// Refused: empty names, more than 255 bytes, control characters, invisible and text-direction
+/// characters (zero-width, bidi, line separators, byte order mark), `/ \ < > : " | ? *`, any `..`,
 /// a leading dot or space, a trailing dot or space, and Windows reserved device names.
 ///
 /// # Errors
@@ -334,6 +390,9 @@ pub fn validate_file_name(name: &str) -> Result<(), NameError> {
     }
     if name.chars().any(char::is_control) {
         return bad("control character");
+    }
+    if name.chars().any(is_invisible) {
+        return bad("invisible or text-direction character");
     }
     if name.contains(FORBIDDEN) {
         return bad("path separator or reserved character");
@@ -360,8 +419,8 @@ mod tests {
 
     use proptest::prelude::*;
 
-    use super::{NameContext, NameTemplate, validate_file_name};
-    use crate::{FixedClock, NameError};
+    use super::{NameContext, NameTemplate, path_taken, validate_file_name};
+    use crate::{CoreError, FixedClock, NameError};
 
     fn clock() -> FixedClock {
         FixedClock::new("2026-11-11T09:08:07+01:00[+01:00]".parse().unwrap())
@@ -499,6 +558,58 @@ mod tests {
     }
 
     #[test]
+    fn length_limit_counts_bytes_not_characters() {
+        // 127 two-byte characters and one ASCII letter make exactly 255 bytes (127 characters + 1).
+        let exact = format!("{}a", "é".repeat(127));
+        assert_eq!(exact.len(), 255);
+        assert!(validate_file_name(&exact).is_ok());
+        // One more byte, with fewer characters than the limit: refused.
+        let over = format!("{}ab", "é".repeat(127));
+        assert_eq!(over.len(), 256);
+        assert!(validate_file_name(&over).is_err());
+        assert!(validate_file_name(&"é".repeat(128)).is_err());
+        // Through a template the extension counts too: 251 + ".png" = 255 bytes, 252 + ".png" = 256.
+        let stem_256 = format!("{}ab", "é".repeat(125));
+        assert_eq!(stem_256.len() + 4, 256);
+        assert!(render(&stem_256).is_err());
+        let stem_ok = format!("{}a", "é".repeat(125));
+        assert_eq!(stem_ok.len() + 4, 255);
+        assert!(render(&stem_ok).is_ok());
+    }
+
+    #[test]
+    fn invisible_and_bidi_characters_are_refused_or_replaced() {
+        for c in [
+            '\u{200B}', '\u{200C}', '\u{200D}', '\u{200E}', '\u{200F}', '\u{2028}', '\u{2029}',
+            '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}',
+            '\u{2068}', '\u{2069}', '\u{FEFF}', '\u{2060}', '\u{061C}',
+        ] {
+            let name = format!("shot{c}gnp.exe.png");
+            assert!(validate_file_name(&name).is_err(), "U+{:04X}", c as u32);
+            // As a literal of a template: refused. As a substituted value: replaced.
+            assert!(render(&format!("a{c}b")).is_err(), "U+{:04X}", c as u32);
+            let ctx = NameContext {
+                host: Some(format!("a{c}b")),
+                ..NameContext::default()
+            };
+            let t = NameTemplate::parse("{host}").unwrap();
+            assert_eq!(t.render(&ctx, &clock(), "png").unwrap(), "a_b.png");
+        }
+        // Ordinary non-ASCII text stays.
+        assert!(validate_file_name("capture écran 日本.png").is_ok());
+    }
+
+    #[test]
+    fn a_template_ending_with_a_dot_is_explained() {
+        let err = render("a.").unwrap_err();
+        let NameError::UnsafeName(why) = err else {
+            panic!("{err:?}")
+        };
+        assert!(why.contains("dot"), "{why}");
+        assert!(!why.contains("'..'"), "{why}");
+    }
+
+    #[test]
     fn counter_skips_existing_files() {
         let dir = tempfile::tempdir().unwrap();
         let t = NameTemplate::parse("s-{n}").unwrap();
@@ -507,6 +618,36 @@ mod tests {
         std::fs::write(dir.path().join("s-2.png"), b"").unwrap();
         let path = t.render_unique(dir.path(), &ctx, &clock(), "png").unwrap();
         assert_eq!(path, dir.path().join("s-3.png"));
+    }
+
+    #[test]
+    fn unreadable_folder_is_an_error_not_a_hundred_thousand_tries() {
+        // A file where the folder should be: `symlink_metadata` fails with something other than
+        // "not found", whoever runs the test (a permission-based setup would not fail for root).
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("plain");
+        std::fs::write(&file, b"").unwrap();
+        let t = NameTemplate::parse("s-{n}").unwrap();
+        let err = t
+            .render_unique(&file, &NameContext::default(), &clock(), "png")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Io { .. }), "{err:?}");
+        assert!(path_taken(&file.join("x.png")).is_err());
+        // A folder that does not exist is simply free.
+        assert!(!path_taken(&dir.path().join("missing").join("x.png")).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_link_is_taken() {
+        let dir = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink("nowhere", dir.path().join("s-1.png")).unwrap();
+        assert!(path_taken(&dir.path().join("s-1.png")).unwrap());
+        let t = NameTemplate::parse("s-{n}").unwrap();
+        let path = t
+            .render_unique(dir.path(), &NameContext::default(), &clock(), "png")
+            .unwrap();
+        assert_eq!(path, dir.path().join("s-2.png"));
     }
 
     #[test]

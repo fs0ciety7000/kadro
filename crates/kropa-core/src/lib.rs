@@ -17,4 +17,4 @@ pub use config::{
 };
 pub use error::{CoreError, NameError};
 pub use exit::ExitCode;
-pub use template::{NameContext, NameTemplate, validate_file_name};
+pub use template::{NameContext, NameTemplate, path_taken, validate_file_name};
