@@ -44,16 +44,22 @@ droit (le geste). Pas d'appareil photo, pas d'objectif, pas de viseur centré.
 
 ## 4. Logo
 
-Fichiers : `a/logo.svg` (clair), `a/logo-inverse.svg` (fond `#111318`), `a/logo-mono.svg` (une couleur, noir).
+Fichiers : `a/logo.svg` (clair), `a/logo-inverse.svg` (pour fond sombre `#111318`, fond transparent : le fond n'est
+pas incrusté), `a/logo-mono.svg` (une couleur, `fill`/`stroke` en `currentColor` : il prend la couleur du texte
+quand il est incorporé en ligne, noir quand il est chargé en `<img>`).
 Symbole + mot-symbole « kropa » en bas de casse monolinéaire géométrique, terminaisons coupées net.
 
 **Construction du mot-symbole** (unités du `viewBox="0 3 79 24"`, mot décalé de 23 unités) :
 - Hauteur d'x 10 (y 10 → 20), trait 2, coupe nette (`butt`, `miter`). Le symbole va de l'ascendante à la ligne de
   base (y 4 → 20).
-- `k`, `r`, `o`, `a` repris de l'ancien dessin. Le `p`, seule descendante, est un fût et la panse de l'`o` : son fût
+- `k`, `r`, `o`, `a` repris de l'ancien dessin. Les extrémités obliques du `k` sont coupées à l'horizontale par un
+  `clipPath` : la jambe (`M4.3 13 8.4 20`) s'arrête sur la ligne de base (y ≤ 20), le bras sur la hauteur d'x
+  (y ≥ 10) ; sans cela, la coupe `butt` perpendiculaire au trait dépassait de 0,54 unité. Le `p`, seule descendante, est un fût et la panse de l'`o` : son fût
   (y 10 → 26) a la même longueur que celui du `k` (y 4 → 20), descendante = ascendante = 6.
-- Approches : 2 à 2,5 unités entre formes (2 entre les panses de `p` et `a`), 1,4 après la terminaison du `r`.
-  Le mot fait 55 unités, comme l'ancien.
+- Approches : 2 à 2,5 unités entre formes (2 entre les panses de `p` et `a`) ; 2,07 au plus près entre `r` et `o`
+  (de l'angle bas de la terminaison du `r` à la panse de l'`o`), la terminaison s'arrêtant à 1,4 unité de l'aplomb
+  de l'`o`. Centrage optique : le vide sous la terminaison du `r` élargit l'espace perçu, d'où cette approche plus
+  serrée à l'horizontale, qui paraît égale aux autres. Le mot fait 55 unités, comme l'ancien.
 - La zone du logo est l'encombrement du dessin plus 1 unité ; la descendante dépasse sous la ligne de base du
   symbole : aligner le logo sur sa ligne de base, pas sur le centre de sa boîte.
 
@@ -64,22 +70,37 @@ Symbole + mot-symbole « kropa » en bas de casse monolinéaire géométrique, t
 | Hauteur | Largeur | Trait | Constat |
 |---|---|---|---|
 | 32 px | 105 px | 2,7 px | Net partout. |
-| 24 px | 79 px | 2 px | Net en 1x ; contreformes de `o`, `p`, `a` ouvertes (6 px) ; descendante bien visible. **Minimum recommandé.** |
-| 16 px | 53 px | 1,3 px | Lisible mais flou en 1x (traits sur deux pixels) ; équerre basse et poignée se fondent. Net en 2x. Toléré sur écran HiDPI seulement. |
+| 24 px | 79 px | 2 px | Net en 1x ; contreformes de `o`, `p`, `a` ouvertes (6 px) ; descendante bien visible. **Minimum.** |
+| 16 px | 53 px | 1,3 px | Flou en 1x (traits sur deux pixels) ; équerre basse et poignée se fondent. Net en 2x. **Interdit en 1x, toléré si `devicePixelRatio` ≥ 2.** |
 
-En dessous de 24 px de haut (16 px sur HiDPI) : le **symbole seul** (`a/icon-symbolic.svg`, dessiné pour 16 px).
+Minimum : **24 px de haut, soit une hauteur d'x de 10 px** (la hauteur d'x vaut 10/24 de la boîte) ; 16 px de haut
+(hauteur d'x 6,7 px) seulement si `devicePixelRatio` ≥ 2. En dessous : le **symbole seul** (`a/icon-symbolic.svg`,
+dessiné pour 16 px).
 
 **Couleurs du logo** : trait `#15171C` sur clair (16,73:1 sur `#F6F7F9`), `#ECEEF2` sur sombre (16,00:1 sur
-`#111318`). La poignée ambre fait 2,20:1 sur le fond clair : elle s'appuie sur l'équerre sombre et n'est jamais le
-seul élément identifiant. **Une couleur** : la poignée passe à la couleur du trait (`a/logo-mono.svg`) et reste
+`#111318`). La poignée ambre fait 2,20:1 sur le fond clair. Les logos sont exemptés du critère de contraste des
+objets graphiques (WCAG 1.4.11), mais le dessin ne compte pas sur cette exemption : la poignée se distingue par sa
+**forme** (carré plein accolé à l'équerre sombre), pas par sa couleur, et le logo reste identifiable en une couleur. **Une couleur** : la poignée passe à la couleur du trait (`a/logo-mono.svg`) et reste
 lisible grâce à son épaisseur.
 
 ## 5. Icônes
 
-- `a/icon.svg` : macOS, gabarit 1024 (plaque superellipse 824 px, ombre incluse). Plaque graphite, zone éclairée,
-  équerres blanches, poignée ambre.
-- `a/icon-linux.svg` : freedesktop/GNOME, grille 128, **sans plaque imposée** : la silhouette est un écran-carte
-  paysage avec épaisseur en bas (convention Adwaita), bord clair à 14 % pour se détacher sur fond sombre.
+- `a/icon.svg` : macOS, gabarit 1024 (plaque superellipse 824 px, ombre incluse), tracée en 8 courbes de Bézier
+  (écart à la superellipse n = 5 inférieur à 0,12 px). Plaque graphite, zone éclairée `#4A5160 → #3A404C`
+  (1,92:1 en haut et 1,71:1 en bas sur la plaque, visible à 64 px), équerres blanches, poignée ambre.
+- Linux (freedesktop/GNOME), grille 128, **sans plaque imposée** : carte paysage avec épaisseur en bas (convention
+  Adwaita). Le glyphe est centré sur la face (`translate(20 16)`, marges haut et bas égales, 11 px) ; la poignée est
+  agrandie à 6,5 unités (+40 % de surface). Deux variantes, **choix en attente** (planche de comparaison dans
+  `preview.html`, contrastes WCAG mesurés) :
+  - `a/icon-linux.svg`, **ardoise** : face `#7A8293 → #666E7E`, liseré blanc 25 %, épaisseur `#3A3F4A`. Face
+    ≥ 3:1 sur `#111318` (3,62) et `#242424` (3,03) ; 2,57 sur `#303030`, où le liseré prend le relais (4,22).
+    Coût : poignée à 2,17:1 sur la face et 2,14:1 contre l'équerre blanche.
+  - `a/icon-linux-light.svg`, **claire** : face Light 2 → Light 3 (`#F6F5F4 → #DEDDDA`), épaisseur Light 5
+    `#9A9996`, liseré noir 12 %, zone éclairée blanche, équerres `#241F31`. Face ≥ 9,7:1 sur tout fond sombre ;
+    poignée 6,77:1 contre l'équerre qu'elle touche. Sur fond clair, la face se fond (1,30:1) comme les icônes
+    Adwaita claires ; l'épaisseur détache le bas (2,73:1).
+  L'ancienne plaque sombre (`#2B303A → #171A20`) tombait à 1,07:1 sur `#111318` et ressemblait aux icônes de
+  terminal : abandonnée.
 - `a/icon-symbolic.svg` : 16 × 16, aplats seulement (pas de trait, pour que GTK recolore), `#2e3436` ; alignés au
   pixel. Sur macOS, l'exporter en image *template* (PDF ou PNG noir + alpha, nom en `…Template`).
 
@@ -132,9 +153,11 @@ formes géométriques simples ; un seul accent (ambre) réservé à l'outil acti
 chaque outil**. Pour les actions standard (annuler, copier…), utiliser les icônes du système (Adwaita symbolic,
 SF Symbols) ; les icônes maison ne couvrent que les outils propres à Kropa.
 
-**Points à surveiller.** Vérifier en situation (dock GNOME, Launchpad) qu'on ne confond pas l'icône avec une icône
-de terminal ; garder la poignée pleine dans toutes les déclinaisons ; le symbolique reste proche des pictogrammes
-« plein écran » et « recadrer », la poignée pleine fait la différence.
+**Points à surveiller.** Confusion avec une icône de terminal : vérifiée dans le dock GNOME (planche de
+`preview.html`), à refaire dans le Launchpad ; garder la poignée pleine dans toutes les déclinaisons ; le symbolique
+reste proche des pictogrammes « plein écran » et « recadrer », la poignée pleine fait la différence. L'outil
+**Recadrer** de l'éditeur utilise l'icône de recadrage du système (Adwaita symbolic, SF Symbols), jamais le symbole
+de Kropa, qui reste réservé à l'application (icône, barre système, logo).
 
 ## 8. Nom
 
@@ -159,10 +182,10 @@ docs/brand/
   brand.md            ce document
   naming.md           recherche du nom
   preview.html        aperçu autonome de l'identité A (SVG embarqués, Google Fonts seulement)
-  a/ logo.svg logo-inverse.svg logo-mono.svg icon.svg icon-linux.svg icon-symbolic.svg
+  a/ logo.svg logo-inverse.svg logo-mono.svg icon.svg icon-linux.svg icon-linux-light.svg icon-symbolic.svg
   archive/b/          identité B archivée (README.md et SVG de la proposition)
 ```
 Notes techniques : les logos gardent des traits SVG (rendu exact, fichiers légers) ; les vectoriser avant
 impression. L'icône macOS se convertit en `.icns` depuis `icon.svg` (1024) au moment du build ; sous Linux,
-installer `icon-linux.svg` dans `hicolor/scalable/apps/<app-id>.svg` et `icon-symbolic.svg` dans
+installer la variante Linux retenue (`icon-linux.svg` ou `icon-linux-light.svg`) dans `hicolor/scalable/apps/<app-id>.svg` et `icon-symbolic.svg` dans
 `hicolor/symbolic/apps/<app-id>-symbolic.svg`.
