@@ -92,10 +92,10 @@ lisible grâce à son épaisseur.
   Adwaita). Le glyphe est centré sur la face (`translate(20 16)`, marges haut et bas égales, 11 px) ; la poignée est
   agrandie à 6,5 unités (+40 % de surface). Deux variantes, **choix en attente** (planche de comparaison dans
   `preview.html`, contrastes WCAG mesurés) :
-  - `a/icon-linux.svg`, **ardoise** : face `#7A8293 → #666E7E`, liseré blanc 25 %, épaisseur `#3A3F4A`. Face
+  - `archive/a/icon-linux-slate.svg`, **ardoise** (écartée le 11/11/2026) : face `#7A8293 → #666E7E`, liseré blanc 25 %, épaisseur `#3A3F4A`. Face
     ≥ 3:1 sur `#111318` (3,62) et `#242424` (3,03) ; 2,57 sur `#303030`, où le liseré prend le relais (4,22).
     Coût : poignée à 2,17:1 sur la face et 2,14:1 contre l'équerre blanche.
-  - `a/icon-linux-light.svg`, **claire** : face Light 2 → Light 3 (`#F6F5F4 → #DEDDDA`), épaisseur Light 5
+  - `a/icon-linux.svg`, **claire** (**retenue par l'utilisateur le 11/11/2026**) : face Light 2 → Light 3 (`#F6F5F4 → #DEDDDA`), épaisseur Light 5
     `#9A9996`, liseré noir 12 %, zone éclairée blanche, équerres `#241F31`. Face ≥ 9,7:1 sur tout fond sombre ;
     poignée 6,77:1 contre l'équerre qu'elle touche. Sur fond clair, la face se fond (1,30:1) comme les icônes
     Adwaita claires ; l'épaisseur détache le bas (2,73:1).
@@ -182,10 +182,10 @@ docs/brand/
   brand.md            ce document
   naming.md           recherche du nom
   preview.html        aperçu autonome de l'identité A (SVG embarqués, Google Fonts seulement)
-  a/ logo.svg logo-inverse.svg logo-mono.svg icon.svg icon-linux.svg icon-linux-light.svg icon-symbolic.svg
+  a/ logo.svg logo-inverse.svg logo-mono.svg icon.svg icon-linux.svg (claire) icon-symbolic.svg
   archive/b/          identité B archivée (README.md et SVG de la proposition)
 ```
 Notes techniques : les logos gardent des traits SVG (rendu exact, fichiers légers) ; les vectoriser avant
 impression. L'icône macOS se convertit en `.icns` depuis `icon.svg` (1024) au moment du build ; sous Linux,
-installer la variante Linux retenue (`icon-linux.svg` ou `icon-linux-light.svg`) dans `hicolor/scalable/apps/<app-id>.svg` et `icon-symbolic.svg` dans
+installer `icon-linux.svg` (variante claire retenue) dans `hicolor/scalable/apps/<app-id>.svg` et `icon-symbolic.svg` dans
 `hicolor/symbolic/apps/<app-id>-symbolic.svg`.

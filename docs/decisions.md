@@ -18,7 +18,10 @@
   Releases ; `.dmg` macOS. **Pas de Flathub** (règles Flathub sur le contenu généré par IA), pas d'AUR.
 - Copie impossible sous GNOME alors que `--copy` est explicite : **avertissement** (code 0, message sur stderr,
   `clipboard.status` dans le JSON), pas d'erreur.
-- Logo « kropa » (identité A) **validé**.
+- Logo « kropa » (identité A) **validé** ; icône Linux : **variante claire** (l'ardoise est archivée).
+- Spécification CLI v1 (`docs/cli.md`) **validée**, avec ses arbitrages (`--to`, `--copy image`, URL brute sur stdout,
+  `queue clear`).
+- Dépôt GitHub **rendu public** par l'utilisateur (11/11/2026) ; renommage `kadro` → `kropa` encore à faire.
 - Tests manuels macOS : l'utilisateur dispose d'un Mac sous macOS 15 ou plus.
 - Licence : **GPL-3.0-or-later** (choix délégué ; aligné sur ShareX et Flameshot, garde ouverte une dépendance GPL
   future). Le reste du périmètre v1 proposé par Produit est
