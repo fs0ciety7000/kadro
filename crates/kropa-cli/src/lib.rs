@@ -244,7 +244,10 @@ mod tests {
         assert_eq!(r.code, ExitCode::Usage);
         assert!(r.out.is_empty());
         assert!(r.err.contains("valeur invalide '99'"), "{}", r.err);
-        assert!(r.err.contains("Utilisation :"), "{}", r.err);
+        assert!(r.err.contains("--help"), "{}", r.err);
+        let r = run(&["kropa", "--lang", "fr", "capture", "--bogus"], false);
+        assert!(r.err.contains("argument inattendu '--bogus'"), "{}", r.err);
+        assert!(r.err.contains("Utilisation : kropa capture"), "{}", r.err);
         let r = run(&["kropa", "--lang", "en", "capture", "--bogus"], false);
         assert_eq!(r.code, ExitCode::Usage);
         assert!(r.err.contains("unexpected argument '--bogus'"), "{}", r.err);

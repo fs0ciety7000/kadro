@@ -45,6 +45,20 @@ pub fn build_command(loc: &Localizer, color: ColorChoice) -> Command {
     localize(cmd, &[], loc)
 }
 
+/// Global options in the order of the help, after the command's own options.
+const GLOBAL_ORDER: [&str; 10] = [
+    "json",
+    "lang",
+    "quiet",
+    "verbose",
+    "no_input",
+    "color",
+    "config",
+    "password_fd",
+    "help",
+    "version",
+];
+
 /// `Some(text)` if Fluent has a message `id` (the localizer answers with the id itself otherwise).
 fn lookup(loc: &Localizer, id: &str) -> Option<String> {
     let text = loc.message(id);
@@ -68,7 +82,11 @@ fn localize_arg(arg: Arg, path: &[String], loc: &Localizer) -> Arg {
     let mut arg = arg;
     if arg.get_action().takes_values() {
         // The values are listed in the Fluent help text; clap's own list is not translatable.
-        arg = arg.hide_possible_values(true);
+        arg = arg.hide_possible_values(true).hide_default_value(true);
+    }
+    if let Some(rank) = GLOBAL_ORDER.iter().position(|g| *g == id) {
+        // Options valid everywhere come after the options of the command itself.
+        arg = arg.display_order(1000 + rank);
     }
     if let Some(help) = arg_help(loc, path, &id) {
         arg = arg.help(help);
@@ -86,6 +104,9 @@ fn localize(mut cmd: Command, path: &[String], loc: &Localizer) -> Command {
         format!("cmd-{}", path.join("-"))
     };
     cmd = cmd.about(loc.message(&about_id));
+    if cmd.has_subcommands() {
+        cmd = cmd.subcommand_value_name(loc.message("val-command"));
+    }
     let ids: Vec<String> = cmd
         .get_arguments()
         .map(|a| a.get_id().to_string())
@@ -169,15 +190,22 @@ mod tests {
     fn help_is_localised_everywhere() {
         let loc = Localizer::new(Lang::Fr).unwrap();
         let cmd = build_command(&loc, ColorChoice::Never);
-        let mut all = String::new();
-        walk(&cmd, &mut Vec::new(), &mut |c, _| {
-            all.push_str(&c.clone().render_long_help().to_string());
-        });
-        // No English heading from clap itself may leak into the French help.
-        for english in ["Usage:", "Options:", "Commands:", "Arguments:", "Print help"] {
-            assert!(!all.contains(english), "{english} leaked");
+        let mut paths = Vec::new();
+        walk(&cmd, &mut Vec::new(), &mut |_, path| paths.push(path.to_vec()));
+        assert!(paths.len() > 25, "{}", paths.len());
+        for path in paths {
+            // Real parsing, so that the global options are propagated as in a run.
+            let mut argv = vec!["kropa".to_owned()];
+            argv.extend(path.iter().cloned());
+            argv.push("--help".to_owned());
+            let err = cmd.clone().try_get_matches_from(argv).unwrap_err();
+            let help = err.to_string();
+            // No English text from clap itself may leak into the French help.
+            for english in ["Usage:", "Options:", "Commands:", "Arguments:", "Print help", "default:", "<COMMAND>"] {
+                assert!(!help.contains(english), "{path:?}: {english} leaked\n{help}");
+            }
+            assert!(help.contains("Utilisation :"), "{path:?}");
         }
-        assert!(all.contains("Utilisation :"));
     }
 
     #[test]

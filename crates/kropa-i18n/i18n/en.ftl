@@ -51,7 +51,7 @@ arg-json = Machine-readable output: one JSON object on stdout
 arg-quiet = Fewer messages on stderr (errors are kept)
 arg-verbose = More messages on stderr (-vv: debug log)
 arg-no-input = Never prompt, even on a terminal
-arg-color = Colour of stderr output: auto, always or never
+arg-color = Colour of stderr output: auto (default), always or never
 arg-config = Configuration folder
 arg-password-fd = Read the vault passphrase on this file descriptor
 
@@ -131,6 +131,8 @@ val-limit = N
 val-since = DATE
 val-presign = DURATION
 val-lang = LANG
+val-command = COMMAND
+val-color = COLOR
 
 ## Argument errors (the reason after "invalid value")
 

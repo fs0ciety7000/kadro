@@ -51,7 +51,7 @@ arg-json = Sortie lisible par une machine : un objet JSON sur stdout
 arg-quiet = Moins de messages sur stderr (les erreurs restent)
 arg-verbose = Plus de messages sur stderr (-vv : journal de débogage)
 arg-no-input = Ne jamais poser de question, même sur un terminal
-arg-color = Couleur de la sortie stderr : auto, always ou never
+arg-color = Couleur de la sortie stderr : auto (par défaut), always ou never
 arg-config = Dossier de configuration
 arg-password-fd = Lire la phrase de passe du coffre sur ce descripteur de fichier
 
@@ -131,6 +131,8 @@ val-limit = N
 val-since = DATE
 val-presign = DURÉE
 val-lang = LANGUE
+val-command = COMMANDE
+val-color = COULEUR
 
 ## Erreurs d'argument (la raison après « valeur invalide »)
 
