@@ -559,7 +559,7 @@ fn a_locked_or_missing_keyring_is_exit_7_with_its_reason_and_never_a_fallback() 
     let c = cfg(dir.path());
     for (reason, state, words) in [
         ("keyring_locked", StoreState::Locked, "locked"),
-        ("keyring_timeout", StoreState::Unavailable, "did not answer"),
+        ("keyring_timeout", StoreState::Unavailable, "did not respond"),
         ("keyring_ambiguous", StoreState::Ambiguous, "more than once"),
         ("keyring_unavailable", StoreState::Unavailable, "vault"),
     ] {

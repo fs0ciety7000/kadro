@@ -4,9 +4,9 @@ System
   linux ([..]), kropa [..]
 
 Capabilities
-  capture screen: unavailable
+  screen capture (screen): unavailable
     Why: no D-Bus session bus: run kropa inside a graphical session
-  capture output: unavailable
+  single-screen capture (output): unavailable
     Why: the portal returns all screens as one image
 
 Details

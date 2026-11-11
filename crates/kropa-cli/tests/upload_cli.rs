@@ -565,7 +565,7 @@ async fn upload_errors_use_codes_8_9_and_the_reason() {
     assert_eq!(v["error"]["step"], "upload");
     assert_eq!(
         v["error"]["message"],
-        "The server answered with status 503: overloaded"
+        "The server responded with status 503: overloaded"
     );
     assert_eq!(v["upload"]["status"], "failed");
     assert!(v["upload"]["url"].is_null());

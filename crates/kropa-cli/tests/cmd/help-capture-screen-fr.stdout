@@ -5,7 +5,7 @@ Utilisation : kropa capture screen [OPTIONS]
 Options :
       --delay <SEC>        Attendre avant la capture, de 0 à 60 secondes (décimales acceptées)
       --output <CHEMIN>    Dossier de destination, ou fichier si le chemin se termine par une extension d'image
-      --name <MODÈLE>      Modèle de nom de fichier (variables : date, time, host, mode, output, n)
+      --name <MODÈLE>      Modèle de nom de fichier (variables : date, time, n, w, h, kind, mode, output, host)
       --upload[=<PROFIL>]  Envoyer après l'enregistrement, vers le profil indiqué ou le profil par défaut
       --no-upload          Ne pas envoyer, même si la configuration envoie par défaut
       --copy <CIBLE>       Ce qui va au presse-papiers : url, markdown, html, image ou none

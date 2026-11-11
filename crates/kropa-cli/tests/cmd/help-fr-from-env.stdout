@@ -10,7 +10,7 @@ Commandes :
   queue    Gérer la file d'envoi
   history  Parcourir les captures et les envois
   edit     Ouvrir l'éditeur sur une image
-  doctor   Rapporter le système, ses capacités et les replis actifs
+  doctor   Décrire le système, ses capacités et les replis actifs
   version  Afficher les informations de version
 
 Options :

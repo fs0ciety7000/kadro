@@ -120,7 +120,7 @@ fn the_binary_stores_reads_and_removes_a_secret_in_a_real_keyring() {
         "{all}"
     );
     assert!(out.contains("Secret store: keyring (available)"), "{all}");
-    assert!(out.contains("zipline: 1 entries, 0 still empty"), "{all}");
+    assert!(out.contains("zipline: entries 1, still empty 0"), "{all}");
     assert!(out.contains("Secret token: set"), "{all}");
     assert!(out.contains("Secret token: missing"), "{all}");
     // The new entry was tied to the address and place of the profile, and shown.

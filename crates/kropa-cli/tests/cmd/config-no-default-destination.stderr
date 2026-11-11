@@ -1,1 +1,1 @@
-kropa: No destination was given and the configuration has no default_destination.
+kropa: No destination was given, and the configuration has no default_destination. Give a profile, or choose a default destination with 'kropa dest set-default'.

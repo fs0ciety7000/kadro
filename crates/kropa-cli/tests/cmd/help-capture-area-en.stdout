@@ -6,7 +6,7 @@ Options:
       --last                Reuse the last area without the selection overlay
       --delay <SEC>         Wait before capturing, 0 to 60 seconds (decimals accepted)
       --output <PATH>       Destination folder, or file if the path ends in an image extension
-      --name <TEMPLATE>     File-name template (variables: date, time, host, mode, output, n)
+      --name <TEMPLATE>     File name template (variables: date, time, n, w, h, kind, mode, output, host)
       --upload[=<PROFILE>]  Upload after saving, to the given profile or the default one
       --no-upload           Do not upload, even if the configuration uploads by default
       --copy <WHAT>         What goes to the clipboard: url, markdown, html, image or none
@@ -18,7 +18,7 @@ Options:
   -q, --quiet               Fewer messages on stderr (errors are kept)
   -v, --verbose...          More messages on stderr (-vv: debug log)
       --no-input            Never prompt, even on a terminal
-      --color <COLOR>       Colour of stderr output: auto (default), always or never
+      --color <COLOR>       Color of stderr output: auto (default), always or never
       --config <DIR>        Configuration folder
       --password-fd <N>     Read the vault passphrase on this file descriptor
   -h, --help                Print help
