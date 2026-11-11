@@ -50,7 +50,7 @@ Dépend de : rien. En parallèle : D1, S.
 ## Lot D1 — Mot-symbole « kropa » (identité A)
 Dépend de : rien. En parallèle : 0, S, 1.
 - [ ] D1.1 Dessiner « kropa » sur la grille A (`p` à créer), `logo*.svg`, taille minimale, `preview.html`. Agent : `brand-identity`. Fin : validé par l'utilisateur.
-- [ ] D1.2 `brand.md` réduit à A (B archivée), exemples de ton avec `kropa`. Agent : `brand-identity`.
+- [x] D1.2 `brand.md` réduit à A (B archivée), exemples de ton avec `kropa`. Agent : `brand-identity`.
 - [ ] D1.3 Critique logo et icône à 16/32/80 px (dock GNOME, Launchpad ; risque « icône de terminal »). Agent : `design-critic`. Fin : aucun bloquant.
 
 ## Lot S — Modèle de secrets (avant tout code de stockage)
