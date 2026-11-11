@@ -1,4 +1,4 @@
-# Kadro : envoi et intégrations
+# Kropa : envoi et intégrations
 
 > Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
 
@@ -44,10 +44,10 @@ moment de les ajouter.
   `x-zipline-p-lastchunk: true` sur le dernier. Chaque morceau intermédiaire renvoie `partialSuccess` et un
   `partialToken` à usage unique, valable 30 min, à renvoyer en `x-zipline-p-token`. Limites serveur par défaut :
   `chunks.size` 25 Mo, `chunks.max` 95 Mo, lisibles sans authentification via `GET /api/server/public`.
-  Kadro lit ce point d'accès au test du profil et passe en morceaux au-delà de `chunks.size`.
+  Kropa lit ce point d'accès au test du profil et passe en morceaux au-delà de `chunks.size`.
 - **Particularités** : l'état partiel vit **en mémoire** du serveur. Un redémarrage de Zipline, ou plus de 30 min
   d'interruption, oblige à recommencer depuis zéro. Pas d'URL de suppression dans la réponse. La suppression se
-  fait par l'API utilisateur avec le jeton (v2 de Kadro).
+  fait par l'API utilisateur avec le jeton (v2 de Kropa).
 - **Zipline v3** : non ciblée, possible via destination personnalisée (non testé).
 
 ### 1.2 S3 et compatibles
@@ -56,10 +56,10 @@ moment de les ajouter.
   bucket, préfixe de clé, style path/virtual-host, `public_base_url`.
 - **Authentification** : clé d'accès et clé secrète, toutes deux rangées dans le trousseau.
 - **Envoi par morceaux** : multipart, morceaux de 8 Mio (minimum S3 et R2 : 5 Mio, sauf le dernier ; R2 exige des
-  morceaux de taille égale ; 10 000 morceaux au maximum). Kadro persiste l'`UploadId` et les ETag des morceaux finis
+  morceaux de taille égale ; 10 000 morceaux au maximum). Kropa persiste l'`UploadId` et les ETag des morceaux finis
   pour reprendre. En cas d'abandon, il appelle `AbortMultipartUpload`. Sinon, R2 purge seul après 7 jours, et
   ailleurs c'est la règle de cycle de vie du bucket.
-- **URL publique** : S3 ne la renvoie pas. Kadro la **construit** : `public_base_url + clé` (CDN, domaine R2,
+- **URL publique** : S3 ne la renvoie pas. Kropa la **construit** : `public_base_url + clé` (CDN, domaine R2,
   site web Garage). En option, une URL présignée de durée bornée (≤ 7 j) pour un bucket privé.
 - **Particularités par service** :
   - AWS S3 : référence.
@@ -75,13 +75,13 @@ moment de les ajouter.
 - **Protocole** : SSH puis sous-système SFTP (russh-sftp).
 - **Authentification**, dans l'ordre : agent SSH (`SSH_AUTH_SOCK`), clé privée (chemin en config, phrase de passe
   dans le trousseau), mot de passe (trousseau).
-- **Clé d'hôte obligatoire** : lecture de `~/.ssh/known_hosts` et d'un `known_hosts` propre à Kadro. Hôte inconnu :
+- **Clé d'hôte obligatoire** : lecture de `~/.ssh/known_hosts` et d'un `known_hosts` propre à Kropa. Hôte inconnu :
   l'interface affiche l'empreinte SHA-256 et demande confirmation. En CLI, on passe `--accept-host-key SHA256:…`
   explicitement, sinon c'est un échec. Une clé changée donne un refus net, jamais un contournement.
 - **Envoi par morceaux et reprise** : écriture dans `nom.part`. En reprise, on lit la taille distante (`stat`) et on
   reprend à cet offset, puis `rename` atomique.
 - **URL publique** : non fournie par le protocole. Elle vient d'un modèle `public_url = "https://f.example.com/{remote_name}"`.
-  Sans modèle, Kadro copie le chemin distant et le signale.
+  Sans modèle, Kropa copie le chemin distant et le signale.
 - **Particularités** : pas de lecture de `~/.ssh/config` en v1. `russh-config` existe mais il est jeune, c'est une
   question ouverte.
 
@@ -100,7 +100,7 @@ moment de les ajouter.
   annonce officielle. `apidocs.imgur.com` n'a pas pu être consulté par l'outil, donc les limites citées
   (≈ 1 250 envois/jour/application, contrôle via `/3/credits`) viennent de sources secondaires, **à vérifier**.
   Imgur bloque en outre tout accès depuis le Royaume-Uni depuis le 30/09/2025.
-- **Conséquence pour « aucun service imposé »** : Kadro **n'embarque aucun client_id**. Un identifiant partagé
+- **Conséquence pour « aucun service imposé »** : Kropa **n'embarque aucun client_id**. Un identifiant partagé
   serait un service imposé, rattaché au projet, révocable à tout moment, et nous ne pouvons de toute façon pas en
   obtenir un. L'utilisateur fournit son propre `client_id`, s'il en possède un ancien, et le range dans le trousseau.
   C'est acceptable : rien n'est requis, rien n'est contacté sans configuration.
@@ -116,7 +116,7 @@ moment de les ajouter.
 | | TOML (dans `destinations.toml`) | JSON (format `.sxcu` natif) |
 |---|---|---|
 | Écriture à la main | lisible, commentaires possibles | pas de commentaires, échappements lourds |
-| Cohérence | même format que la config Kadro (à confirmer avec l'équipe Architecture) | format à part |
+| Cohérence | même format que la config Kropa (à confirmer avec l'équipe Architecture) | format à part |
 | ShareX | conversion à l'import | lecture directe, mais sémantique ShareX (menus interactifs, secrets en clair) |
 
 **Choix : TOML**, avec un import `.sxcu` qui **convertit** en TOML et n'exécute jamais un `.sxcu` tel quel. Le
@@ -145,7 +145,7 @@ timeout  = "120s"
 redirects = "same-origin"               # none | same-origin (défaut) ; jamais cross-origin avec secret
 
 [destination.secrets]
-token = { ref = "kadro/maison/token" }  # référence : la valeur vit dans le trousseau ou le coffre
+token = { ref = "kropa/maison/token" }  # référence : la valeur vit dans le trousseau ou le coffre
 
 [destination.response]
 url          = "{json:$.data.url}"
@@ -159,7 +159,7 @@ success_status = [200, 201]             # sinon : erreur, même si le JSON conti
 
 - Fonctions de réponse : `{response}`, `{responseurl}`, `{header:nom}`, `{json:chemin}`, `{json:entrée|chemin}`,
   `{xml:xpath}`, `{regex:motif|groupe}`. Côté requête : `{filename}`, `{input}`, `{random:a|b}`, `{base64:…}`,
-  `{secret:nom}` (propre à Kadro).
+  `{secret:nom}` (propre à Kropa).
 - Le chemin JSON est compris comme RFC 9535. Préfixe `$.` ajouté s'il manque, comme le fait ShareX.
 - **Validation de l'URL extraite** : elle doit être `http(s)` et ne pas contenir de caractère de contrôle. Sinon, la
   tâche est en échec, et on ne copie jamais n'importe quoi dans le presse-papiers.
@@ -167,7 +167,7 @@ success_status = [200, 201]             # sinon : erreur, même si le JSON conti
   `error` extrait (sinon les 500 premiers caractères de la réponse, **expurgés**, § 4.6). Classification pour la
   file : 408, 429, 5xx et erreurs réseau = transitoires (nouvel essai, `Retry-After` respecté) ; autres 4xx =
   définitives.
-- `kadro dest test <id>` envoie une image témoin de 1×1 et affiche statut, en-têtes filtrés et URL extraite.
+- `kropa dest test <id>` envoie une image témoin de 1×1 et affiche statut, en-têtes filtrés et URL extraite.
 
 ### 2.4 Correspondance avec `.sxcu` (ShareX v22.4, schéma `Version` ≥ 13.7.1)
 
@@ -197,10 +197,10 @@ L'import affiche un résumé (hôte, champs, secrets détectés) et ne crée le 
 - **Envoi automatique** : désactivé par défaut. Il s'active par profil ou par chaîne d'actions (équipe « Après la
   capture »).
 - **CLI**, à harmoniser avec l'équipe CLI :
-  - `kadro capture area --upload` (défaut), `--upload=maison`, `--no-upload`.
-  - `kadro upload fichier.png [--to maison] [--copy url|markdown|html|none] [--json]`.
-  - `kadro dest list | show | add | edit | test | remove | set-default | import x.sxcu | export`.
-  - `kadro queue list | retry <id> | cancel <id> | pause | resume`.
+  - `kropa capture area --upload` (défaut), `--upload=maison`, `--no-upload`.
+  - `kropa upload fichier.png [--to maison] [--copy url|markdown|html|none] [--json]`.
+  - `kropa dest list | show | add | edit | test | remove | set-default | import x.sxcu | export`.
+  - `kropa queue list | retry <id> | cancel <id> | pause | resume`.
   - Sortie `--json` stable (id de tâche, URL, URL de suppression) pour les scripts.
 - Choix à la volée dans l'interface : menu sur la miniature flottante (« Envoyer vers… »).
 
@@ -213,7 +213,7 @@ L'import affiche un résumé (hôte, champs, secrets détectés) et ne crée le 
 | macOS | Keychain (login), via `apple-native-keyring-store` | coffre chiffré |
 | Linux | Secret Service D-Bus (GNOME Keyring, KWallet / ksecretd de Plasma 6, KeePassXC) | coffre chiffré si pas de service sur le bus, ou sur refus de l'utilisateur |
 
-Bascule **jamais silencieuse** : Kadro dit quel magasin il utilise (`kadro secrets status`). Si les deux existent,
+Bascule **jamais silencieuse** : Kropa dit quel magasin il utilise (`kropa secrets status`). Si les deux existent,
 c'est le trousseau, sauf si l'utilisateur force le coffre.
 
 **Limite macOS (signature ad hoc)** : l'ACL d'un élément Keychain est liée à l'identité de code. Avec une signature
@@ -242,7 +242,7 @@ chaque version. On le documente ; c'est inévitable sans compte Developer.
 
 ### 4.3 Déverrouillage et durée de session
 
-- Déverrouillage par boîte de dialogue (interface), invite TTY (CLI, saisie masquée) ou `kadro secrets unlock`, qui
+- Déverrouillage par boîte de dialogue (interface), invite TTY (CLI, saisie masquée) ou `kropa secrets unlock`, qui
   déverrouille le processus résident pour une durée. **Jamais** par variable d'environnement ni argument de ligne de
   commande. Option pour les scripts : `--password-fd N`.
 - Durée : réglable (15 min d'inactivité par défaut, ou « jusqu'au verrouillage de session »). Verrouillage immédiat
@@ -253,12 +253,12 @@ chaque version. On le documente ; c'est inévitable sans compte Developer.
 
 ### 4.4 Où vivent les références
 
-- La config (`destinations.toml`) ne contient **que des références** : `{ ref = "kadro/<profil>/<nom>" }`. Dans le
-  trousseau, service `kadro` et compte `<profil>/<nom>`. Dans le coffre, c'est une entrée du même nom.
+- La config (`destinations.toml`) ne contient **que des références** : `{ ref = "kropa/<profil>/<nom>" }`. Dans le
+  trousseau, service `kropa` et compte `<profil>/<nom>`. Dans le coffre, c'est une entrée du même nom.
 - Chaque secret stocké porte sa **liste d'origines autorisées** (schéma + hôte + port), fixée à sa création à partir
   de l'URL du profil. Elle fait partie de la valeur protégée, pas de la config modifiable en clair.
 - **Import `.sxcu`** : un `.sxcu` contient souvent des secrets **en clair** : `Authorization`, `x-api-key`, jeton
-  Zipline, `Arguments` comme `key`/`token`/`password`, voire un jeton dans `RequestURL` ou `Parameters`. Kadro les
+  Zipline, `Arguments` comme `key`/`token`/`password`, voire un jeton dans `RequestURL` ou `Parameters`. Kropa les
   détecte (noms d'en-têtes et d'arguments connus, entropie élevée), les montre masqués, les range dans le magasin
   lié à l'origine de `RequestURL` et ne garde que `{secret:…}` dans le TOML. Le `.sxcu` d'origine n'est pas recopié,
   et l'utilisateur est invité à le supprimer.
@@ -316,7 +316,7 @@ Une config tierce (un `.sxcu` reçu, un TOML copié) ne doit pas pouvoir envoyer
 ### 5.3 Copie du lien et modèles
 
 - Formats : `url`, `markdown` (`![{name}]({url})`, ou `[{name}]({url})` hors image), `html`
-  (`<img src="{url}" alt="{name}">`, ou `<video src controls>`), ou modèle libre par profil :
+  (`<img src="{url}" alt="{name}">`, ~~ou `<video src controls>`~~ retiré avec la vidéo), ou modèle libre par profil :
   `link_template = "[{name}]({url}) ({width}×{height})"`.
 - Variables : `{url}`, `{thumbnail_url}`, `{deletion_url}`, `{name}`, `{ext}`, `{width}`, `{height}`, `{size}`,
   `{date:%Y-%m-%d}`. Échappement automatique selon le format (HTML, Markdown).
@@ -371,22 +371,21 @@ Une config tierce (un `.sxcu` reçu, un TOML copié) ne doit pas pouvoir envoyer
 - **Licence** : `russh`, `russh-sftp` et `aws-*` sont en Apache-2.0, ce qui est incompatible avec une licence
   **GPL-2.0-only** ; c'est compatible avec GPL-3.0, MPL-2.0, MIT ou Apache. `kamadak-exif` est en BSD-2, `rexiv2`
   (GPL-3) est écarté.
-- **Empaquetage** : en Flatpak, l'accès au Secret Service passe par le portail (`org.freedesktop.portal.Secret`),
+- **Empaquetage** (Flatpak non distribué : pas de Flathub, décision du 11/11/2026 ; distribution .deb/.rpm/tap Homebrew/.dmg) : en Flatpak, l'accès au Secret Service passe par le portail (`org.freedesktop.portal.Secret`),
   dont la prise en charge par `keyring` reste à vérifier. Sur macOS en ad hoc, la confirmation Keychain revient à chaque
   mise à jour.
 - **Après la capture / historique** : base SQLite partagée, URL de suppression stockée comme sensible, place de
   « Envoyer vers… » dans la chaîne d'actions et la miniature.
-- **Vidéo** : la commande FFmpeg de nettoyage est à intégrer au pipeline d'export ; les métadonnées GIF sont à
-  traiter.
+- ~~**Vidéo** : la commande FFmpeg de nettoyage est à intégrer au pipeline d'export ; les métadonnées GIF sont à
+  traiter.~~ Sans objet : vidéo et GIF retirés (décision du 11/11/2026).
 - **Annotation** : la détection de secrets à l'écran complète, sans remplacer, le nettoyage des métadonnées.
 - **CLI** : sous-commandes `dest`, `queue`, `secrets`, options `--upload`, `--to`, `--copy`, `--json`.
 - **i18n** : messages d'erreur d'envoi et de sécurité en FR et EN, sans détail technique sensible.
 
 ## 9. Questions ouvertes
 
-1. Imgur : intégration (A) ou simple modèle d'exemple (B, recommandé), vu l'enregistrement fermé et le blocage
-   au Royaume-Uni ?
-2. Licence du projet : confirmer qu'elle n'est pas GPL-2.0-only (dépendances Apache-2.0).
+1. ~~Imgur : intégration (A) ou simple modèle d'exemple (B, recommandé)~~ Tranché : B (modèle d'exemple).
+2. ~~Licence du projet : confirmer qu'elle n'est pas GPL-2.0-only~~ Tranché : GPL-3.0-or-later.
 3. Durée de session du coffre par défaut : 15 min d'inactivité ou jusqu'au verrouillage de l'écran ?
 4. Lecture de `~/.ssh/config` (alias `Host`, `ProxyJump`) en v1 ou plus tard ?
 5. Suppression distante depuis l'historique (Zipline, S3, SFTP, Imgur, `DeletionURL`) : v1 ou v2 ?
