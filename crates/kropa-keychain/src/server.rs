@@ -372,7 +372,8 @@ mod tests {
         assert_eq!(result, Err(Refusal::PeerCodeRejected));
         assert_eq!(store.calls(), 0);
         let mut reply = Vec::new();
-        client.shutdown(std::net::Shutdown::Write).unwrap();
+        // The server end is already closed: macOS answers ENOTCONN here, Linux does not.
+        let _ = client.shutdown(std::net::Shutdown::Write);
         let mut client = client;
         client.read_to_end(&mut reply).unwrap();
         assert!(reply.is_empty());
