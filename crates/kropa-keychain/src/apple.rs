@@ -104,7 +104,7 @@ fn designated_requirement(code: &SecCode) -> Result<String, Unverified> {
         SecCodeCopyDesignatedRequirement(
             code.as_concrete_TypeRef().cast::<c_void>(),
             0,
-            &mut requirement,
+            &raw mut requirement,
         )
     };
     if status != 0 || requirement.is_null() {
@@ -115,7 +115,7 @@ fn designated_requirement(code: &SecCode) -> Result<String, Unverified> {
     let mut text: CFStringRef = ptr::null();
     // SAFETY: `requirement` is a live SecRequirement; the out pointer is valid for a write. On
     // success the string is a new reference we own.
-    let status = unsafe { SecRequirementCopyString(requirement.as_CFTypeRef(), 0, &mut text) };
+    let status = unsafe { SecRequirementCopyString(requirement.as_CFTypeRef(), 0, &raw mut text) };
     if status != 0 || text.is_null() {
         return Err(Unverified("the designated requirement cannot be printed"));
     }
@@ -133,7 +133,7 @@ fn has_hardened_runtime(code: &SecCode) -> Result<bool, Unverified> {
         SecCodeCopySigningInformation(
             code.as_concrete_TypeRef().cast::<c_void>(),
             SIGNING_INFORMATION,
-            &mut information,
+            &raw mut information,
         )
     };
     if status != 0 || information.is_null() {

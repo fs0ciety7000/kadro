@@ -122,7 +122,7 @@ impl FileKeychain {
             let _quiet = if target.interactive {
                 None
             } else {
-                Some(SecKeychain::disable_user_interaction().map_err(|e| failure(&e))?)
+                Some(SecKeychain::disable_user_interaction().map_err(failure)?)
             };
             call(&target)
         })
@@ -147,7 +147,7 @@ impl FileKeychain {
             let (new, out) = change(current.as_ref().map(|(doc, _)| doc.as_slice()))?;
             if let Some(new) = new {
                 match current {
-                    Some((_, mut item)) => item.set_password(&new).map_err(|e| failure(&e))?,
+                    Some((_, mut item)) => item.set_password(&new).map_err(failure)?,
                     None => add(target.keychain.as_ref(), &new)?,
                 }
             }
@@ -157,7 +157,7 @@ impl FileKeychain {
 }
 
 /// What an `OSStatus` of the Keychain means here. The codes carry no secret.
-fn failure(error: &Error) -> Failure {
+fn failure(error: Error) -> Failure {
     let code = error.code();
     match code {
         // errSecUserCanceled, errSecAuthFailed: the prompt was refused.
@@ -200,14 +200,15 @@ fn count(keychain: Option<&SecKeychain>) -> Result<usize, Failure> {
     match search.search() {
         Ok(found) => Ok(found.len()),
         Err(e) if e.code() == ITEM_NOT_FOUND => Ok(0),
-        Err(e) => Err(failure(&e)),
+        Err(e) => Err(failure(e)),
     }
 }
 
-/// The document of the store and its item; `None` when there is no item.
-fn load(
-    keychain: Option<&SecKeychain>,
-) -> Result<Option<(Zeroizing<Vec<u8>>, SecKeychainItem)>, Failure> {
+/// The document of the store and the item that holds it.
+type Stored = (Zeroizing<Vec<u8>>, SecKeychainItem);
+
+/// The stored document and its item; `None` when there is no item.
+fn load(keychain: Option<&SecKeychain>) -> Result<Option<Stored>, Failure> {
     match count(keychain)? {
         0 => return Ok(None),
         1 => {}
@@ -225,7 +226,7 @@ fn load(
     match found {
         Ok((password, item)) => Ok(Some((Zeroizing::new(password.to_vec()), item))),
         Err(e) if e.code() == ITEM_NOT_FOUND => Ok(None),
-        Err(e) => Err(failure(&e)),
+        Err(e) => Err(failure(e)),
     }
 }
 
@@ -233,11 +234,11 @@ fn load(
 fn add(keychain: Option<&SecKeychain>, document: &[u8]) -> Result<(), Failure> {
     let keychain = match keychain {
         Some(keychain) => keychain.clone(),
-        None => SecKeychain::default().map_err(|e| failure(&e))?,
+        None => SecKeychain::default().map_err(failure)?,
     };
     keychain
         .add_generic_password(SERVICE, STORE_ACCOUNT, document)
-        .map_err(|e| failure(&e))
+        .map_err(failure)
 }
 
 impl ItemStore for FileKeychain {

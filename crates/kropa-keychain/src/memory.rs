@@ -13,10 +13,13 @@ use zeroize::Zeroizing;
 
 use crate::item::{Failure, FailureKind, Item, ItemName, ItemStore, check_document, check_part};
 
+/// Documents by (profile, name); several under one name are a duplicate.
+type Documents = BTreeMap<(String, String), Vec<Vec<u8>>>;
+
 /// A keychain in memory.
 #[derive(Default)]
 pub struct MemoryItemStore {
-    items: Mutex<BTreeMap<(String, String), Vec<Vec<u8>>>>,
+    items: Mutex<Documents>,
     failure: Mutex<Option<Failure>>,
     interactive: AtomicBool,
     calls: AtomicUsize,

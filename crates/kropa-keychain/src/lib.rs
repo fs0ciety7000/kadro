@@ -19,6 +19,8 @@
 //!
 //! `kropa-store` turns an [`item::ItemStore`] into the `SecretStore` of the commands.
 
+#![cfg_attr(test, allow(clippy::assert_is_empty, clippy::naive_bytecount))]
+
 pub mod client;
 pub mod deadline;
 pub mod guard;
