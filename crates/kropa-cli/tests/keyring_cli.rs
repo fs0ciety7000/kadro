@@ -24,6 +24,14 @@ chmod 700 "$XDG_RUNTIME_DIR"
 printf '%s' 'kropa-test-password' | gnome-keyring-daemon --foreground --unlock --components=secrets >/dev/null 2>&1 &
 daemon=$!
 trap 'kill "$daemon" 2>/dev/null' EXIT
+# Wait until the daemon owns the name. NameHasOwner never activates anything: calling the service
+# earlier would make the bus start a second, locked daemon from its service file.
+i=0
+until dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+    org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets 2>/dev/null | grep -q 'boolean true'; do
+  i=$((i + 1)); [ "$i" -gt 100 ] && { echo "keyring daemon never appeared"; exit 99; }
+  sleep 0.2
+done
 # The daemon is on the bus a moment before its default collection exists.
 i=0
 until "$kropa" --json secrets status 2>/dev/null | grep -q '"state":"available"'; do
@@ -57,15 +65,12 @@ fn required() -> bool {
 }
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
+    Command::new(tool).arg("--version").output().is_ok()
 }
 
 #[test]
 fn the_binary_stores_reads_and_removes_a_secret_in_a_real_keyring() {
-    if !(have("dbus-run-session") && have("gnome-keyring-daemon")) {
+    if !(have("dbus-run-session") && have("gnome-keyring-daemon") && have("dbus-send")) {
         assert!(
             !required(),
             "dbus-run-session and gnome-keyring-daemon are required (KROPA_REQUIRE_KEYRING_TESTS is set)"
@@ -84,6 +89,13 @@ fn the_binary_stores_reads_and_removes_a_secret_in_a_real_keyring() {
     // Built at run time: nothing in the source looks like a token.
     let secret = ["Kb8-", "Tn4Lm2", "Vx7Rw-qq"].concat();
     let output = Command::new("dbus-run-session")
+        .env("HOME", home.path())
+        .env("XDG_DATA_HOME", home.path().join("data"))
+        .env("XDG_CONFIG_HOME", home.path().join("config"))
+        .env("XDG_CACHE_HOME", home.path().join("cache"))
+        .env("XDG_RUNTIME_DIR", home.path().join("run"))
+        .env_remove("GNOME_KEYRING_CONTROL")
+        .env_remove("SSH_AUTH_SOCK")
         .args(["--", "sh", "-c", SCRIPT, "sh"])
         .arg(home.path())
         .arg(env!("CARGO_BIN_EXE_kropa"))

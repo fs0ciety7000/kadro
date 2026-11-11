@@ -40,6 +40,14 @@ chmod 700 "$XDG_RUNTIME_DIR"
 # foreground and in the background, so that it can be stopped: it does not end with the bus.
 printf '%s' 'kropa-test-password' | gnome-keyring-daemon --foreground --unlock --components=secrets >/dev/null 2>&1 &
 daemon=$!
+# Wait until the daemon owns the name. NameHasOwner never activates anything: calling the service
+# earlier would make the bus start a second, locked daemon from its service file.
+i=0
+until dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+    org.freedesktop.DBus.NameHasOwner string:org.freedesktop.secrets 2>/dev/null | grep -q 'boolean true'; do
+  i=$((i + 1)); [ "$i" -gt 100 ] && { echo "keyring daemon never appeared"; exit 99; }
+  sleep 0.2
+done
 "$exe" --exact "$name" --ignored --nocapture --test-threads=1
 status=$?
 kill "$daemon" 2>/dev/null
@@ -52,15 +60,12 @@ fn required() -> bool {
 }
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
+    Command::new(tool).arg("--version").output().is_ok()
 }
 
 /// Runs the `inner_*` test `name` inside a private session bus with an unlocked keyring.
 fn in_private_session(name: &str) {
-    if !(have("dbus-run-session") && have("gnome-keyring-daemon")) {
+    if !(have("dbus-run-session") && have("gnome-keyring-daemon") && have("dbus-send")) {
         assert!(
             !required(),
             "dbus-run-session and gnome-keyring-daemon are required (KROPA_REQUIRE_KEYRING_TESTS is set)"
@@ -71,6 +76,13 @@ fn in_private_session(name: &str) {
     let home = tempfile::tempdir().unwrap();
     let exe = std::env::current_exe().unwrap();
     let output = Command::new("dbus-run-session")
+        .env("HOME", home.path())
+        .env("XDG_DATA_HOME", home.path().join("data"))
+        .env("XDG_CONFIG_HOME", home.path().join("config"))
+        .env("XDG_CACHE_HOME", home.path().join("cache"))
+        .env("XDG_RUNTIME_DIR", home.path().join("run"))
+        .env_remove("GNOME_KEYRING_CONTROL")
+        .env_remove("SSH_AUTH_SOCK")
         .args(["--", "sh", "-c", SCRIPT, "sh"])
         .arg(home.path())
         .arg(exe)
