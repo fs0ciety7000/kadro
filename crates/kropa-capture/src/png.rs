@@ -88,14 +88,14 @@ fn be32(bytes: &[u8]) -> u32 {
     u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-fn kept(kind: &[u8; 4]) -> bool {
-    KEPT.contains(&kind) || KEPT_LATE.contains(&kind)
+fn kept(kind: [u8; 4]) -> bool {
+    KEPT.contains(&&kind) || KEPT_LATE.contains(&&kind)
 }
 
-fn name(kind: &[u8; 4]) -> &'static str {
+fn name(kind: [u8; 4]) -> &'static str {
     KEPT.iter()
         .chain(KEPT_LATE.iter())
-        .find(|k| **k == kind)
+        .find(|k| ***k == kind)
         .map_or("unknown", |k| std::str::from_utf8(*k).unwrap_or("unknown"))
 }
 
@@ -136,9 +136,9 @@ pub fn sanitize(input: &[u8]) -> Result<CleanPng, PngError> {
             }
             dimensions = Some((w, h));
         }
-        if kept(&kind) {
+        if kept(kind) {
             if be32(&chunk[8 + length..]) != crc32(&[&kind, data]) {
-                return Err(PngError::Checksum(name(&kind)));
+                return Err(PngError::Checksum(name(kind)));
             }
             out.extend_from_slice(chunk);
         }
@@ -181,7 +181,9 @@ pub fn sample_png(width: u32, height: u32, extra: &[(&[u8; 4], &[u8])]) -> Vec<u
     // 8 bits, greyscale, deflate, no filter, no interlace.
     ihdr.extend_from_slice(&[8, 0, 0, 0, 0]);
     // Not real pixels: the sanitizer never decodes the image data.
-    let idat: &[u8] = &[0x78, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01];
+    let idat: &[u8] = &[
+        0x78, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01,
+    ];
     let mut chunks: Vec<(&[u8; 4], &[u8])> = vec![(b"IHDR", &ihdr)];
     chunks.extend_from_slice(extra);
     chunks.push((b"IDAT", idat));

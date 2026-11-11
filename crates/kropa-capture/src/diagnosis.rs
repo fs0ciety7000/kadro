@@ -101,10 +101,10 @@ impl Diagnosis {
     pub fn active_fallbacks(&self) -> Vec<&'static str> {
         let mut out: Vec<&'static str> = Vec::new();
         for cap in [&self.capabilities.screen, &self.capabilities.output] {
-            if let Some(f) = cap.fallback {
-                if !out.contains(&f) {
-                    out.push(f);
-                }
+            if let Some(f) = cap.fallback
+                && !out.contains(&f)
+            {
+                out.push(f);
             }
         }
         out
@@ -115,7 +115,11 @@ impl Diagnosis {
 pub const ALL_FEATURES: [&str; 2] = ["capture_screen", "capture_output"];
 
 /// Reason codes of [`Capability::reason`].
-pub const ALL_REASONS: [&str; 3] = ["no_session_bus", "portal_unavailable", "output_not_isolable"];
+pub const ALL_REASONS: [&str; 3] = [
+    "no_session_bus",
+    "portal_unavailable",
+    "output_not_isolable",
+];
 
 /// Fallback codes of [`Capability::fallback`].
 pub const ALL_FALLBACKS: [&str; 1] = ["capture_screen_instead"];

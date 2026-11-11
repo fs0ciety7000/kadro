@@ -5,8 +5,8 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use ashpd::desktop::screenshot::Screenshot;
 use ashpd::desktop::ResponseError;
+use ashpd::desktop::screenshot::Screenshot;
 use ashpd::zbus::{self, Connection, DBusError};
 use ashpd::{AppID, Error as AshpdError, PortalError};
 use kropa_core::{APP_ID, ImageFormat};
@@ -399,10 +399,7 @@ mod tests {
             classify(&AshpdError::Zbus(io)),
             PortalFailure::Other(_)
         ));
-        assert_eq!(
-            classify(&AshpdError::NoResponse),
-            PortalFailure::NoResponse
-        );
+        assert_eq!(classify(&AshpdError::NoResponse), PortalFailure::NoResponse);
     }
 
     fn dbus_named(name: &str, message: &str) -> PortalFailure {

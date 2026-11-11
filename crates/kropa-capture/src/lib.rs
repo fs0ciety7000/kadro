@@ -83,7 +83,7 @@ pub type Note = &'static str;
 pub const ALL_NOTES: [Note; 2] = ["app_id_registered", "app_id_registration_unavailable"];
 
 /// An image delivered by a backend, already in its final encoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CapturedImage {
     /// Encoded file content, without metadata.
     pub data: Vec<u8>,

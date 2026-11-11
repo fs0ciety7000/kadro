@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use ashpd::zbus::fdo::{DBusProxy, PropertiesProxy};
-use ashpd::zbus::names::InterfaceName;
+use ashpd::zbus::names::{BusName, InterfaceName};
 use ashpd::zbus::{self, Connection, DBusError};
 use kropa_core::APP_ID;
 
@@ -69,12 +69,17 @@ fn state_fact(key: &'static str, state: &PortalState) -> Fact {
 /// active window), comma separated.
 #[must_use]
 pub fn targets_text(mask: u32) -> String {
-    [(1, "screen"), (2, "window"), (4, "area"), (8, "active_window")]
-        .iter()
-        .filter(|(bit, _)| mask & bit != 0)
-        .map(|(_, name)| *name)
-        .collect::<Vec<_>>()
-        .join(",")
+    [
+        (1, "screen"),
+        (2, "window"),
+        (4, "area"),
+        (8, "active_window"),
+    ]
+    .iter()
+    .filter(|(bit, _)| mask & bit != 0)
+    .map(|(_, name)| *name)
+    .collect::<Vec<_>>()
+    .join(",")
 }
 
 /// Whether `<dir>/applications/<APP_ID>.desktop` exists in `XDG_DATA_HOME` or `XDG_DATA_DIRS`.
@@ -82,7 +87,12 @@ pub(crate) fn desktop_file_installed(data_home: Option<PathBuf>, data_dirs: &str
     let file = format!("applications/{APP_ID}.desktop");
     data_home
         .into_iter()
-        .chain(data_dirs.split(':').filter(|d| !d.is_empty()).map(PathBuf::from))
+        .chain(
+            data_dirs
+                .split(':')
+                .filter(|d| !d.is_empty())
+                .map(PathBuf::from),
+        )
         .any(|dir| dir.join(&file).is_file())
 }
 
@@ -177,7 +187,10 @@ pub(crate) async fn diagnose(connection: Option<&Connection>) -> Diagnosis {
         }
         Err(e) => {
             facts.push(Fact::new("session_bus", FactValue::Bool(false)));
-            facts.push(Fact::new("session_bus_error", FactValue::Text(e.to_string())));
+            facts.push(Fact::new(
+                "session_bus_error",
+                FactValue::Text(e.to_string()),
+            ));
             facts.push(Fact::new("portal_screenshot", FactValue::NotProbed));
             for key in portal_keys {
                 facts.push(Fact::new(key, FactValue::NotProbed));
@@ -205,17 +218,15 @@ pub(crate) async fn diagnose(connection: Option<&Connection>) -> Diagnosis {
     }
 }
 
-/// The Screenshot state, then the facts about the other portals, KWin and the targets.
+/// The Screenshot state, then the facts about the other portals, `KWin` and the targets.
 async fn probe_bus(connection: &Connection) -> (PortalState, Vec<Fact>) {
     let mut facts = Vec::new();
-    let properties = PropertiesProxy::builder(connection)
+    let built = PropertiesProxy::builder(connection)
         .destination(PORTAL_NAME)
-        .and_then(|b| b.path(PORTAL_PATH))
-        .map(|b| b.build());
-    let Ok(properties) = properties else {
-        return (PortalState::Missing, facts);
-    };
-    let Ok(properties) = properties.await else {
+        .path(PORTAL_PATH)
+        .build()
+        .await;
+    let Ok(properties) = built else {
         return (PortalState::Missing, facts);
     };
     let screenshot = portal_state(&properties, SCREENSHOT).await;
@@ -223,8 +234,9 @@ async fn probe_bus(connection: &Connection) -> (PortalState, Vec<Fact>) {
         PortalState::Version(v) if *v >= TARGETS_VERSION => {
             let name = InterfaceName::from_static_str_unchecked(SCREENSHOT);
             match properties.get(name, "AvailableTargets").await {
-                Ok(value) => u32::try_from(&*value)
-                    .map_or(FactValue::Absent, |mask| FactValue::Text(targets_text(mask))),
+                Ok(value) => u32::try_from(&*value).map_or(FactValue::Absent, |mask| {
+                    FactValue::Text(targets_text(mask))
+                }),
                 Err(_) => FactValue::Absent,
             }
         }
@@ -244,12 +256,15 @@ async fn probe_bus(connection: &Connection) -> (PortalState, Vec<Fact>) {
     }
     // KWin owns `org.kde.KWin` whatever the policy: the fact only says it is there. Using its
     // `ScreenShot2` interface needs the `.desktop` declaration, which Kropa does not make yet.
-    let kwin = match DBusProxy::new(connection).await {
-        Ok(bus) => bus
-            .name_has_owner("org.kde.KWin".try_into().unwrap_or_else(|_| unreachable!()))
+    let kwin = match (
+        DBusProxy::new(connection).await,
+        BusName::try_from("org.kde.KWin"),
+    ) {
+        (Ok(bus), Ok(name)) => bus
+            .name_has_owner(name)
             .await
             .map_or(FactValue::Absent, FactValue::Bool),
-        Err(_) => FactValue::Absent,
+        _ => FactValue::Absent,
     };
     facts.push(Fact::new("kwin_service", kwin));
     (screenshot, facts)
@@ -306,6 +321,9 @@ mod tests {
         assert!(!desktop_file_installed(None, "/nonexistent"));
         std::fs::create_dir_all(home.path().join("applications")).unwrap();
         std::fs::write(home.path().join(&file), "[Desktop Entry]\n").unwrap();
-        assert!(desktop_file_installed(Some(home.path().to_owned()), "/nonexistent"));
+        assert!(desktop_file_installed(
+            Some(home.path().to_owned()),
+            "/nonexistent"
+        ));
     }
 }
