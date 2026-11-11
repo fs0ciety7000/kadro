@@ -19,6 +19,7 @@ use serde_json::Value;
 use serde_json_path::JsonPath;
 use url::Url;
 
+use crate::debug_log::{BODY_LIMIT, DebugLog, redact_header_map, redact_headers, redact_url};
 use crate::destination::{
     BodyKind, Compiled, Destination, MAX_REDIRECTS, MediaKind, REGEX_SIZE_LIMIT, Redirects,
     normalize_json_path,
@@ -191,6 +192,7 @@ pub struct UploadOutcome {
 pub struct Uploader<'a> {
     secrets: &'a dyn SecretSource,
     http: HttpClient,
+    log: DebugLog,
 }
 
 struct Resolved {
@@ -331,13 +333,31 @@ impl<'a> Uploader<'a> {
         Ok(Self {
             secrets,
             http: HttpClient::new()?,
+            log: DebugLog::new(0),
         })
+    }
+
+    /// Keeps a redacted journal of the exchange, up to `level` (1: `-v`, 2: `-vv`).
+    #[must_use]
+    pub fn with_debug_log(mut self, level: u8) -> Self {
+        self.log = DebugLog::new(level);
+        self
+    }
+
+    /// The lines of the journal so far, as `(level, text)`; each one went through the detector.
+    #[must_use]
+    pub fn take_log(&self) -> Vec<(u8, String)> {
+        self.log.take()
     }
 
     /// The engine on a given client (tests only: a client that trusts the CA of a test server).
     #[cfg(test)]
     pub(crate) fn with_client(secrets: &'a dyn SecretSource, http: HttpClient) -> Self {
-        Self { secrets, http }
+        Self {
+            secrets,
+            http,
+            log: DebugLog::new(0),
+        }
     }
 
     /// Sends `input` to `destination`.
@@ -352,7 +372,35 @@ impl<'a> Uploader<'a> {
         input: &UploadInput,
         vars: &[(String, String)],
     ) -> Result<UploadOutcome, UploadError> {
+        let result = self.upload_inner(destination, input, vars).await;
+        match &result {
+            Ok(outcome) => self
+                .log
+                .record(1, &format!("upload done: HTTP {}", outcome.status)),
+            Err(e) => self
+                .log
+                .record(1, &format!("upload failed ({}): {e}", e.reason())),
+        }
+        result
+    }
+
+    async fn upload_inner(
+        &self,
+        destination: &Destination,
+        input: &UploadInput,
+        vars: &[(String, String)],
+    ) -> Result<UploadOutcome, UploadError> {
         let compiled = destination.compile()?;
+        self.log.record(
+            1,
+            &format!(
+                "upload: {} to {} ({} bytes, {})",
+                compiled.method,
+                compiled.origin().unwrap_or_default(),
+                input.bytes.len(),
+                input.mime,
+            ),
+        );
         if input.bytes.len() as u64 > compiled.max_size {
             return Err(UploadError::failed(
                 "file_too_large",
@@ -539,12 +587,38 @@ impl<'a> Uploader<'a> {
         let mut with_body = true;
         let mut hops = 0usize;
         loop {
-            let response = self
-                .request(compiled, plan, input, &method, &url, with_body)?
-                .send()
-                .await
-                .map_err(|e| network_error(&e))?;
+            let builder = self.request(compiled, plan, input, &method, &url, with_body)?;
+            self.log
+                .record(2, &format!("request: {method} {}", redact_url(&url)));
+            self.log.record(
+                2,
+                &format!(
+                    "request headers: {}",
+                    redact_headers(plan.headers.iter().map(|(n, v)| (n, v)))
+                ),
+            );
+            self.log.record(
+                2,
+                &format!(
+                    "request body: {:?} (content not logged)",
+                    if with_body {
+                        compiled.body
+                    } else {
+                        BodyKind::None
+                    }
+                ),
+            );
+            let response = builder.send().await.map_err(|e| network_error(&e))?;
             let status = response.status();
+            self.log
+                .record(1, &format!("response: HTTP {}", status.as_u16()));
+            self.log.record(
+                2,
+                &format!(
+                    "response headers: {}",
+                    redact_header_map(response.headers())
+                ),
+            );
             if status.is_redirection()
                 && compiled.redirects == Redirects::SameOrigin
                 && let Some(location) = response.headers().get(LOCATION)
@@ -569,6 +643,10 @@ impl<'a> Uploader<'a> {
                     method = Method::GET;
                     with_body = false;
                 }
+                self.log.record(
+                    2,
+                    &format!("redirect {} to {}", status.as_u16(), redact_url(&next)),
+                );
                 url = next;
                 continue;
             }
@@ -587,6 +665,15 @@ impl<'a> Uploader<'a> {
                     ));
                 }
                 body.extend_from_slice(&chunk);
+            }
+            self.log
+                .record(2, &format!("response body: {} bytes", body.len()));
+            if !status.is_success() && self.log.enabled(2) {
+                // Only an error body, masked on the whole text and then cut; the body of a success
+                // holds the URL of deletion, which no journal gets.
+                let excerpt = MaskedText::from_response(&body, &SecretSet::loaded(), BODY_LIMIT);
+                self.log
+                    .record(2, &format!("response body (error): {excerpt}"));
             }
             return Ok(Answer {
                 status: code,
@@ -773,7 +860,7 @@ impl Env for ResponseEnv<'_> {
 
 /// Characters that make a URL taken from a response unusable: controls, bidirectional overrides
 /// and zero-width characters (`docs/security/secrets.md` section 4.4).
-fn is_hostile_char(c: char) -> bool {
+pub(crate) fn is_hostile_char(c: char) -> bool {
     c.is_control()
         || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}')
 }

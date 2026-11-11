@@ -14,6 +14,7 @@
     clippy::assert_is_empty
 )]
 
+pub mod debug_log;
 pub mod destination;
 pub mod engine;
 pub mod error;
@@ -32,5 +33,7 @@ pub use error::UploadError;
 // client that trusts a test CA exists in test builds of this crate and nowhere else.
 #[cfg(test)]
 mod engine_tests;
+#[cfg(test)]
+mod log_tests;
 #[cfg(test)]
 mod testing;

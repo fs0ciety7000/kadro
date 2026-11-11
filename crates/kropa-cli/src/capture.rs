@@ -332,7 +332,14 @@ pub fn run(
             .map(str::to_owned)
             .or_else(|| config.default_destination.clone())
             .unwrap_or_default();
-        let delivery = upload::deliver(ctx, config_dir, &profile, &path, &opts.vars);
+        let delivery = upload::deliver(
+            ctx,
+            config_dir,
+            &profile,
+            &path,
+            &opts.vars,
+            session.verbose,
+        );
         let copy = opts.send.copy.map(CopyChoice::from_target);
         upload::report(&delivery, copy, loc, session)
     });

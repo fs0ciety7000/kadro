@@ -44,7 +44,7 @@
 |---|---|
 | `--json` | Sortie machine (§ 4). |
 | `--lang <fr\|en>` | Langue des messages. |
-| `-q, --quiet` / `-v, --verbose` | Moins / plus de messages sur stderr (`-vv` : journal de débogage expurgé). |
+| `-q, --quiet` / `-v, --verbose` | Moins / plus de messages sur stderr (`-vv` : journal de débogage expurgé). Envoi (`upload`, `capture --upload`, `dest test`) : lignes préfixées `kropa-upload: ` sur stderr, affichées après l'envoi, en anglais technique ; `-v` résumé, `-vv` requête, en-têtes (valeur montrée pour une liste blanche, sinon `***`), redirections, réponse (corps seulement sur erreur, masqué, 200 caractères). |
 | `--no-input` | Interdit toute invite, même sur un TTY. |
 | `--color <auto\|always\|never>` | Couleur sur stderr ; `auto` respecte `NO_COLOR` et l'absence de TTY. |
 | `--config <dossier>` | Dossier de configuration (tests, profils séparés). |

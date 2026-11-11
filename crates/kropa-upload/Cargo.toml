@@ -27,6 +27,7 @@ zeroize.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+proptest.workspace = true
 # HTTPS on the loopback for the tests that carry a secret: a CA and a certificate made per test.
 rcgen.workspace = true
 tempfile.workspace = true

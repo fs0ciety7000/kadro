@@ -15,7 +15,7 @@ use kropa_upload::UploadError;
 use kropa_upload::destination::Destination;
 use kropa_upload::engine::{UploadInput, UploadOutcome, Uploader};
 use kropa_upload::http::block_on;
-use kropa_upload::links::{LinkFormat, format_link};
+use kropa_upload::links::{LinkError, LinkFormat, format_link};
 use kropa_upload::masked::{CheckedOutput, MaskedText, SecretSet};
 use kropa_upload::profiles::{find, load_destinations};
 use serde_json::{Value, json};
@@ -143,6 +143,21 @@ pub fn cli_error_write(err: &UploadError, loc: &Localizer) -> CliError {
     error
 }
 
+/// The upload error for a link that could not be made.
+#[must_use]
+pub fn link_failure(error: LinkError) -> UploadError {
+    match error {
+        LinkError::SecretInOutput => UploadError::Security {
+            reason: "secret_in_output",
+            detail: "the link holds a secret".to_owned(),
+        },
+        LinkError::InvalidUrl => UploadError::Failed {
+            reason: "url_invalid",
+            detail: "the URL read from the answer is not usable".to_owned(),
+        },
+    }
+}
+
 /// An upload that was tried: the profile, the name of the file, and what came of it.
 pub struct Delivery {
     /// Profile name.
@@ -151,6 +166,16 @@ pub struct Delivery {
     pub file_name: String,
     /// The outcome.
     pub result: Result<UploadOutcome, UploadError>,
+    /// The redacted journal of the exchange as `(level, line)`, empty without `-v`.
+    pub log: Vec<(u8, String)>,
+}
+
+/// Prints the journal of an upload on stderr, from `-v` (level 1) or `-vv` (level 2). The lines
+/// went through the detector of secrets when they were made.
+pub fn show_log(log: &[(u8, String)], session: &mut Session<'_, '_>) {
+    for (level, line) in log {
+        session.debug(*level, &format!("kropa-upload: {line}"));
+    }
 }
 
 fn send(
@@ -159,13 +184,25 @@ fn send(
     profile: &str,
     file: &Path,
     vars: &[(String, String)],
-) -> Result<UploadOutcome, UploadError> {
-    let destinations = load_destinations(config_dir)?;
-    let destination = find(&destinations, profile)?;
-    let compiled = destination.compile()?;
-    let input = UploadInput::from_file(file, compiled.max_size)?;
-    let uploader = Uploader::new(ctx.secrets)?;
-    block_on(uploader.upload(destination, &input, vars))
+    verbose: u8,
+) -> (Result<UploadOutcome, UploadError>, Vec<(u8, String)>) {
+    let destinations = match load_destinations(config_dir) {
+        Ok(d) => d,
+        Err(e) => return (Err(e), Vec::new()),
+    };
+    let prepared = find(&destinations, profile).and_then(|destination| {
+        let compiled = destination.compile()?;
+        let input = UploadInput::from_file(file, compiled.max_size)?;
+        let uploader = Uploader::new(ctx.secrets)?.with_debug_log(verbose);
+        Ok((destination, input, uploader))
+    });
+    match prepared {
+        Ok((destination, input, uploader)) => {
+            let result = block_on(uploader.upload(destination, &input, vars));
+            (result, uploader.take_log())
+        }
+        Err(e) => (Err(e), Vec::new()),
+    }
 }
 
 /// Sends `file` to `profile`.
@@ -176,13 +213,16 @@ pub fn deliver(
     profile: &str,
     file: &Path,
     vars: &[(String, String)],
+    verbose: u8,
 ) -> Delivery {
+    let (result, log) = send(ctx, config_dir, profile, file, vars, verbose);
     Delivery {
         profile: profile.to_owned(),
         file_name: file
             .file_name()
             .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned()),
-        result: send(ctx, config_dir, profile, file, vars),
+        result,
+        log,
     }
 }
 
@@ -218,26 +258,27 @@ pub fn report(
     session: &mut Session<'_, '_>,
 ) -> Report {
     let requested = copy.unwrap_or(CopyChoice::None);
+    show_log(&delivery.log, session);
     let refused;
     let mut link: Option<CheckedOutput> = None;
     let (outcome, error): (Option<&UploadOutcome>, Option<&UploadError>) = match &delivery.result {
         Err(e) => (None, Some(e)),
         Ok(outcome) => {
             let format = requested.format().unwrap_or(LinkFormat::Url);
-            if let Ok(text) = format_link(
+            match format_link(
                 format,
                 &outcome.url,
                 &delivery.file_name,
                 &SecretSet::loaded(),
             ) {
-                link = Some(text);
-                (Some(outcome), None)
-            } else {
-                refused = UploadError::Security {
-                    reason: "secret_in_output",
-                    detail: "the link holds a secret".to_owned(),
-                };
-                (None, Some(&refused))
+                Ok(text) => {
+                    link = Some(text);
+                    (Some(outcome), None)
+                }
+                Err(e) => {
+                    refused = link_failure(e);
+                    (None, Some(&refused))
+                }
             }
         }
     };
@@ -337,7 +378,14 @@ pub fn run(
     let loc = ctx.loc;
     let profile = profile_of(args.to.as_deref(), config)
         .ok_or_else(|| CliError::new(ExitCode::Config, loc, "error-no-default-destination", &[]))?;
-    let delivery = deliver(ctx, config_dir, &profile, &args.file, &args.vars);
+    let delivery = deliver(
+        ctx,
+        config_dir,
+        &profile,
+        &args.file,
+        &args.vars,
+        session.verbose,
+    );
     let copy = args.copy.map(CopyChoice::from);
     let report = report(&delivery, copy, loc, session);
     let file = file_member(&args.file);

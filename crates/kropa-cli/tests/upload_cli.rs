@@ -7,7 +7,8 @@
     clippy::many_single_char_names,
     clippy::struct_field_names,
     clippy::too_many_lines,
-    clippy::case_sensitive_file_extension_comparisons
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::format_push_string
 )]
 
 use std::ffi::OsString;
@@ -917,4 +918,179 @@ async fn dest_import_rules() {
     )
     .await;
     assert_eq!(r.code, 6);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Task 1.9: no secret on stdout, stderr or in the JSON, at `-vv`, even when the server echoes it
+// ---------------------------------------------------------------------------------------------
+
+/// Built at run time: nothing here looks like a token in the source.
+fn journal_token() -> String {
+    ["cli9-", "Zq7kLm9", "Xt2+vRw", "/abcdef-QW"].concat()
+}
+
+/// The forms of the secret that must not come out: raw, percent-encoded, hex, and the part of the
+/// base64 (both alphabets) that does not depend on the neighbours, at the three alignments.
+fn leaked_forms(text: &str, secret: &str) -> Vec<String> {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+    let mut forms = vec![secret.to_owned()];
+    for lower in [false, true] {
+        let (mut pct, mut hex) = (String::new(), String::new());
+        for b in secret.bytes() {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                pct.push(char::from(b));
+            } else if lower {
+                pct.push_str(&format!("%{b:02x}"));
+            } else {
+                pct.push_str(&format!("%{b:02X}"));
+            }
+            hex.push_str(&if lower {
+                format!("{b:02x}")
+            } else {
+                format!("{b:02X}")
+            });
+        }
+        forms.push(pct);
+        forms.push(hex);
+    }
+    for pad in 0..3 {
+        let mut bytes = vec![b'#'; pad];
+        bytes.extend_from_slice(secret.as_bytes());
+        for e in [
+            STANDARD_NO_PAD.encode(&bytes),
+            URL_SAFE_NO_PAD.encode(&bytes),
+        ] {
+            forms.push(e[4..e.len() - 4].to_owned());
+        }
+    }
+    forms
+        .into_iter()
+        .filter(|f| text.contains(f.as_str()))
+        .collect()
+}
+
+fn echoing(status: u16, body: serde_json::Value, secret: &str) -> ResponseTemplate {
+    ResponseTemplate::new(status)
+        .insert_header("x-echo", secret)
+        .insert_header("set-cookie", format!("sid={secret}").as_str())
+        .insert_header("www-authenticate", format!("Bearer {secret}").as_str())
+        .set_body_json(body)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn no_secret_reaches_stdout_stderr_or_the_json_at_vv() {
+    use base64::Engine as _;
+    let secret = journal_token();
+    // A secret loaded in the process since its start (N5): the detector knows it whatever the
+    // request. The TLS path with a real store is covered in `kropa-upload` (`log_tests`).
+    kropa_upload::masked::register_secret(&secret);
+    let standard = base64::engine::general_purpose::STANDARD;
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let file = shot(dir.path());
+    let c = cfg(dir.path());
+    let mut seen = String::new();
+    let mut journal_lines = 0;
+
+    // Success: the secret comes back in headers and in fields of the body that are not read.
+    server.reset().await;
+    Mock::given(any())
+        .respond_with(echoing(
+            200,
+            serde_json::json!({
+                "url": "https://files.example.org/a/shot.png?name=a%20b",
+                "debug": [secret, standard.encode(format!("user:{secret}"))],
+            }),
+            &secret,
+        ))
+        .mount(&server)
+        .await;
+    for args in [
+        vec!["-vv", "--lang", "en", "upload", &file],
+        vec!["-vv", "--json", "upload", &file, "--copy", "markdown"],
+        vec!["-vv", "--json", "upload", &file, "--copy", "html"],
+        vec!["-vv", "--lang", "fr", "dest", "test", "open", "--yes"],
+        vec!["-vv", "--json", "dest", "test", "open", "--yes"],
+    ] {
+        let mut full = vec!["--config", c.as_str()];
+        full.extend(args);
+        let r = cli(&full, none(), false, true, false).await;
+        assert_eq!(r.code, 0, "{full:?}: {}", r.err);
+        journal_lines += r
+            .err
+            .lines()
+            .filter(|l| l.starts_with("kropa-upload: "))
+            .count();
+        seen.push_str(&format!("{}\n{}\n", r.out, r.err));
+    }
+
+    // Failure: the answer holds the secret in several forms.
+    for body in [
+        serde_json::json!({"error": format!("bad credentials {secret}")}),
+        serde_json::json!({"error": standard.encode(format!("Bearer {secret}"))}),
+        serde_json::json!({"error": secret.replace('/', "%2F").replace('+', "%2B")}),
+    ] {
+        server.reset().await;
+        Mock::given(any())
+            .respond_with(echoing(500, body, &secret))
+            .mount(&server)
+            .await;
+        for json in [false, true] {
+            let mut full = vec!["--config", c.as_str(), "-vv", "--lang", "en"];
+            if json {
+                full.push("--json");
+            }
+            full.extend(["upload", file.as_str()]);
+            let r = cli(&full, none(), false, false, false).await;
+            assert_eq!(r.code, 9, "{}", r.err);
+            assert!(
+                r.err.contains("kropa-upload: response body (error):"),
+                "{}",
+                r.err
+            );
+            journal_lines += r
+                .err
+                .lines()
+                .filter(|l| l.starts_with("kropa-upload: "))
+                .count();
+            seen.push_str(&format!("{}\n{}\n", r.out, r.err));
+        }
+    }
+    // The proof is not an empty one: the journal spoke, and it was redacted.
+    assert!(journal_lines >= 30, "{journal_lines}");
+    assert!(
+        seen.contains("kropa-upload: request: POST http://127.0.0.1:"),
+        "{seen}"
+    );
+    assert!(seen.contains("x-echo: ***"), "{seen}");
+    assert!(seen.contains("set-cookie: ***"), "{seen}");
+    assert_eq!(leaked_forms(&seen, &secret), Vec::<String>::new(), "{seen}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_hostile_link_never_reaches_stdout() {
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let file = shot(dir.path());
+    let c = cfg(dir.path());
+    for url in ["javascript:alert(1)", "ftp://files.example.org/a.png"] {
+        server.reset().await;
+        Mock::given(any())
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"url": url})))
+            .mount(&server)
+            .await;
+        let r = cli(
+            &["--config", &c, "--json", "upload", &file, "--copy", "html"],
+            none(),
+            false,
+            false,
+            false,
+        )
+        .await;
+        assert_eq!(r.code, 9, "{url}: {}", r.err);
+        assert!(!r.out.contains(url), "{}", r.out);
+    }
 }

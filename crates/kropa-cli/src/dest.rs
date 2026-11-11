@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
-use crate::upload::{cli_error, cli_error_write, load_one};
+use crate::upload::{cli_error, cli_error_write, link_failure, load_one, show_log};
 
 fn media_names(destination: &Destination) -> Vec<&'static str> {
     destination
@@ -251,22 +251,19 @@ pub fn test(
             return Err(cancelled(loc));
         }
     }
-    let run = || -> Result<_, UploadError> {
-        let uploader = Uploader::new(ctx.secrets)?;
-        block_on(uploader.upload(&destination, &UploadInput::test_image(), &[]))
+    let (result, log) = match Uploader::new(ctx.secrets) {
+        Ok(uploader) => {
+            let uploader = uploader.with_debug_log(session.verbose);
+            let result = block_on(uploader.upload(&destination, &UploadInput::test_image(), &[]));
+            (result, uploader.take_log())
+        }
+        Err(e) => (Err(e), Vec::new()),
     };
-    let outcome = run().map_err(|e| cli_error(&e, loc))?;
+    show_log(&log, session);
+    let outcome = result.map_err(|e| cli_error(&e, loc))?;
     let known = SecretSet::loaded();
-    let link =
-        format_link(LinkFormat::Url, &outcome.url, "kropa-test.png", &known).map_err(|_| {
-            cli_error(
-                &UploadError::Security {
-                    reason: "secret_in_output",
-                    detail: String::new(),
-                },
-                loc,
-            )
-        })?;
+    let link = format_link(LinkFormat::Url, &outcome.url, "kropa-test.png", &known)
+        .map_err(|e| cli_error(&link_failure(e), loc))?;
     let mut warnings: Vec<Value> = outcome
         .warnings
         .iter()
