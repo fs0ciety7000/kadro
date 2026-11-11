@@ -479,6 +479,9 @@ pub enum SecretsCommand {
         /// Where the secret comes from.
         #[command(flatten)]
         source: SecretSource,
+        /// Answer yes to confirmations.
+        #[arg(long)]
+        yes: bool,
     },
     /// Remove a secret.
     Remove {
@@ -490,6 +493,25 @@ pub enum SecretsCommand {
         secret: String,
         /// Answer yes to confirmations.
         #[arg(long)]
+        yes: bool,
+    },
+    /// Authorize a secret for another origin or place.
+    #[command(group(ArgGroup::new("what").required(true).args(["origin", "placement"])))]
+    Allow {
+        /// Profile identifier.
+        #[arg(value_name = "PROFILE", value_parser = parse_profile_required)]
+        profile: String,
+        /// Secret name.
+        #[arg(value_name = "NAME", value_parser = parse_secret_name)]
+        secret: String,
+        /// Origin the secret may also be sent to.
+        #[arg(long, value_name = "URL", value_parser = parse_url)]
+        origin: Option<String>,
+        /// Place the secret may also be put in.
+        #[arg(long, value_name = "PLACE", value_parser = parse_placement)]
+        placement: Option<String>,
+        /// Has no effect: this confirmation is never given without a terminal.
+        #[arg(long, hide = true)]
         yes: bool,
     },
     /// Unlock the vault.
@@ -595,6 +617,16 @@ fn parse_secret_name(value: &str) -> Result<String, ArgError> {
         Ok(value.to_owned())
     } else {
         Err(ArgError::new("err-secret-name"))
+    }
+}
+
+/// A place in the notation of `docs/cli.md`; what it means is checked when it is used, and a host or a
+/// path is refused there (code 11), so that the value is never repeated in a usage error.
+fn parse_placement(value: &str) -> Result<String, ArgError> {
+    if !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control) {
+        Ok(value.to_owned())
+    } else {
+        Err(ArgError::new("err-placement"))
     }
 }
 

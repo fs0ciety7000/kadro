@@ -66,9 +66,16 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install a keyring for the keyring tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus gnome-keyring
       - name: Tests
-        # --no-tests=pass: the skeleton crates have no test yet (nextest exits 4 otherwise); drop it once tests exist.
-        run: cargo nextest run --workspace --locked --no-tests=pass
+        env:
+          # Linux: the real gnome-keyring tests must run (they fail if a tool is missing instead of skipping).
+          KROPA_REQUIRE_KEYRING_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+        run: cargo nextest run --workspace --locked
       - name: Doctests
         run: cargo test --doc --workspace --locked
       # Kropa.app: the command line inside a bundle, universal, ad hoc signed (no certificate and no

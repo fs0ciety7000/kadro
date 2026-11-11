@@ -26,6 +26,10 @@ pub const ALL_REASONS: &[&str] = &[
     "secret_missing",
     "secret_store_not_delivered",
     "secret_store_error",
+    "keyring_locked",
+    "keyring_timeout",
+    "keyring_ambiguous",
+    "keyring_unavailable",
     "timeout",
     "connect",
     "tls",
@@ -86,10 +90,16 @@ pub enum UploadError {
         name: String,
     },
     /// The store failed (exit 7).
-    #[error("{0}")]
-    SecretStore(String),
-    /// There is no secret store yet: lot 1.8 (exit 5).
-    #[error("the secret store is not available yet")]
+    #[error("{detail}")]
+    SecretStore {
+        /// `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable` or
+        /// `secret_store_error`.
+        reason: &'static str,
+        /// What happened; never a secret.
+        detail: String,
+    },
+    /// This build has no secret store: the macOS Keychain broker is lot 1.8m (exit 5).
+    #[error("the secret store is not available in this build")]
     SecretStoreNotDelivered,
     /// DNS, connection, timeout or TLS (exit 8).
     #[error("{detail}")]
@@ -172,7 +182,7 @@ impl UploadError {
         match self {
             Self::Config { .. } => ExitCode::Config,
             Self::Variable { .. } => ExitCode::Usage,
-            Self::SecretMissing { .. } | Self::SecretStore(_) => ExitCode::SecretUnavailable,
+            Self::SecretMissing { .. } | Self::SecretStore { .. } => ExitCode::SecretUnavailable,
             Self::SecretStoreNotDelivered => ExitCode::Unsupported,
             Self::Network { .. } => ExitCode::Network,
             Self::Server { .. } | Self::Failed { .. } => ExitCode::UploadFailed,
@@ -189,9 +199,9 @@ impl UploadError {
             | Self::Variable { reason, .. }
             | Self::Network { reason, .. }
             | Self::Failed { reason, .. }
-            | Self::Security { reason, .. } => reason,
+            | Self::Security { reason, .. }
+            | Self::SecretStore { reason, .. } => reason,
             Self::SecretMissing { .. } => "secret_missing",
-            Self::SecretStore(_) => "secret_store_error",
             Self::SecretStoreNotDelivered => "secret_store_not_delivered",
             Self::Server { .. } => "http_status",
             Self::Io { .. } => "io",
@@ -244,7 +254,17 @@ impl From<crate::secret::SecretError> for UploadError {
     fn from(e: crate::secret::SecretError) -> Self {
         match e {
             crate::secret::SecretError::NotDelivered => Self::SecretStoreNotDelivered,
-            other => Self::SecretStore(other.to_string()),
+            crate::secret::SecretError::Store {
+                reason: "secret_missing",
+                detail,
+            } => Self::SecretMissing { name: detail },
+            crate::secret::SecretError::Store { reason, detail } => {
+                Self::SecretStore { reason, detail }
+            }
+            other => Self::SecretStore {
+                reason: "secret_store_error",
+                detail: other.to_string(),
+            },
         }
     }
 }

@@ -17,6 +17,8 @@ pub mod errors;
 pub mod exec;
 pub mod output;
 pub mod secret_args;
+pub mod secret_input;
+pub mod secrets;
 pub mod target;
 pub mod upload;
 
@@ -29,7 +31,7 @@ use clap::{ColorChoice, FromArgMatches, ValueEnum};
 use kropa_capture::CaptureBackend;
 use kropa_core::{Clock, Config, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
-use kropa_upload::secret::{SecretSource, UnavailableSecretSource};
+use kropa_upload::secret::SecretStore;
 
 pub use output::Io;
 
@@ -37,6 +39,7 @@ use args::{Cli, ColorWhen};
 use errors::{CliError, localize_clap_error, plain_clap_message};
 use exec::{Context, ERROR_SCHEMA};
 use output::{Session, error_document};
+use secret_input::{SecretInput, SystemInput};
 
 /// Finds the value of a long option in raw arguments, before the real parsing: the help text must
 /// already be in the right language when clap renders it. Stops at `--`. Returns the last occurrence.
@@ -143,8 +146,11 @@ pub fn run_with(
 
 /// What the commands need from outside the process, injectable for tests.
 pub struct Services<'a> {
-    /// Where secrets are read and written. Until lot 1.8 the real one refuses.
-    pub secrets: &'a dyn SecretSource,
+    /// Where secrets are read and written: the system keyring on Linux, nothing (exit 5) on macOS
+    /// until the Keychain broker of lot 1.8m.
+    pub secrets: &'a dyn SecretStore,
+    /// Where the value of a secret is read from (terminal, stdin, descriptor).
+    pub input: &'a dyn SecretInput,
     /// Answers a yes/no question put to the user on a terminal.
     pub confirm: &'a dyn Fn(&str) -> bool,
 }
@@ -176,8 +182,11 @@ pub fn run_with_backend(
     backend: Option<&dyn CaptureBackend>,
     sleep: &dyn Fn(Duration),
 ) -> ExitCode {
+    // Opens nothing: the store connects when a command needs it.
+    let store = kropa_store::open_system_store(std::sync::Arc::new(SystemClock));
     let services = Services {
-        secrets: &UnavailableSecretSource,
+        secrets: store.as_ref(),
+        input: &SystemInput,
         confirm: &ask_on_terminal,
     };
     run_with_services(args, lookup, io, clock, host, backend, sleep, &services)
@@ -236,8 +245,14 @@ fn run_inner(
         backend,
         sleep,
         secrets: services.secrets,
+        input: services.input,
         confirm: services.confirm,
     };
+    // A locked keyring is only unlocked with a prompt when someone can answer it: a terminal, and a
+    // graphical session to show the dialog on. Otherwise the call fails at once (exit 7).
+    let display = lookup("WAYLAND_DISPLAY").is_some() || lookup("DISPLAY").is_some();
+    ctx.secrets
+        .set_interactive(session.interactive && (display || cfg!(target_os = "macos")));
     Ok(exec::execute(&cli, &ctx, &mut session))
 }
 

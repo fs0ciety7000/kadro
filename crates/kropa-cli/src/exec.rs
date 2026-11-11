@@ -14,7 +14,7 @@ use std::time::Duration;
 use kropa_capture::{CaptureBackend, CaptureMode};
 use kropa_core::{CONFIG_FILE, Clock, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
-use kropa_upload::secret::SecretSource;
+use kropa_upload::secret::SecretStore;
 use serde_json::json;
 
 use crate::args::{
@@ -27,6 +27,8 @@ use crate::doctor;
 use crate::errors::CliError;
 use crate::output::Session;
 use crate::secret_args::{set_carries_secret, url_carries_secret, var_carries_secret};
+use crate::secret_input::SecretInput;
+use crate::secrets;
 use crate::target::{Target, TargetSpec, resolve_target};
 use crate::upload;
 
@@ -64,8 +66,10 @@ pub struct Context<'a> {
     pub backend: Option<&'a dyn CaptureBackend>,
     /// Waits for `--delay`; replaced by a recorder in tests.
     pub sleep: &'a dyn Fn(Duration),
-    /// Where secrets are read and written (lot 1.8 brings the real store).
-    pub secrets: &'a dyn SecretSource,
+    /// Where secrets are read and written.
+    pub secrets: &'a dyn SecretStore,
+    /// Where the value of a secret is read from.
+    pub input: &'a dyn SecretInput,
     /// Answers a yes/no question put to the user on a terminal.
     pub confirm: &'a dyn Fn(&str) -> bool,
 }
@@ -95,6 +99,7 @@ fn path(cmd: &Command) -> Vec<&'static str> {
                 SecretsCommand::Status => "status",
                 SecretsCommand::Set { .. } => "set",
                 SecretsCommand::Remove { .. } => "remove",
+                SecretsCommand::Allow { .. } => "allow",
                 SecretsCommand::Unlock => "unlock",
                 SecretsCommand::Lock => "lock",
             },
@@ -167,9 +172,10 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
             _ => vec!["2.6"],
         },
         Command::Secrets { action } => match action {
-            SecretsCommand::Status | SecretsCommand::Set { .. } | SecretsCommand::Remove { .. } => {
-                vec!["1.8"]
-            }
+            SecretsCommand::Status
+            | SecretsCommand::Set { .. }
+            | SecretsCommand::Remove { .. }
+            | SecretsCommand::Allow { .. } => Vec::new(),
             SecretsCommand::Unlock | SecretsCommand::Lock => vec!["2.8"],
         },
         Command::Queue { .. } => vec!["4.5"],
@@ -275,6 +281,42 @@ fn run_command(
                 _ => {}
             }
         }
+        Command::Secrets { action } => match action {
+            SecretsCommand::Status => return secrets::status(ctx, session),
+            SecretsCommand::Set {
+                profile,
+                secret,
+                source,
+                yes,
+            } => {
+                let dir = upload::config_dir_of(config_dir_arg, loc)?;
+                return secrets::set(profile, secret, source, *yes, &dir, ctx, session);
+            }
+            SecretsCommand::Remove {
+                profile,
+                secret,
+                yes,
+            } => return secrets::remove(profile, secret, *yes, ctx, session),
+            SecretsCommand::Allow {
+                profile,
+                secret,
+                origin,
+                placement,
+                ..
+            } => {
+                let dir = upload::config_dir_of(config_dir_arg, loc)?;
+                return secrets::allow(
+                    profile,
+                    secret,
+                    origin.as_deref(),
+                    placement.as_deref(),
+                    &dir,
+                    ctx,
+                    session,
+                );
+            }
+            SecretsCommand::Unlock | SecretsCommand::Lock => {}
+        },
         _ => {}
     }
     Err(unsupported(&cli.command, loc))
@@ -368,6 +410,11 @@ fn refuse_secrets_in_arguments(cmd: &Command, loc: &Localizer) -> Result<(), Cli
             }
             _ => {}
         },
+        Command::Secrets {
+            action: SecretsCommand::Allow {
+                origin: Some(v), ..
+            },
+        } => urls.push(("--origin", v)),
         _ => {}
     }
     // Only the name of the option goes in the message, never the value.

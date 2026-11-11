@@ -125,7 +125,7 @@ pub fn cli_error(err: &UploadError, loc: &Localizer) -> CliError {
     .with_reason(reason)
     .at_step("upload");
     if matches!(err, UploadError::SecretStoreNotDelivered) {
-        error.lots = vec!["1.8"];
+        error.lots = vec!["1.8m"];
     }
     error
 }
@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(e.code.code(), 5);
         assert_eq!(e.reason.as_deref(), Some("secret_store_not_delivered"));
         assert_eq!(e.step, Some("upload"));
-        assert_eq!(e.lots, ["1.8"]);
-        assert!(e.message.contains("lot 1.8"), "{}", e.message);
+        assert_eq!(e.lots, ["1.8m"]);
+        assert!(e.message.contains("lot 1.8m"), "{}", e.message);
     }
 }

@@ -23,8 +23,14 @@ jiff.workspace = true
 kropa-capture.workspace = true
 kropa-core.workspace = true
 kropa-i18n.workspace = true
+kropa-store.workspace = true
 kropa-upload.workspace = true
 serde_json.workspace = true
+zeroize.workspace = true
+
+# Hidden prompt of a secret on the terminal (safe termios, no `unsafe`).
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

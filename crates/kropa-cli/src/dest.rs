@@ -4,8 +4,9 @@
 //!
 //! Nothing here prints the value of a secret. `import` reads the file as data, shows what it would
 //! do, asks (or requires `--yes` and `--expect-host` without a terminal) and only then writes; the
-//! secrets it finds go to the store, which is lot 1.8: until then an import that holds a secret
-//! stops with a clear message and writes nothing.
+//! secrets it finds go to the secret store (lot 1.8) as new entries, and are taken back out if the
+//! profile cannot be written. Where the build has no store (macOS until lot 1.8m) an import that holds
+//! a secret stops with a clear message and writes nothing.
 
 use std::io::Read as _;
 use std::path::Path;
@@ -372,7 +373,7 @@ fn read_import(path: &Path, loc: &Localizer) -> Result<Vec<u8>, CliError> {
 ///
 /// # Errors
 /// [`CliError`] for a file that cannot be imported, a host that is not the expected one, a
-/// declined confirmation, a secret to store before lot 1.8, or a profile that already exists.
+/// declined confirmation, a secret that cannot be stored, or a profile that already exists.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
 pub fn import_command(
@@ -426,7 +427,7 @@ pub fn import_command(
         || ctx
             .secrets
             .profile_exists(&id)
-            .map_err(|e| cli_error(&UploadError::SecretStore(e.to_string()), loc))?;
+            .map_err(|e| cli_error(&UploadError::from(e), loc))?;
     if taken {
         return Err(
             CliError::new(ExitCode::Config, loc, "error-dest-exists", &[("id", &id)])
@@ -456,24 +457,35 @@ pub fn import_command(
         .collect();
     let origin = plan.origin.clone();
     let destination = plan.destination;
+    // The entries and the profile go together: when one step fails, what was stored is removed, so
+    // that no orphan entry is left to block the next import of the same identifier (N2).
+    let mut created: Vec<String> = Vec::new();
+    let rollback = |created: &[String]| {
+        for name in created {
+            let _ = ctx.secrets.remove(&id, name);
+        }
+    };
     for secret in plan.secrets {
+        let name = secret.name.clone();
         let entry = NewSecret {
             value: secret.value,
             origins: vec![secret.origin],
             placements: vec![secret.placement],
         };
-        ctx.secrets.put(&id, &secret.name, entry).map_err(|e| {
-            let error = UploadError::from(e);
-            let mut error = cli_error(&error, loc);
+        if let Err(e) = ctx.secrets.put(&id, &name, entry) {
+            rollback(&created);
+            let mut error = cli_error(&UploadError::from(e), loc);
             error.step = Some("import");
-            error
-        })?;
+            return Err(error);
+        }
+        created.push(name);
     }
-    append_destination(config_dir, &destination).map_err(|e| {
+    if let Err(e) = append_destination(config_dir, &destination) {
+        rollback(&created);
         let mut error = cli_error(&e, loc);
         error.step = Some("import");
-        error
-    })?;
+        return Err(error);
+    }
     session.note(&loc.message_args("note-imported", &[("id", &id), ("origin", &origin)]));
     if session.json {
         session.document(&json!({

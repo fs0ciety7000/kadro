@@ -80,7 +80,9 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [ ] 1.6 **[Utilisateur]** Certificat auto-signé (20 ans, sauvegarde `age` hors ligne) ; vérifier que la permission survit à deux builds. Fin : résultat dans `decisions.md`.
 - [x] 1.7 `kropa-upload` : client HTTP unique, destinations TOML (gabarits, JSONPath, redirections même origine, HTTPS obligatoire avec secret, réponse ≤ 1 Mio), préréglage Zipline, import `.sxcu`. Agent : `backend-dev`. Fin : tests `wiremock` + `insta` verts.
 - [x] 1.7b Corrections de la revue de sécurité 1.7 (`docs/reviews/2026-11-11-security-1.7.md` : 2 bloquants, 3 importants). Agent : `backend-dev`. I3 fait : fournisseur aws-lc-rs (décision du 11/11).
-- [ ] 1.8 `kropa-store` + secrets au trousseau (origines liées), `kropa secrets status`. Dépend de S.3. Agent : `backend-dev`. Fin : tests gnome-keyring (CI) et trousseau temporaire macOS ; `security-reviewer` sans bloquant.
+- [x] 1.8 (cœur + Linux ; macOS = 1.8m) `kropa-store` + secrets au trousseau (origines liées), `kropa secrets status`. Dépend de S.3. Agent : `backend-dev`. Fin : tests gnome-keyring (CI) et trousseau temporaire macOS ; `security-reviewer` sans bloquant.
+- [ ] 1.8m Courtier Keychain macOS (`KeychainBroker`, un seul binaire accède au Keychain, `socketpair` hérité, vérification `SecCode`/`audit_token`, voir `docs/security/secrets.md` § 2.2.1). Agent : `macos-desktop-dev`. Fin : CI macOS verte ; essai réel en 1.12.
+- [ ] 1.8r Revue de sécurité de 1.8. Agent : `security-reviewer`.
 - [ ] 1.9 Liens URL/Markdown/HTML échappés ; journaux expurgés. Agent : `backend-dev`. Fin : un test prouve qu'aucun secret n'apparaît dans les journaux.
 - [ ] 1.10 Presse-papiers : `NSPasteboard`, data-control (KDE, wlroots), message honnête sur GNOME. Agents : plateformes. Fin : statut = effet réel.
 - [ ] 1.11 Compose de test (Zipline + PostgreSQL, Garage, OpenSSH ; digests épinglés), job d'intégration, test « zéro requête » (`unshare -rn`). Agents : `devops`, `qa-tester`.

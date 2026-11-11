@@ -1,0 +1,6 @@
+[[destination]]
+id = "zipline"
+type = "zipline"
+url = "https://zipline.example.org"
+[destination.secrets]
+token = {}

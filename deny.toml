@@ -41,7 +41,17 @@ yanked = "deny"
 version = 2
 # Ignored advisories must carry an id and a justification, e.g.:
 # ignore = [{ id = "RUSTSEC-0000-0000", reason = "..." }]
-ignore = []
+#
+# RUSTSEC-2026-0370, -0371 and -0372 (zvariant, zbus_names, zvariant_derive 5.x/4.x): "unmaintained",
+# not vulnerabilities; the crates were merged into zbus 6. They come only from `secret-service` 5.2.0
+# (zbus 5), the Linux keyring client of `kropa-store` (lot 1.8). The next major, secret-service 6
+# (zbus 6), is a release candidate at the time of writing (6.0.0-rc.1, 2026-11-06): take the stable
+# release when it is out and remove these three lines. Reviewed by: security-reviewer (to do).
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "zvariant 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names 4 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+]
 
 [bans]
 # Duplicated versions of a crate: warning only.

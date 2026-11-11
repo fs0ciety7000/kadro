@@ -2,11 +2,12 @@
 
 //! Secret values and where they may travel (`docs/security/secrets.md` sections 2.3, 4.1 and 4.3).
 //!
-//! The store itself is lot 1.8. Here lives the contract the upload engine needs from it
-//! ([`SecretSource`]), an in-memory implementation for tests ([`MemorySecretSource`]) and the
-//! refusal used by the command line until the store exists ([`UnavailableSecretSource`]).
+//! The real stores live in `kropa-store` (lot 1.8). Here lives the contract the upload engine needs
+//! from them ([`SecretSource`]), the one the `secrets` commands need ([`SecretStore`]), an in-memory
+//! implementation for tests ([`MemorySecretSource`]) and the refusal used where there is no store
+//! ([`UnavailableSecretSource`]: macOS until the Keychain broker of lot 1.8m).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -161,20 +162,31 @@ pub struct NewSecret {
     pub placements: Vec<Placement>,
 }
 
-/// Why a secret could not be read.
+/// Why a secret could not be read or written.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum SecretError {
-    /// There is no secret store yet (lot 1.8).
-    #[error("the secret store is not available yet")]
+    /// There is no secret store in this build (macOS until lot 1.8m).
+    #[error("the secret store is not available in this build")]
     NotDelivered,
     /// The store failed; the text never holds a secret.
     #[error("{0}")]
     Unavailable(String),
+    /// The store failed for a known cause (`error.reason` of `docs/cli.md` section 4:
+    /// `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`,
+    /// `secret_missing`, `secret_store_error`); the detail never holds a secret.
+    #[error("{detail}")]
+    Store {
+        /// Machine sub-cause.
+        reason: &'static str,
+        /// What happened, in English, without any value.
+        detail: String,
+    },
 }
 
-/// Where the upload engine reads secrets from. The real implementation (keyring, `age` vault) is
-/// lot 1.8; an entry is looked up by profile and name only, never across profiles.
+/// Where the upload engine reads secrets from. The real implementations are the system keyring
+/// (lot 1.8) and the `age` vault (lot 2.8); an entry is looked up by profile and name only, never
+/// across profiles.
 pub trait SecretSource: Send + Sync {
     /// The entry `<profile>/<name>`; `Ok(None)` when it does not exist or is still empty.
     ///
@@ -197,8 +209,134 @@ pub trait SecretSource: Send + Sync {
     fn put(&self, profile: &str, name: &str, entry: NewSecret) -> Result<(), SecretError>;
 }
 
-/// The source used until the store exists: nothing to read, and a clear error when a secret is
-/// needed.
+/// What a stored entry says about itself, without its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryInfo {
+    /// Whether a value is stored (an entry made by an import starts empty).
+    pub has_value: bool,
+    /// Canonical origins it may be sent to.
+    pub origins: Vec<String>,
+    /// Places it may be put in.
+    pub placements: Vec<Placement>,
+}
+
+/// Where a new entry may be sent and put (`docs/security/secrets.md` section 4.3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Authorization {
+    /// Canonical origins.
+    pub origins: Vec<String>,
+    /// Places.
+    pub placements: Vec<Placement>,
+}
+
+/// State of a secret store, as `kropa secrets status` reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StoreState {
+    /// Readable and writable without asking anything.
+    Available,
+    /// Locked: reading it needs the user to unlock it.
+    Locked,
+    /// Not there (no Secret Service, no session bus).
+    Unavailable,
+    /// More than one entry answers to the same profile and name.
+    Ambiguous,
+    /// The user refused access (macOS Keychain prompt).
+    Denied,
+    /// This build has no store (macOS until lot 1.8m).
+    NotDelivered,
+}
+
+impl StoreState {
+    /// Name in the JSON output.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::Locked => "locked",
+            Self::Unavailable => "unavailable",
+            Self::Ambiguous => "ambiguous",
+            Self::Denied => "denied",
+            Self::NotDelivered => "not_delivered",
+        }
+    }
+}
+
+/// Entries of one profile in the store.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProfileCount {
+    /// Entries in all.
+    pub entries: usize,
+    /// Entries that hold no value yet (made by an import).
+    pub empty: usize,
+}
+
+/// What `kropa secrets status` shows. Never a value, never a secret's name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreStatus {
+    /// Store in use: `keyring`, `keychain-broker`, `memory`.
+    pub store: &'static str,
+    /// State.
+    pub state: StoreState,
+    /// Why the state is not [`StoreState::Available`], in English, without any value.
+    pub detail: Option<String>,
+    /// Entries per profile; empty when the store could not be read.
+    pub profiles: BTreeMap<String, ProfileCount>,
+}
+
+/// What the `secrets` commands need from a store, on top of what the upload engine reads.
+///
+/// Nothing here returns a value: reading one is [`SecretSource::load`], for the upload engine only.
+pub trait SecretStore: SecretSource {
+    /// Tells the store whether it may ask the user something (a prompt to unlock). Without it a
+    /// locked store fails at once instead of waiting for someone.
+    fn set_interactive(&self, _interactive: bool) {}
+
+    /// State and entries per profile. Never fails and never prompts: a store that cannot be read
+    /// says why in the result.
+    fn status(&self) -> StoreStatus;
+
+    /// What the entry `<profile>/<name>` holds besides its value; `Ok(None)` when it does not exist.
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be read.
+    fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError>;
+
+    /// Stores `value` in `<profile>/<name>`. An entry that exists (even empty) keeps its origins
+    /// and places; a new one gets `fresh`.
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be written.
+    fn set(
+        &self,
+        profile: &str,
+        name: &str,
+        value: SecretValue,
+        fresh: Authorization,
+    ) -> Result<(), SecretError>;
+
+    /// Removes `<profile>/<name>`; `Ok(false)` when there was none.
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be written.
+    fn remove(&self, profile: &str, name: &str) -> Result<bool, SecretError>;
+
+    /// Adds an origin and/or a place to an entry that exists (`kropa secrets allow`). Existing ones
+    /// are kept.
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be written, or the entry does not exist.
+    fn authorize(
+        &self,
+        profile: &str,
+        name: &str,
+        origin: Option<&str>,
+        placement: Option<Placement>,
+    ) -> Result<(), SecretError>;
+}
+
+/// The source of a build without a store (macOS until lot 1.8m): nothing to read, and a clear error
+/// (exit 5) when a secret is needed.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableSecretSource;
 
@@ -212,6 +350,45 @@ impl SecretSource for UnavailableSecretSource {
     }
 
     fn put(&self, _profile: &str, _name: &str, _entry: NewSecret) -> Result<(), SecretError> {
+        Err(SecretError::NotDelivered)
+    }
+}
+
+impl SecretStore for UnavailableSecretSource {
+    fn status(&self) -> StoreStatus {
+        StoreStatus {
+            store: "keychain-broker",
+            state: StoreState::NotDelivered,
+            detail: None,
+            profiles: BTreeMap::new(),
+        }
+    }
+
+    fn inspect(&self, _profile: &str, _name: &str) -> Result<Option<EntryInfo>, SecretError> {
+        Err(SecretError::NotDelivered)
+    }
+
+    fn set(
+        &self,
+        _profile: &str,
+        _name: &str,
+        _value: SecretValue,
+        _fresh: Authorization,
+    ) -> Result<(), SecretError> {
+        Err(SecretError::NotDelivered)
+    }
+
+    fn remove(&self, _profile: &str, _name: &str) -> Result<bool, SecretError> {
+        Err(SecretError::NotDelivered)
+    }
+
+    fn authorize(
+        &self,
+        _profile: &str,
+        _name: &str,
+        _origin: Option<&str>,
+        _placement: Option<Placement>,
+    ) -> Result<(), SecretError> {
         Err(SecretError::NotDelivered)
     }
 }
@@ -304,9 +481,91 @@ impl SecretSource for MemorySecretSource {
     }
 }
 
+impl SecretStore for MemorySecretSource {
+    fn status(&self) -> StoreStatus {
+        let entries = self.entries.lock().expect("lock");
+        let mut profiles: BTreeMap<String, ProfileCount> = BTreeMap::new();
+        for ((profile, _), (value, _, _)) in entries.iter() {
+            let count = profiles.entry(profile.clone()).or_default();
+            count.entries += 1;
+            count.empty += usize::from(value.is_none());
+        }
+        StoreStatus {
+            store: "memory",
+            state: StoreState::Available,
+            detail: None,
+            profiles,
+        }
+    }
+
+    fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError> {
+        let entries = self.entries.lock().expect("lock");
+        Ok(entries.get(&(profile.to_owned(), name.to_owned())).map(
+            |(value, origins, placements)| EntryInfo {
+                has_value: value.is_some(),
+                origins: origins.clone(),
+                placements: placements.clone(),
+            },
+        ))
+    }
+
+    fn set(
+        &self,
+        profile: &str,
+        name: &str,
+        value: SecretValue,
+        fresh: Authorization,
+    ) -> Result<(), SecretError> {
+        let mut entries = self.entries.lock().expect("lock");
+        let slot = entries
+            .entry((profile.to_owned(), name.to_owned()))
+            .or_insert_with(|| (None, fresh.origins, fresh.placements));
+        slot.0 = Some(value.expose().to_owned());
+        Ok(())
+    }
+
+    fn remove(&self, profile: &str, name: &str) -> Result<bool, SecretError> {
+        let mut entries = self.entries.lock().expect("lock");
+        Ok(entries
+            .remove(&(profile.to_owned(), name.to_owned()))
+            .is_some())
+    }
+
+    fn authorize(
+        &self,
+        profile: &str,
+        name: &str,
+        origin: Option<&str>,
+        placement: Option<Placement>,
+    ) -> Result<(), SecretError> {
+        let mut entries = self.entries.lock().expect("lock");
+        let Some((_, origins, placements)) =
+            entries.get_mut(&(profile.to_owned(), name.to_owned()))
+        else {
+            return Err(SecretError::Store {
+                reason: "secret_missing",
+                detail: name.to_owned(),
+            });
+        };
+        if let Some(origin) = origin
+            && !origins.iter().any(|o| o == origin)
+        {
+            origins.push(origin.to_owned());
+        }
+        if let Some(placement) = placement
+            && !placements.contains(&placement)
+        {
+            placements.push(placement);
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MemorySecretSource, Placement, SecretSource, SecretValue};
+    use super::{
+        Authorization, MemorySecretSource, Placement, SecretSource, SecretStore, SecretValue,
+    };
 
     #[test]
     fn debug_and_display_never_show_the_value() {
@@ -349,5 +608,66 @@ mod tests {
         assert!(store.load("other", "token").unwrap().is_none());
         assert!(store.profile_exists("zipline").unwrap());
         assert!(!store.profile_exists("other").unwrap());
+    }
+
+    #[test]
+    fn memory_store_set_keeps_the_authorization_of_an_existing_entry() {
+        let store = MemorySecretSource::new();
+        let fresh = Authorization {
+            origins: vec!["https://z:443".into()],
+            placements: vec![Placement::header("Authorization")],
+        };
+        store
+            .set(
+                "zipline",
+                "token",
+                SecretValue::new("abcdefgh").unwrap(),
+                fresh,
+            )
+            .unwrap();
+        let other = Authorization {
+            origins: vec!["https://evil:443".into()],
+            placements: vec![Placement::Query("k".into())],
+        };
+        store
+            .set(
+                "zipline",
+                "token",
+                SecretValue::new("ijklmnop").unwrap(),
+                other,
+            )
+            .unwrap();
+        let info = store.inspect("zipline", "token").unwrap().unwrap();
+        assert!(info.has_value);
+        assert_eq!(info.origins, vec!["https://z:443".to_owned()]);
+        assert_eq!(info.placements, vec![Placement::header("authorization")]);
+        assert_eq!(
+            store
+                .load("zipline", "token")
+                .unwrap()
+                .unwrap()
+                .value
+                .expose(),
+            "ijklmnop"
+        );
+        store
+            .authorize("zipline", "token", Some("https://n:443"), None)
+            .unwrap();
+        store
+            .authorize("zipline", "token", Some("https://n:443"), None)
+            .unwrap();
+        assert_eq!(
+            store
+                .inspect("zipline", "token")
+                .unwrap()
+                .unwrap()
+                .origins
+                .len(),
+            2
+        );
+        assert!(store.authorize("zipline", "nope", None, None).is_err());
+        assert!(store.remove("zipline", "token").unwrap());
+        assert!(!store.remove("zipline", "token").unwrap());
+        assert!(store.inspect("zipline", "token").unwrap().is_none());
     }
 }

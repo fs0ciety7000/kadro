@@ -495,6 +495,7 @@ mod tests {
                 backend: Some(backend),
                 sleep: &sleep,
                 secrets: &kropa_upload::secret::UnavailableSecretSource,
+                input: &crate::secret_input::SystemInput,
                 confirm: &|_| false,
             };
             let opts = opts(extra);

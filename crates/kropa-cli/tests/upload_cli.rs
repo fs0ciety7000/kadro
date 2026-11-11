@@ -18,12 +18,16 @@ use kropa_capture::{
     BackendId, Capabilities, Capability, CaptureBackend, CaptureError, CaptureRequest,
     CapturedImage, Diagnosis, ImageFormat, Status,
 };
+use kropa_cli::secret_input::{InputError, InputFrom, SecretInput};
 use kropa_cli::{Io, Services, run_with_services};
 use kropa_core::FixedClock;
 use kropa_upload::origin::canonical_origin;
-use kropa_upload::secret::{MemorySecretSource, Placement, SecretSource, UnavailableSecretSource};
+use kropa_upload::secret::{
+    MemorySecretSource, Placement, SecretSource, SecretStore, UnavailableSecretSource,
+};
 use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+use zeroize::Zeroizing;
 
 const TOKEN: &str = concat!("cli-", "Zq7kLm9", "Xt2vRw-abcdef");
 
@@ -31,6 +35,15 @@ struct Out {
     code: u8,
     out: String,
     err: String,
+}
+
+/// These tests give no secret by hand: asking for one is a bug.
+struct NoInput;
+
+impl SecretInput for NoInput {
+    fn read(&self, _from: InputFrom, _prompt: &str) -> Result<Zeroizing<String>, InputError> {
+        Err(InputError::Unreadable)
+    }
 }
 
 struct Fake;
@@ -76,7 +89,7 @@ impl CaptureBackend for Fake {
 /// Runs the command line on a blocking thread (it owns its runtime) and collects what it printed.
 async fn cli(
     args: &[&str],
-    secrets: Arc<dyn SecretSource>,
+    secrets: Arc<dyn SecretStore>,
     tty: bool,
     answer: bool,
     with_backend: bool,
@@ -96,6 +109,7 @@ async fn cli(
             };
             let services = Services {
                 secrets: secrets.as_ref(),
+                input: &NoInput,
                 confirm: &move |_| answer,
             };
             let backend = Fake;
@@ -120,7 +134,7 @@ async fn cli(
     .unwrap()
 }
 
-fn none() -> Arc<dyn SecretSource> {
+fn none() -> Arc<dyn SecretStore> {
     Arc::new(UnavailableSecretSource)
 }
 
@@ -309,7 +323,7 @@ async fn upload_with_a_secret_needs_the_store_of_lot_1_8_and_https() {
     let file = shot(dir.path());
     let c = cfg(dir.path());
 
-    // No store yet: a clear refusal that points at lot 1.8, nothing sent.
+    // A build without a store (macOS until lot 1.8m): a clear refusal, nothing sent.
     let r = cli(
         &["--lang", "en", "--json", "--config", &c, "upload", &file],
         none(),
@@ -321,8 +335,8 @@ async fn upload_with_a_secret_needs_the_store_of_lot_1_8_and_https() {
     assert_eq!(r.code, 5);
     let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
     assert_eq!(v["error"]["reason"], "secret_store_not_delivered");
-    assert_eq!(v["error"]["lots"][0], "1.8");
-    assert!(r.err.contains("lot 1.8"));
+    assert_eq!(v["error"]["lots"][0], "1.8m");
+    assert!(r.err.contains("lot 1.8m"));
     assert_eq!(server.received_requests().await.unwrap().len(), 0);
 
     config_with(dir.path(), &destination(&server.uri()), Some("zipline"));
@@ -797,7 +811,7 @@ async fn dest_import_rules() {
     assert_eq!(r.code, 5);
     let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
     assert_eq!(v["error"]["reason"], "secret_store_not_delivered");
-    assert_eq!(v["error"]["lots"][0], "1.8");
+    assert_eq!(v["error"]["lots"][0], "1.8m");
     assert!(!r.out.contains("ZIPLINE-FAKE") && !r.err.contains("ZIPLINE-FAKE"));
     assert_eq!(
         std::fs::read_to_string(dir.path().join("destinations.toml")).unwrap(),
