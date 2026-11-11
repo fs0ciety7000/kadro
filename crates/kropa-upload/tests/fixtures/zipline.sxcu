@@ -1,0 +1,17 @@
+{
+  "Version": "16.0.1",
+  "Name": "Zipline (team)",
+  "DestinationType": "ImageUploader, TextUploader, FileUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "https://zipline.example.org/api/upload",
+  "Headers": {
+    "Authorization": "ZIPLINE-FAKE-TOKEN-0123456789abcdef",
+    "x-zipline-format": "random",
+    "x-zipline-original-name": "false",
+    "Accept": "application/json"
+  },
+  "Body": "MultipartFormData",
+  "FileFormName": "file",
+  "URL": "{json:files[0].url}",
+  "ErrorMessage": "{json:error}"
+}

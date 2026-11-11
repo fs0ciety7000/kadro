@@ -370,6 +370,9 @@ pub enum DestCommand {
         /// Answer yes to confirmations.
         #[arg(long)]
         yes: bool,
+        /// Host the file must target.
+        #[arg(long, value_name = "HOST", value_parser = parse_host)]
+        expect_host: Option<String>,
     },
     /// Export profiles as TOML.
     Export {
@@ -665,6 +668,21 @@ fn parse_set(value: &str) -> Result<(String, String), ArgError> {
     }
 }
 
+/// A host name, optionally with a port: no scheme, no path, no user.
+fn parse_host(value: &str) -> Result<String, ArgError> {
+    let ok = !value.is_empty()
+        && value.len() <= 260
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b':' | b'[' | b']'))
+        && !value.starts_with(['.', '-']);
+    if ok {
+        Ok(value.to_owned())
+    } else {
+        Err(ArgError::new("err-host"))
+    }
+}
+
 /// A descriptor number: 0 (stdin) or 3 and above; 1 and 2 are the output streams.
 fn parse_fd(value: &str) -> Result<i32, ArgError> {
     match value.parse::<i32>() {
@@ -742,7 +760,7 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        parse_delay, parse_fd, parse_limit, parse_port, parse_presign, parse_profile, parse_set,
+        parse_delay, parse_fd, parse_host, parse_limit, parse_port, parse_presign, parse_profile, parse_set,
         parse_since, parse_url, parse_var,
     };
 
@@ -794,6 +812,16 @@ mod tests {
         assert_eq!(parse_presign("7d").unwrap(), Duration::from_hours(168));
         for bad in ["8d", "169h", "0s", "d", "10", "1.5h", "-1h", ""] {
             assert!(parse_presign(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn hosts() {
+        for ok in ["z.example.org", "z.example.org:8443", "[::1]:80", "localhost"] {
+            assert!(parse_host(ok).is_ok(), "{ok}");
+        }
+        for bad in ["", "https://z.example.org", "z.example.org/x", "u@z.example.org", "a b", "-x"] {
+            assert!(parse_host(bad).is_err(), "{bad}");
         }
     }
 

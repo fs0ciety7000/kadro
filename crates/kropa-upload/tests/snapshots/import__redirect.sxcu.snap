@@ -1,0 +1,26 @@
+---
+source: crates/kropa-upload/tests/import.rs
+expression: text
+---
+origin: https://r.example.org:443 (host r.example.org, https true)
+
+--- profile ---
+[[destination]]
+id = "redirecting-host"
+type = "http"
+label = "Redirecting host"
+kinds = ["image"]
+
+[destination.request]
+method = "POST"
+url = "https://r.example.org/up"
+body = "multipart"
+file_field = "file"
+redirects = "same-origin"
+
+[destination.response]
+url = "{responseurl}"
+
+--- secrets ---
+
+--- notes ---

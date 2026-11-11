@@ -291,3 +291,93 @@ doctor-pending-secrets = Magasin de secrets : lot 1.8
 doctor-pending-app = Socket et version de kropa-app : lot 2.1
 doctor-pending-clipboard = Presse-papiers : lot 1.10
 doctor-pending-outputs = Écrans et leurs noms : lot 2.5
+
+## Envoi et destinations (lot 1.7)
+
+arg-expect-host = Hôte que le fichier doit viser ; obligatoire avec --yes sans terminal
+val-expect-host = HÔTE
+err-host = nom d'hôte attendu, sans schéma ni chemin, par exemple z.example.org
+
+error-cancelled = Annulé.
+error-import-host-required = Importer sans terminal exige --yes et --expect-host HÔTE, pour qu'un fichier ne puisse pas vous envoyer vers un hôte que vous n'avez pas choisi.
+error-import-file-type = Type de fichier inconnu : un fichier .sxcu ou .toml est attendu.
+error-dest-exists = Une destination nommée '{ $id }' existe déjà, ou le magasin de secrets garde encore des entrées sous ce nom. Choisissez un autre identifiant avec --id.
+error-dest-no-file = Impossible de lire le fichier : { $detail }
+
+error-upload-invalid-destination = Destination invalide : { $detail }
+error-upload-unknown-destination = { $detail }. Listez-les avec 'kropa dest list'.
+error-upload-import-invalid = Import impossible : { $detail }
+error-upload-import-unsupported = Import impossible : { $detail }
+error-upload-import-too-large = Import impossible : le fichier dépasse 64 Kio.
+error-upload-missing-variable = La destination attend une valeur pour '{ $detail }' : ajoutez --var { $detail }=VALEUR.
+error-upload-invalid-variable = La valeur donnée pour '{ $detail }' ne fait pas partie des choix de la destination.
+error-upload-secret-missing = Le secret '{ $detail }' de la destination n'est pas renseigné.
+error-upload-secret-store-not-delivered = Le stockage des secrets n'est pas encore disponible : il arrive avec le lot 1.8. Cette destination a besoin d'un secret, rien n'a été fait.
+error-upload-secret-store-error = Le magasin de secrets a échoué : { $detail }
+error-upload-timeout = Le serveur n'a pas répondu à temps. Le fichier est conservé.
+error-upload-connect = Connexion au serveur impossible. Vérifiez l'adresse et le réseau. Le fichier est conservé.
+error-upload-tls = La connexion sécurisée a échoué : le certificat du serveur n'a pas pu être vérifié. S'il vient d'une autorité privée, ajoutez-la au magasin de certificats du système. Le fichier est conservé.
+error-upload-network = La requête a échoué. Le fichier est conservé.
+error-upload-http-status = Le serveur a répondu avec le statut { $status } : { $detail }
+error-upload-http-status-bare = Le serveur a répondu avec le statut { $status }.
+error-upload-url-missing = Le serveur a répondu, mais sa réponse ne contient pas d'URL. Vérifiez le gabarit de réponse de la destination.
+error-upload-url-invalid = Le serveur a répondu avec une URL inutilisable (ni http ni https, ou avec des caractères de contrôle). Rien n'a été copié.
+error-upload-response-too-large = La réponse du serveur dépasse 1 Mio : elle n'a pas été lue.
+error-upload-bad-response = La réponse du serveur est illisible : { $detail }
+error-upload-file-too-large = Le fichier dépasse la limite de la destination (max_size).
+error-upload-origin-not-allowed = Refusé : { $detail }. Rien n'a été envoyé.
+error-upload-placement-not-allowed = Refusé : { $detail }. Rien n'a été envoyé.
+error-upload-secret-in-output = Refusé : la réponse du serveur contient le secret, son lien est donc retenu et rien n'a été copié. Le fichier a peut-être été envoyé.
+error-upload-https-required = Refusé : { $detail }. Rien n'a été envoyé.
+error-upload-cross-origin-redirect = Refusé : le serveur a redirigé vers une autre origine ; la requête n'y a pas été répétée.
+error-upload-secret-in-argument = Refusé : { $detail }
+error-upload-secret-too-short = Refusé : un secret fait au moins 4 octets.
+error-upload-secret-in-path = Refusé : { $detail }
+error-upload-import-host-mismatch = Refusé : le fichier vise { $detail }, pas l'hôte attendu. Rien n'a été importé.
+error-upload-io = { $detail }
+error-upload-tls-cpu-unsupported = Ce processeur n'a pas les fonctions dont le fournisseur TLS a besoin (AES, PCLMUL et AVX2 sur x86-64 ; AES, SHA-2 et PMULL sur ARM) : l'envoi n'y est pas disponible.
+
+warn-secret-short = Le secret '{ $detail }' est court : il peut être masqué à plus d'endroits que nécessaire.
+warn-secret-echoed = Le serveur a répété un secret dans sa réponse : le texte a été masqué.
+warn-uploaded-link-withheld = Le fichier a peut-être été envoyé, mais son lien est retenu parce qu'il contenait un secret.
+warn-thumbnail-url-invalid = L'URL de miniature de la réponse est inutilisable et a été écartée.
+warn-deletion-url-invalid = L'URL de suppression de la réponse est inutilisable et a été écartée.
+warn-metadata-not-stripped = Les métadonnées ne sont pas encore retirées du fichier envoyé (lot 4.8).
+warn-clipboard-unavailable = Lien non copié : le presse-papiers n'est pas encore disponible (lot 1.10). Le lien est affiché ci-dessus.
+
+note-uploaded = Envoyé vers { $profile }
+note-link = Lien ({ $format }) : { $text }
+note-no-destinations = Aucune destination configurée. Importez-en une avec 'kropa dest import FICHIER'.
+
+out-dest-default-marker = (par défaut)
+out-show-title = { $id } ({ $type })
+out-show-label = Libellé : { $label }
+out-show-address = Adresse : { $address }
+out-show-origin = Origine : { $origin }
+out-show-kinds = Accepte : { $kinds }
+out-show-default = Destination par défaut : oui
+out-show-request = Requête : { $method } { $url }
+out-show-header = En-tête { $name } : { $value }
+out-show-query = Paramètre { $name } : { $value }
+out-show-field = Champ { $name } : { $value }
+out-show-secret = Secret { $name } : { $state }
+out-show-var = Variable { $name }
+out-secret-set = renseigné
+out-secret-missing = manquant
+out-secret-unknown = inconnu (le stockage des secrets arrive avec le lot 1.8)
+
+prompt-dest-test = Envoyer une image de test de 1x1 vers { $id } ({ $origin }) ? [o/N]
+prompt-dest-import = Créer la destination '{ $id }' pour { $origin } ? [o/N]
+out-test-status = Statut : { $status }
+out-test-header = { $name } : { $value }
+out-test-url = URL : { $url }
+out-test-link = Lien ({ $format }) : { $text }
+
+out-import-summary = Destination '{ $id }' pour { $origin }
+out-import-http-warning = Cette adresse n'est pas en https.
+out-import-secret = Secret { $name } ({ $placement }) : { $preview }
+out-import-note-text-types-ignored = Ignoré : le fichier déclare aussi { $detail }, que Kropa n'envoie pas.
+out-import-note-legacy-syntax = Le fichier utilise l'ancienne syntaxe de ShareX ; elle a été migrée.
+out-import-note-query-secret = Un secret ({ $detail }) passe dans les paramètres de l'adresse : il apparaîtra dans les journaux du serveur et des proxys.
+out-import-note-body-template-secret = Le corps de la requête a été gardé comme secret ({ $detail }) et part tel quel : ses variables ne sont pas remplacées.
+note-imported = Destination '{ $id }' importée ({ $origin }).

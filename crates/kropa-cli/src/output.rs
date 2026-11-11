@@ -6,6 +6,7 @@
 use std::io::Write;
 
 use kropa_core::ExitCode;
+use kropa_upload::masked::CheckedOutput;
 use serde_json::{Value, json};
 
 use crate::errors::CliError;
@@ -53,6 +54,12 @@ impl<'a, 'b> Session<'a, 'b> {
         let _ = writeln!(self.io.out, "{line}");
     }
 
+    /// One line of result on stdout that comes from a response: only text that went through the
+    /// secret check (`docs/security/secrets.md` section 4.4) is accepted.
+    pub fn result_checked(&mut self, text: &CheckedOutput) {
+        self.result(text.as_str());
+    }
+
     /// The single JSON object on stdout.
     pub fn document(&mut self, value: &Value) {
         let _ = writeln!(self.io.out, "{value}");
@@ -77,12 +84,28 @@ impl<'a, 'b> Session<'a, 'b> {
         let _ = write!(self.io.err, "{text}");
     }
 
+    /// The message of an error on stderr; errors survive `--quiet`.
+    pub fn error_message(&mut self, error: &CliError) {
+        let _ = writeln!(self.io.err, "kropa: {}", error.message);
+    }
+
     /// Reports a failure: message on stderr (errors survive `--quiet`), and with `--json` the error
     /// envelope on stdout. Returns the exit code.
     pub fn fail(&mut self, schema: &str, error: &CliError) -> ExitCode {
-        let _ = writeln!(self.io.err, "kropa: {}", error.message);
+        self.fail_with(schema, error, &Value::Null)
+    }
+
+    /// Like [`Session::fail`], with the members of `extra` (an object) added to the envelope: what
+    /// the command did before it failed, such as the file that was saved.
+    pub fn fail_with(&mut self, schema: &str, error: &CliError, extra: &Value) -> ExitCode {
+        self.error_message(error);
         if self.json {
-            let doc = error_document(schema, error);
+            let mut doc = error_document(schema, error);
+            if let (Some(target), Some(more)) = (doc.as_object_mut(), extra.as_object()) {
+                for (k, v) in more {
+                    target.insert(k.clone(), v.clone());
+                }
+            }
             self.document(&doc);
         }
         error.code

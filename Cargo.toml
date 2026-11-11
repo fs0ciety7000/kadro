@@ -11,12 +11,16 @@ repository = "https://github.com/fs0ciety7000/kropa"
 
 [workspace.dependencies]
 ashpd = { version = "0.14.0", default-features = false, features = ["async-io", "screenshot"] }
+base64 = "0.23.1"
 block2 = { version = "0.6.2", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive", "string"] }
 directories = "6.0.0"
 fluent-bundle = "0.16.0"
 gethostname = "1.1.0"
+graviola = "0.4.5"
+insta = { version = "1.49.0", features = ["json", "redactions"] }
 jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
+jsonpath-rust = "1.0.12"
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"] }
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
@@ -25,14 +29,24 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 objc2-image-io = { version = "0.3.2", default-features = false, features = ["std"] }
 objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std"] }
 proptest = "1.12.0"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "multipart"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12"] }
+rustls-graviola = "0.4.0"
+rustls-platform-verifier = "0.7.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false }
 toml = "1.2.1"
 trycmd = "1.2.1"
 unic-langid = "0.9.6"
+url = "2.5.8"
+wiremock = "0.6.5"
 zbus = { version = "6.2.1", default-features = false }
+zeroize = "1.9.1"
 kropa-core = { path = "crates/kropa-core", version = "0.0.1" }
 kropa-doc = { path = "crates/kropa-doc", version = "0.0.1" }
 kropa-render = { path = "crates/kropa-render", version = "0.0.1" }

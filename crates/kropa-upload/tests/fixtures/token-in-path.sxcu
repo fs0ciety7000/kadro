@@ -1,0 +1,8 @@
+{
+  "Version": "16.0.1",
+  "Name": "Token in the path",
+  "DestinationType": "ImageUploader",
+  "RequestURL": "https://up.example.org/api/a8F3kQ9zL0pX2vB7nC4mR1/upload",
+  "Body": "MultipartFormData",
+  "URL": "{json:link}"
+}

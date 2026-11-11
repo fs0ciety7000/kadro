@@ -8,5 +8,36 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# Lets a secret travel over `http://127.0.0.1` / `http://[::1]` (`docs/security/secrets.md` 4.5, U3).
+# For test builds only: never enabled by a normal or release build, never shipped.
+test-loopback = []
+
+[dependencies]
+base64.workspace = true
+graviola.workspace = true
+jsonpath-rust.workspace = true
+kropa-core.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+rustls-graviola.workspace = true
+rustls-platform-verifier.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }
+toml.workspace = true
+url.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+kropa-upload = { path = ".", features = ["test-loopback"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock.workspace = true
+
 [lints]
 workspace = true

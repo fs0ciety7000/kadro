@@ -1,0 +1,10 @@
+{
+  "Version": "13.2.1",
+  "Name": "Legacy syntax",
+  "DestinationType": "ImageUploader",
+  "RequestURL": "https://old.example.org/up",
+  "Body": "MultipartFormData",
+  "URL": "$json:data.link$",
+  "ThumbnailURL": "$json:data.thumb$",
+  "ErrorMessage": "$json:error$"
+}

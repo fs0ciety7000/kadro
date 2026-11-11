@@ -1,0 +1,19 @@
+{
+  "Version": "13.7.1",
+  "Name": "XBackBone",
+  "DestinationType": "ImageUploader, FileUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "https://xbb.example.net/upload",
+  "Parameters": {
+    "api_key": "xbb-0123456789abcdef"
+  },
+  "Body": "MultipartFormData",
+  "Arguments": {
+    "token": "xbb-fedcba9876543210",
+    "title": "{filename}"
+  },
+  "FileFormName": "upload",
+  "URL": "{json:url}",
+  "ThumbnailURL": "{json:url}/thumb",
+  "DeletionURL": "{json:url}/delete/{json:delete_token}"
+}
