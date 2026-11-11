@@ -16,7 +16,7 @@
 
 ## État d'avancement
 
-- Conception validée le 11/11/2026. Faits : lots 0, D1, S, D2 (sauf D2.4) ; lot 1 tâches 1.1-1.5, 1.7 (+ corrections 1.3b, 1.7b). Suite : décision TLS puis 1.8. Suivi : `docs/plan.md`, relais : `docs/memory/handoff.md`.
+- Conception validée le 11/11/2026. Faits : lots 0, D1, S, D2 (sauf D2.4) ; lot 1 tâches 1.1-1.5, 1.7-1.11 (+ suites de revue). Suite : D2.4 puis essais réels 1.12 (utilisateur), puis lot 2. Suivi : `docs/plan.md`, relais : `docs/memory/handoff.md`.
 
 ## Documents du projet
 

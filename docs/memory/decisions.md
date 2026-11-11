@@ -23,3 +23,12 @@
   décision U1 « une seule invite par mise à jour » (ACL liée au `cdhash`, une invite par élément sinon).
 - **2026-11-11** — Exceptions `deny.toml` RUSTSEC-2026-0370/-0371/-0372 (« unmaintained », zbus 5 via
   `secret-service` 5.2.0) : à retirer à la sortie de `secret-service` 6.0.0 stable, revue au plus tard le 2027-02-28.
+- **2026-11-11** — Presse-papiers Linux de la CLI : `wl-clipboard-rs` servi par un fils détaché
+  `kropa __clipboard-serve` qui relit la sélection avant de répondre ; GNOME (sans data-control) et X11 seul →
+  `unavailable`, code de sortie 0 même avec `--copy` explicite (extension de la décision GNOME, à confirmer).
+- **2026-11-11** — Durcissement de la CLI : `RLIMIT_CORE=0` en release ; pas de `PR_SET_DUMPABLE` (le portail
+  Screenshot lit `/proc/<pid>/root` de l'appelant). Protection ptrace laissée à Yama.
+- **2026-11-11** — Journal de débogage : en mémoire, masqué à l'écriture, affiché après l'envoi (`-v`/`-vv`), en
+  anglais technique, sans `tracing`. Raison : pas de dépendance, aucune bibliothèque tierce ne journalise.
+- **2026-11-11** — Tests d'intégration Zipline derrière Caddy (TLS local), CA de test reconnue par le seul magasin
+  système ; job CI `integration` sur `main` et `workflow_dispatch` seulement (quota Actions).
