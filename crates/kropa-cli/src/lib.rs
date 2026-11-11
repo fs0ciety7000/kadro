@@ -25,7 +25,7 @@ use std::time::Duration;
 use clap::error::ErrorKind;
 use clap::{ColorChoice, FromArgMatches, ValueEnum};
 use kropa_capture::CaptureBackend;
-use kropa_core::{Clock, ExitCode, SystemClock};
+use kropa_core::{Clock, Config, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
 
 pub use output::Io;
@@ -78,6 +78,22 @@ fn prescan_color(args: &[OsString]) -> ColorChoice {
     prescan(args, "--color")
         .and_then(|v| ColorWhen::from_str(&v, true).ok())
         .map_or(ColorChoice::Auto, command::color_choice)
+}
+
+/// The language in use: `--lang`, then `language` of the configuration, then the locale variables,
+/// then English (`docs/memory/decisions.md`). The configuration is read only when `--lang` does not
+/// settle the matter, and leniently: a missing or invalid file is reported by the command itself,
+/// with the language of the other sources.
+fn negotiated_language(args: &[OsString], lookup: &dyn Fn(&str) -> Option<String>) -> Lang {
+    let cli = prescan_lang(args);
+    let settled = cli.as_deref().is_some_and(|v| Lang::parse(v).is_ok());
+    let config = if settled {
+        None
+    } else {
+        let dir = prescan(args, "--config").map(std::path::PathBuf::from);
+        Config::load_from(dir.as_deref()).ok().and_then(|c| c.language)
+    };
+    kropa_i18n::negotiate(cli.as_deref(), config.as_deref(), lookup)
 }
 
 /// Runs the command line on the real standard streams: `args` includes the program name, `lookup`
@@ -151,7 +167,7 @@ fn run_inner(
     backend: Option<&dyn CaptureBackend>,
     sleep: &dyn Fn(Duration),
 ) -> Result<ExitCode, I18nError> {
-    let lang: Lang = kropa_i18n::negotiate(prescan_lang(args).as_deref(), lookup);
+    let lang = negotiated_language(args, lookup);
     let loc = Localizer::new(lang)?;
     let command = command::build_command(&loc, prescan_color(args));
     let parsed = command

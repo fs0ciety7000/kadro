@@ -14,7 +14,7 @@ use kropa_i18n::Localizer;
 
 use crate::args::{Cli, ColorWhen};
 
-/// clap's colour choice for `--color`.
+/// clap's colour choice for a value of `--color`.
 #[must_use]
 pub fn color_choice(color: ColorWhen) -> ColorChoice {
     match color {

@@ -3,8 +3,8 @@
 //! Localisation of Kropa, based on Fluent.
 //!
 //! Resources are embedded (`include_str!`) for French and English. The language is negotiated from
-//! `--lang`, then `LC_ALL`, `LC_MESSAGES` and `LANG` (first one that is set and not empty, as POSIX
-//! does), falling back to English.
+//! `--lang`, then the `language` key of the configuration, then `LC_ALL`, `LC_MESSAGES` and `LANG`
+//! (first one that is set and not empty, as POSIX does), falling back to English.
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource};
@@ -91,12 +91,22 @@ fn from_locale(value: &str) -> Option<Lang> {
         .find(|l| l.code() == requested.language.as_str())
 }
 
-/// Negotiates the language: `cli` (value of `--lang`) wins when it is supported, then the first of
-/// `LC_ALL`, `LC_MESSAGES`, `LANG` that is set and not empty, read through `env`. The result is
-/// English when nothing matches, including for the `C` and `POSIX` locales.
+/// Negotiates the language: `cli` (value of `--lang`) wins when it is supported, then `config`
+/// (the `language` key of the configuration) when it is supported, then the first of `LC_ALL`,
+/// `LC_MESSAGES`, `LANG` that is set and not empty, read through `env`. The result is English when
+/// nothing matches, including for the `C` and `POSIX` locales. An unsupported explicit choice is
+/// skipped here; reporting it is up to whoever parses the option.
 #[must_use]
-pub fn negotiate(cli: Option<&str>, env: &dyn Fn(&str) -> Option<String>) -> Lang {
-    if let Some(lang) = cli.and_then(|v| Lang::parse(v).ok()) {
+pub fn negotiate(
+    cli: Option<&str>,
+    config: Option<&str>,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Lang {
+    if let Some(lang) = cli
+        .into_iter()
+        .chain(config)
+        .find_map(|v| Lang::parse(v).ok())
+    {
         return lang;
     }
     ENV_VARS
@@ -180,6 +190,10 @@ impl Localizer {
     }
 
     /// Message `id` with arguments. An unknown id gives the id itself, never a panic.
+    ///
+    /// A placeable without a value (a call that forgets an argument, a message that uses one the
+    /// caller does not know) is a bug: debug builds and tests panic on it, release builds show the
+    /// text as Fluent formats it, `{$name}` in place of the value.
     #[must_use]
     pub fn message_with(&self, id: &str, args: Option<&FluentArgs<'_>>) -> String {
         std::iter::once(&self.primary)
@@ -187,7 +201,9 @@ impl Localizer {
             .find_map(|b| {
                 let pattern = b.get_message(id)?.value()?;
                 let mut errors = Vec::new();
-                Some(b.format_pattern(pattern, args, &mut errors).into_owned())
+                let text = b.format_pattern(pattern, args, &mut errors).into_owned();
+                debug_assert!(errors.is_empty(), "message {id}: {errors:?}");
+                Some(text)
             })
             .unwrap_or_else(|| id.to_owned())
     }
@@ -229,14 +245,63 @@ mod tests {
         assert!(!ids(EN_FTL).is_empty());
     }
 
+    /// `$name` placeables of every message, by message id.
+    fn variables(source: &str) -> std::collections::BTreeMap<String, BTreeSet<String>> {
+        let mut map = std::collections::BTreeMap::new();
+        let mut current: Option<String> = None;
+        for line in source.lines() {
+            let head = line.split_once(" = ").map(|(id, _)| id).filter(|id| {
+                !line.starts_with([' ', '#'])
+                    && id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            });
+            if let Some(id) = head {
+                current = Some(id.to_owned());
+                map.entry(id.to_owned()).or_insert_with(BTreeSet::new);
+            } else if !line.starts_with(' ') {
+                current = None;
+            }
+            let Some(id) = &current else { continue };
+            let mut rest = line;
+            while let Some(at) = rest.find('$') {
+                rest = &rest[at + 1..];
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    map.get_mut(id).unwrap().insert(name);
+                }
+            }
+        }
+        map
+    }
+
+    #[test]
+    fn locales_use_the_same_variables() {
+        let (en, fr) = (variables(EN_FTL), variables(FR_FTL));
+        assert!(en.values().any(|v| !v.is_empty()));
+        for (id, vars) in &en {
+            assert_eq!(Some(vars), fr.get(id), "variables of {id} differ");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "error-unknown-argument")]
+    fn a_missing_argument_is_a_bug_that_tests_catch() {
+        let en = Localizer::new(Lang::En).unwrap();
+        let _ = en.message("error-unknown-argument");
+    }
+
     #[test]
     fn cli_wins_over_environment() {
         assert_eq!(
-            negotiate(Some("fr"), &env(&[("LANG", "en_US.UTF-8")])),
+            negotiate(Some("fr"), None, &env(&[("LANG", "en_US.UTF-8")])),
             Lang::Fr
         );
         assert_eq!(
-            negotiate(Some("EN"), &env(&[("LC_ALL", "fr_FR.UTF-8")])),
+            negotiate(Some("EN"), None, &env(&[("LC_ALL", "fr_FR.UTF-8")])),
             Lang::En
         );
     }
@@ -248,31 +313,45 @@ mod tests {
             ("LC_MESSAGES", "en_US.UTF-8"),
             ("LANG", "en_US.UTF-8"),
         ];
-        assert_eq!(negotiate(None, &env(&all)), Lang::Fr);
+        assert_eq!(negotiate(None, None, &env(&all)), Lang::Fr);
         let msg = [("LC_MESSAGES", "fr_BE.UTF-8"), ("LANG", "en_US.UTF-8")];
-        assert_eq!(negotiate(None, &env(&msg)), Lang::Fr);
-        assert_eq!(negotiate(None, &env(&[("LANG", "fr_CA@euro")])), Lang::Fr);
+        assert_eq!(negotiate(None, None, &env(&msg)), Lang::Fr);
+        assert_eq!(negotiate(None, None, &env(&[("LANG", "fr_CA@euro")])), Lang::Fr);
         // An empty LC_ALL is ignored.
         assert_eq!(
-            negotiate(None, &env(&[("LC_ALL", ""), ("LANG", "fr_FR")])),
+            negotiate(None, None, &env(&[("LC_ALL", ""), ("LANG", "fr_FR")])),
             Lang::Fr
         );
         // The first set variable decides even if it is not supported.
         assert_eq!(
-            negotiate(None, &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])),
+            negotiate(None, None, &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])),
             Lang::En
         );
     }
 
     #[test]
+    fn configuration_sits_between_the_option_and_the_environment() {
+        let fr_env = env(&[("LANG", "fr_FR.UTF-8")]);
+        // The option wins over the configuration, which wins over the environment.
+        assert_eq!(negotiate(Some("en"), Some("fr"), &fr_env), Lang::En);
+        assert_eq!(negotiate(None, Some("en"), &fr_env), Lang::En);
+        assert_eq!(negotiate(None, Some("FR-ca"), &env(&[("LANG", "en_US")])), Lang::Fr);
+        assert_eq!(negotiate(None, None, &fr_env), Lang::Fr);
+        // A language that is not supported is skipped, at each level.
+        assert_eq!(negotiate(Some("de"), Some("en"), &fr_env), Lang::En);
+        assert_eq!(negotiate(None, Some("de"), &fr_env), Lang::Fr);
+        assert_eq!(negotiate(None, Some("C"), &env(&[])), Lang::En);
+    }
+
+    #[test]
     fn fallback_is_english() {
-        assert_eq!(negotiate(None, &env(&[])), Lang::En);
-        assert_eq!(negotiate(None, &env(&[("LANG", "C")])), Lang::En);
-        assert_eq!(negotiate(None, &env(&[("LANG", "POSIX")])), Lang::En);
-        assert_eq!(negotiate(None, &env(&[("LANG", "ja_JP.UTF-8")])), Lang::En);
-        assert_eq!(negotiate(None, &env(&[("LANG", "%%garbage")])), Lang::En);
+        assert_eq!(negotiate(None, None, &env(&[])), Lang::En);
+        assert_eq!(negotiate(None, None, &env(&[("LANG", "C")])), Lang::En);
+        assert_eq!(negotiate(None, None, &env(&[("LANG", "POSIX")])), Lang::En);
+        assert_eq!(negotiate(None, None, &env(&[("LANG", "ja_JP.UTF-8")])), Lang::En);
+        assert_eq!(negotiate(None, None, &env(&[("LANG", "%%garbage")])), Lang::En);
         // An unsupported --lang falls through to the environment.
-        assert_eq!(negotiate(Some("de"), &env(&[("LANG", "fr_FR")])), Lang::Fr);
+        assert_eq!(negotiate(Some("de"), None, &env(&[("LANG", "fr_FR")])), Lang::Fr);
     }
 
     #[test]

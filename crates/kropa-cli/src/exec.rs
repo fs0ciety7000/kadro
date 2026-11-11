@@ -207,7 +207,7 @@ fn run_command(
 ) -> Result<ExitCode, CliError> {
     let loc = ctx.loc;
     if let Command::Version(v) = &cli.command {
-        // `version` needs neither the configuration nor the disk.
+        // `version` needs no configuration (the language alone is read from it, leniently, before).
         if v.check {
             return Err(unsupported(&cli.command, loc));
         }
