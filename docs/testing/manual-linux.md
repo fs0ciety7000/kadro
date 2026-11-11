@@ -117,7 +117,7 @@ main, sur un vrai bureau, avec un serveur de test ou `kropa upload FICHIER --to 
 | Bureau | Version | Date | Testeur | Écarts avec le comportement attendu |
 |---|---|---|---|---|
 | GNOME | | | | |
-| KDE Plasma | | | | |
+| KDE Plasma | 6.8.2, portail Screenshot v2 (pas de cibles) | 2026-11-12 | utilisateur | Aucun pour l'instant : simple boîte « Autoriser / Refuser » une seule fois puis mémorisée (pas d'interface façon Spectacle) ; deux écrans réunis (4480 × 1440) ; sans curseur ; PNG sans métadonnées (exiftool) ; `--delay 5` accepté ; `--copy image` → `copied`, collage vérifié (data-control). Refus : à faire. |
 | wlroots | | | | |
 
 Presse-papiers : noter aussi, par bureau, `copied` / `unavailable` / `failed` obtenu et le protocole utilisé.
