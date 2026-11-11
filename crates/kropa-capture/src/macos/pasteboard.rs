@@ -6,6 +6,12 @@
 //! read back of each type through `stringForType:` / `dataForType:`. `Copied` is only answered when
 //! every `set` returned `YES` and every read back equals what was written ("status = real effect").
 //!
+//! A `set` answers `NO` when the pasteboard is no longer the one `clearContents` claimed (its change
+//! count moved, so another client cleared or wrote it in between: a clipboard manager, Universal
+//! Clipboard...). The claim is then renewed once, `clearContents` and every `set` again, and the
+//! answer is the second attempt's: no sleep, no third try, and the read back stays the judge. The
+//! detail of a refusal carries the change counts, to tell that race from another cause.
+//!
 //! Threads: `NSPasteboard` is not main-thread-only (the generated binding is not `MainThreadOnly`)
 //! and the general pasteboard is a client of the pasteboard server, so no `NSApplication` and no run
 //! loop are needed (`pbcopy` has neither). The data is stored by the server at once: it outlives the
@@ -69,17 +75,22 @@ impl Clipboard for PasteboardClipboard {
 /// Replaces the content of `pasteboard` by `text`: plain text, and for HTML the markup under
 /// `public.html` as well, so that a rich-text field gets the markup and any other gets the source.
 fn copy_text_to(pasteboard: &NSPasteboard, text: &str, kind: TextKind) -> ClipboardOutcome {
-    pasteboard.clearContents();
     let ns_text = NSString::from_str(text);
     let mut written: Vec<(&'static NSPasteboardType, &'static str)> = Vec::with_capacity(2);
     if kind == TextKind::Html {
         written.push((html_type(), "public.html"));
     }
     written.push((plain_type(), "public.utf8-plain-text"));
-    for (ty, name) in &written {
-        if !pasteboard.setString_forType(&ns_text, ty) {
-            return rejected(name);
+    let stored = write_claiming(pasteboard, || {
+        for (ty, name) in &written {
+            if !pasteboard.setString_forType(&ns_text, ty) {
+                return Err(*name);
+            }
         }
+        Ok(())
+    });
+    if let Err(outcome) = stored {
+        return outcome;
     }
     for (ty, name) in &written {
         if let Err(detail) = verify_string(pasteboard, ty, name, text) {
@@ -91,15 +102,35 @@ fn copy_text_to(pasteboard: &NSPasteboard, text: &str, kind: TextKind) -> Clipbo
 
 /// Replaces the content of `pasteboard` by the PNG `png`.
 fn copy_image_to(pasteboard: &NSPasteboard, png: &[u8]) -> ClipboardOutcome {
-    pasteboard.clearContents();
     let data = NSData::with_bytes(png);
-    if !pasteboard.setData_forType(Some(&data), png_type()) {
-        return rejected("public.png");
+    let stored = write_claiming(pasteboard, || {
+        if pasteboard.setData_forType(Some(&data), png_type()) {
+            Ok(())
+        } else {
+            Err("public.png")
+        }
+    });
+    if let Err(outcome) = stored {
+        return outcome;
     }
     match verify_data(pasteboard, png_type(), "public.png", png) {
         Ok(()) => ClipboardOutcome::Copied,
         Err(detail) => mismatch(detail),
     }
+}
+
+/// Claims `pasteboard` (`clearContents`) and runs `write`, which names the type a `set` refused. A
+/// refusal means the claim was lost to another client, so the claim is renewed once; the second
+/// refusal is the answer (`PasteboardRejected`, with the change counts).
+fn write_claiming(
+    pasteboard: &NSPasteboard,
+    write: impl Fn() -> Result<(), &'static str>,
+) -> Result<(), ClipboardOutcome> {
+    let attempt = || {
+        let claimed = pasteboard.clearContents();
+        write().map_err(|type_name| rejected(type_name, claimed, pasteboard.changeCount()))
+    };
+    attempt().or_else(|_| attempt())
 }
 
 /// Reads `ty` back as text and compares. The error never contains the content (it can be a link
@@ -151,10 +182,12 @@ fn verify_data(
     }
 }
 
-fn rejected(type_name: &str) -> ClipboardOutcome {
+fn rejected(type_name: &str, claimed: isize, now: isize) -> ClipboardOutcome {
     ClipboardOutcome::failed(
         ClipboardReason::PasteboardRejected,
-        format!("the pasteboard refused {type_name}"),
+        format!(
+            "the pasteboard refused {type_name} (change count {claimed} when claimed, {now} after)"
+        ),
     )
 }
 
@@ -168,7 +201,11 @@ mod tests {
     //! pasteboard). Without it they fail: a copy that could not be checked is never a pass.
     //!
     //! Only `the_general_pasteboard_...` touches the general pasteboard, so that tests running in
-    //! parallel never overwrite one another; the others use a pasteboard of their own.
+    //! parallel never overwrite one another; the others use a pasteboard of their own. Even so, the
+    //! module runs one test at a time (test group `pasteboard` of `.config/nextest.toml`): a
+    //! refused `set` was seen on a runner while the general pasteboard was written by a neighbour.
+
+    use std::cell::Cell;
 
     use objc2::rc::Retained;
     use objc2_app_kit::{NSPasteboard, NSPasteboardType};
@@ -176,7 +213,7 @@ mod tests {
 
     use super::{
         Clipboard, ClipboardOutcome, ClipboardReason, PasteboardClipboard, TextKind, copy_image_to,
-        copy_text_to, html_type, plain_type, png_type, verify_string,
+        copy_text_to, html_type, plain_type, png_type, verify_string, write_claiming,
     };
 
     /// A minimal valid PNG (1 x 1), as bytes with a NUL and a high byte in them.
@@ -311,8 +348,57 @@ mod tests {
 
     #[test]
     fn the_failure_reason_of_a_refused_type_is_its_own() {
-        let outcome = super::rejected("public.png");
+        let outcome = super::rejected("public.png", 3, 4);
         assert_eq!(outcome.reason(), Some(ClipboardReason::PasteboardRejected));
-        assert_eq!(outcome.detail(), Some("the pasteboard refused public.png"));
+        assert_eq!(
+            outcome.detail(),
+            Some("the pasteboard refused public.png (change count 3 when claimed, 4 after)")
+        );
+    }
+
+    #[test]
+    fn a_refused_write_is_claimed_again_once_and_the_second_answer_counts() {
+        let pb = private_pasteboard();
+        let calls = Cell::new(0);
+        let refuses_once = || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Err("public.png")
+            } else {
+                Ok(())
+            }
+        };
+        assert!(write_claiming(&pb, refuses_once).is_ok());
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn two_refusals_in_a_row_are_a_failure_after_exactly_two_attempts() {
+        let pb = private_pasteboard();
+        let calls = Cell::new(0);
+        let always_refuses = || {
+            calls.set(calls.get() + 1);
+            Err("public.png")
+        };
+        let outcome = write_claiming(&pb, always_refuses).expect_err("refused twice");
+        assert_eq!(calls.get(), 2);
+        assert_eq!(outcome.reason(), Some(ClipboardReason::PasteboardRejected));
+        assert!(
+            outcome
+                .detail()
+                .is_some_and(|d| d.starts_with("the pasteboard refused public.png (change count"))
+        );
+    }
+
+    #[test]
+    fn a_write_that_works_is_attempted_once() {
+        let pb = private_pasteboard();
+        let calls = Cell::new(0);
+        let works = || {
+            calls.set(calls.get() + 1);
+            Ok(())
+        };
+        assert!(write_claiming(&pb, works).is_ok());
+        assert_eq!(calls.get(), 1);
     }
 }

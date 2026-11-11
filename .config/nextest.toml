@@ -4,13 +4,27 @@
 # fail in minutes, not eat the 20 minutes of a job: a test slower than 60 s is terminated after
 # two periods, so after 2 minutes.
 
+# The macOS pasteboard tests run one at a time: they share the pasteboard server, and a `set` refused
+# in a test that overlapped the one writing the general pasteboard failed a CI run (lot 1.10). The
+# filter matches nothing on Linux.
+[test-groups]
+pasteboard = { max-threads = 1 }
+
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+filter = 'package(kropa-capture) and test(/^macos::pasteboard::/)'
+test-group = 'pasteboard'
 
 [profile.ci]
 slow-timeout = { period = "60s", terminate-after = 2 }
 # Every failure of a run, not only the first one: a Mac is not at hand to run again.
 fail-fast = false
+
+[[profile.ci.overrides]]
+filter = 'package(kropa-capture) and test(/^macos::pasteboard::/)'
+test-group = 'pasteboard'
 
 # Real servers (tests/integration/run.sh, lot 1.11): one retry for a slow server start-up, 60 s per
 # test. The tests are `#[ignore]` and run with `--run-ignored only`.
