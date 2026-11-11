@@ -602,6 +602,7 @@ dependencies = [
  "clap",
  "gethostname",
  "jiff",
+ "kropa-capture",
  "kropa-core",
  "kropa-i18n",
  "serde_json",

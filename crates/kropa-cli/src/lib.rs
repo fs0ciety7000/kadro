@@ -4,10 +4,13 @@
 //!
 //! Layout: [`args`] is the typed command line (clap derive), [`command`] gives it its Fluent texts,
 //! [`errors`] localises clap's usage errors, [`output`] separates stdout and stderr and builds the
-//! JSON envelope, [`target`] resolves file names and [`exec`] runs the commands.
+//! JSON envelope, [`target`] resolves file names, [`capture`] and [`doctor`] are the commands that
+//! use the capture backend, and [`exec`] runs the commands.
 
 pub mod args;
+pub mod capture;
 pub mod command;
+pub mod doctor;
 pub mod errors;
 pub mod exec;
 pub mod output;
@@ -15,9 +18,11 @@ pub mod target;
 
 use std::ffi::OsString;
 use std::io::IsTerminal;
+use std::time::Duration;
 
 use clap::error::ErrorKind;
 use clap::{ColorChoice, FromArgMatches};
+use kropa_capture::CaptureBackend;
 use kropa_core::{Clock, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
 
@@ -90,7 +95,8 @@ pub fn run(args: &[OsString], lookup: &dyn Fn(&str) -> Option<String>) -> ExitCo
     run_with(args, lookup, &mut io, &SystemClock, host)
 }
 
-/// Like [`run`], with injected streams, clock and host name (tests).
+/// Like [`run`], with injected streams, clock and host name (tests). The capture backend is the one
+/// of the platform.
 #[must_use]
 pub fn run_with(
     args: &[OsString],
@@ -99,7 +105,31 @@ pub fn run_with(
     clock: &dyn Clock,
     host: Option<String>,
 ) -> ExitCode {
-    match run_inner(args, lookup, io, clock, host) {
+    let backend = kropa_capture::default_backend();
+    run_with_backend(
+        args,
+        lookup,
+        io,
+        clock,
+        host,
+        backend.as_deref(),
+        &std::thread::sleep,
+    )
+}
+
+/// Like [`run_with`], with an injected capture backend (`None`: the platform has none) and the
+/// function that waits for `--delay`.
+#[must_use]
+pub fn run_with_backend(
+    args: &[OsString],
+    lookup: &dyn Fn(&str) -> Option<String>,
+    io: &mut Io<'_>,
+    clock: &dyn Clock,
+    host: Option<String>,
+    backend: Option<&dyn CaptureBackend>,
+    sleep: &dyn Fn(Duration),
+) -> ExitCode {
+    match run_inner(args, lookup, io, clock, host, backend, sleep) {
         Ok(code) => code,
         Err(e) => {
             // The localizer itself is broken: the only message possible is an English one.
@@ -115,6 +145,8 @@ fn run_inner(
     io: &mut Io<'_>,
     clock: &dyn Clock,
     host: Option<String>,
+    backend: Option<&dyn CaptureBackend>,
+    sleep: &dyn Fn(Duration),
 ) -> Result<ExitCode, I18nError> {
     let lang: Lang = kropa_i18n::negotiate(prescan_lang(args).as_deref(), lookup);
     let loc = Localizer::new(lang)?;
@@ -132,6 +164,8 @@ fn run_inner(
         loc: &loc,
         clock,
         host,
+        backend,
+        sleep,
     };
     Ok(exec::execute(&cli, &ctx, &mut session))
 }

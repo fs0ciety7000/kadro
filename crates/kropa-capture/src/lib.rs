@@ -115,7 +115,17 @@ pub trait CaptureBackend {
     /// dialog and never captures anything.
     fn diagnose(&self) -> Diagnosis;
 
-    /// Takes the screenshot. May wait for the user (permission dialog).
+    /// Refuses, without side effect, a request this backend can never satisfy, so that the caller
+    /// does not wait for a delay or a dialog first.
+    ///
+    /// # Errors
+    /// [`CaptureError::Unsupported`] with the reason.
+    fn check(&self, _request: &CaptureRequest<'_>) -> Result<(), CaptureError> {
+        Ok(())
+    }
+
+    /// Takes the screenshot. May wait for the user (permission dialog). Fails like
+    /// [`CaptureBackend::check`] on a request that cannot be satisfied.
     ///
     /// # Errors
     /// [`CaptureError`]: refusal (exit code 4), unsupported request (5) or failure (10).

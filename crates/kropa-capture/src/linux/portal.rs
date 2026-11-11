@@ -97,11 +97,16 @@ impl CaptureBackend for PortalScreenshot {
         zbus::block_on(probe::diagnose(self.connection.as_ref()))
     }
 
-    fn capture(&self, request: &CaptureRequest<'_>) -> Result<CapturedImage, CaptureError> {
+    fn check(&self, request: &CaptureRequest<'_>) -> Result<(), CaptureError> {
         match request.mode {
             CaptureMode::Output => Err(CaptureError::Unsupported(Unsupported::OutputNotIsolable)),
-            CaptureMode::Screen => zbus::block_on(self.capture_screen()),
+            CaptureMode::Screen => Ok(()),
         }
+    }
+
+    fn capture(&self, request: &CaptureRequest<'_>) -> Result<CapturedImage, CaptureError> {
+        self.check(request)?;
+        zbus::block_on(self.capture_screen())
     }
 }
 

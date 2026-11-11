@@ -2,20 +2,26 @@
 
 //! Execution of a parsed command line.
 //!
-//! What does not depend on another lot is done for real: `version`, argument checks (secrets never
-//! in arguments), configuration loading, input files, name resolution and the refusal to prompt
-//! without a terminal. A command whose lot is not delivered ends with `unsupported` (5) and says
-//! which lot brings it; nothing is simulated.
+//! What does not depend on another lot is done for real: `version`, `doctor` and `capture
+//! screen|output` where a capture backend exists (Linux), argument checks (secrets never in
+//! arguments), configuration loading, input files, name resolution and the refusal to prompt without
+//! a terminal. A command whose lot is not delivered ends with `unsupported` (5) and says which lot
+//! brings it; nothing is simulated.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
+use kropa_capture::{CaptureBackend, CaptureMode};
 use kropa_core::{CONFIG_FILE, Clock, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
 use serde_json::json;
 
 use crate::args::{
-    CaptureCommand, Cli, Command, DestCommand, HistoryCommand, QueueCommand, SecretsCommand,
+    CaptureCommand, Cli, Command, CopyTarget, DestCommand, HistoryCommand, QueueCommand,
+    SecretsCommand,
 };
+use crate::capture::{self, Job};
+use crate::doctor;
 use crate::errors::CliError;
 use crate::output::Session;
 use crate::target::{Target, TargetSpec, resolve_target};
@@ -48,6 +54,10 @@ pub struct Context<'a> {
     pub clock: &'a dyn Clock,
     /// Host name for `{host}`.
     pub host: Option<String>,
+    /// How this system takes screenshots; `None` where no backend exists yet (macOS before 1.5).
+    pub backend: Option<&'a dyn CaptureBackend>,
+    /// Waits for `--delay`; replaced by a recorder in tests.
+    pub sleep: &'a dyn Fn(Duration),
 }
 
 /// Command path used for the schema name: `capture`, `dest.list`, `secrets.status`...
@@ -103,27 +113,34 @@ pub fn schema_of(cmd: &Command) -> String {
     format!("kropa.{}/1", path(cmd).join("."))
 }
 
-/// Lots that must be delivered for the command to work, per `docs/plan.md`.
-fn lots_of(cmd: &Command) -> Vec<&'static str> {
-    let platform_capture = if cfg!(target_os = "macos") {
-        "1.5"
+/// The lot that brings the capture backend of this platform, `None` when it is delivered.
+fn platform_capture_lot() -> Option<&'static str> {
+    if cfg!(target_os = "linux") {
+        None
     } else {
-        "1.4"
-    };
+        Some("1.5")
+    }
+}
+
+/// Lots that must still be delivered for the command to work, per `docs/plan.md`.
+fn lots_of(cmd: &Command) -> Vec<&'static str> {
     match cmd {
         Command::Capture { mode } => {
             let (base, opts) = match mode {
                 CaptureCommand::Screen(o) | CaptureCommand::Output { opts: o, .. } => {
-                    (platform_capture, o)
+                    (platform_capture_lot(), o)
                 }
-                CaptureCommand::Area { opts, .. } => ("2.5", opts),
+                CaptureCommand::Area { opts, .. } => (Some("2.5"), opts),
             };
-            let mut lots = vec![base];
+            let mut lots: Vec<&'static str> = base.into_iter().collect();
             if opts.send.upload.is_some() {
                 lots.push("1.7");
             }
             if opts.edit {
                 lots.push("3.7");
+            }
+            if opts.send.copy == Some(CopyTarget::Image) {
+                lots.push("1.10");
             }
             lots
         }
@@ -144,7 +161,7 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
         Command::Queue { .. } => vec!["4.5"],
         Command::History { .. } => vec!["4.6"],
         Command::Edit(_) => vec!["3.7"],
-        Command::Doctor => vec![platform_capture],
+        Command::Doctor => platform_capture_lot().into_iter().collect(),
         Command::Version(_) => vec!["5"],
     }
 }
@@ -190,8 +207,12 @@ fn run_command(
         print_version(ctx, session);
         return Ok(ExitCode::Ok);
     }
-    refuse_secrets_in_arguments(&cli.command, loc)?;
     let config_dir_arg = cli.global.config.as_deref();
+    if let (Command::Doctor, Some(backend)) = (&cli.command, ctx.backend) {
+        // A report: a broken configuration is shown in it, not a reason to fail.
+        return Ok(doctor::run(backend, config_dir_arg, ctx, session));
+    }
+    refuse_secrets_in_arguments(&cli.command, loc)?;
     let config = Config::load_from(config_dir_arg).map_err(|e| CliError::from_core(&e, loc))?;
     if let Some(file) = config_file(config_dir_arg) {
         session.debug(
@@ -199,9 +220,32 @@ fn run_command(
             &loc.message_args("note-config", &[("path", &file.display().to_string())]),
         );
     }
-    check_inputs(&cli.command, &config, ctx, session)?;
+    let target = check_inputs(&cli.command, &config, ctx, session)?;
     check_interaction(&cli.command, session.interactive, loc)?;
+    if lots_of(&cli.command).is_empty()
+        && let Command::Capture { mode } = &cli.command
+        && let (Some(backend), Some(target), Some(job)) = (ctx.backend, &target, job_of(mode))
+    {
+        return capture::run(&job, backend, &config, target, ctx, session);
+    }
     Err(unsupported(&cli.command, loc))
+}
+
+/// The capture job for the modes that have a backend; `area` needs the overlay (lot 2.5).
+fn job_of(mode: &CaptureCommand) -> Option<Job<'_>> {
+    match mode {
+        CaptureCommand::Screen(opts) => Some(Job {
+            mode: CaptureMode::Screen,
+            connector: None,
+            opts,
+        }),
+        CaptureCommand::Output { connector, opts } => Some(Job {
+            mode: CaptureMode::Output,
+            connector: connector.as_deref(),
+            opts,
+        }),
+        CaptureCommand::Area { .. } => None,
+    }
 }
 
 fn config_file(dir: Option<&Path>) -> Option<PathBuf> {
@@ -378,13 +422,15 @@ fn require_destination(
     }
 }
 
+/// Checks what can be checked before anything is done; for a capture, returns where the file goes.
 fn check_inputs(
     cmd: &Command,
     config: &Config,
     ctx: &Context<'_>,
     session: &mut Session<'_, '_>,
-) -> Result<(), CliError> {
+) -> Result<Option<Target>, CliError> {
     let loc = ctx.loc;
+    let mut resolved = None;
     match cmd {
         Command::Capture { mode } => {
             let (name, connector, opts) = match mode {
@@ -405,7 +451,7 @@ fn check_inputs(
                 force: opts.force,
             };
             let target = resolve_target(&spec, config, ctx.clock, ctx.host.as_deref(), loc)?;
-            let note = match target {
+            let note = match &target {
                 Target::File(p) => {
                     loc.message_args("note-target", &[("path", &p.display().to_string())])
                 }
@@ -414,6 +460,7 @@ fn check_inputs(
                 }
             };
             session.debug(1, &note);
+            resolved = Some(target);
         }
         Command::Upload(a) => {
             require_file(&a.file, loc)?;
@@ -432,7 +479,7 @@ fn check_inputs(
         } => require_file(file, loc)?,
         _ => {}
     }
-    Ok(())
+    Ok(resolved)
 }
 
 /// Without a terminal (or with `--no-input`) nothing may wait for an answer: code 12.

@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! `kropa doctor`: what this system lets Kropa do, and the fallbacks in force (`docs/cli.md`
+//! section 2.8). The backend detects; this module only presents. No network request is made.
+//!
+//! It is a report: capabilities that are missing do not change the exit code, and a broken
+//! configuration file is a finding, not a failure.
+
+use std::path::{Path, PathBuf};
+
+use kropa_capture::{CaptureBackend, Diagnosis, Fact, FactValue};
+use kropa_core::{CONFIG_FILE, Config, ExitCode, config_dir};
+use kropa_i18n::Localizer;
+use serde_json::{Value, json};
+
+use crate::exec::Context;
+use crate::output::Session;
+
+/// JSON schema of the report.
+pub const SCHEMA: &str = "kropa.doctor/1";
+
+/// What `doctor` cannot report yet, the lot that adds it, and its Fluent message.
+const PENDING: [(&str, &str, &str); 4] = [
+    ("secrets", "1.8", "doctor-pending-secrets"),
+    ("kropa_app", "2.1", "doctor-pending-app"),
+    ("clipboard", "1.10", "doctor-pending-clipboard"),
+    ("outputs", "2.5", "doctor-pending-outputs"),
+];
+
+/// Where things are, and whether the configuration reads.
+struct Paths {
+    config_file: Option<PathBuf>,
+    config_error: Option<String>,
+    captures_dir: Option<PathBuf>,
+}
+
+fn paths(config_dir_arg: Option<&Path>) -> Paths {
+    let dir = match config_dir_arg {
+        Some(d) => Some(d.to_owned()),
+        None => config_dir().ok(),
+    };
+    let config_file = dir.map(|d| d.join(CONFIG_FILE));
+    let loaded = match &config_file {
+        Some(file) => Config::load(file),
+        None => Ok(Config::default()),
+    };
+    match loaded {
+        Ok(config) => Paths {
+            config_file,
+            config_error: None,
+            captures_dir: config.resolved_output_dir().ok(),
+        },
+        Err(e) => Paths {
+            config_file,
+            config_error: Some(e.to_string()),
+            captures_dir: None,
+        },
+    }
+}
+
+/// Fluent id of a code: the prefix and the code with dashes.
+fn fluent_id(prefix: &str, code: &str) -> String {
+    format!("{prefix}-{}", code.replace('_', "-"))
+}
+
+fn fact_json(fact: &Fact) -> Value {
+    let (state, value) = match &fact.value {
+        FactValue::Text(t) => ("present", json!(t)),
+        FactValue::Number(n) => ("present", json!(n)),
+        FactValue::Bool(b) => ("present", json!(b)),
+        FactValue::Absent => ("absent", Value::Null),
+        FactValue::NotProbed => ("not_probed", Value::Null),
+    };
+    json!({ "key": fact.key, "state": state, "value": value })
+}
+
+fn document(diagnosis: &Diagnosis, paths: &Paths) -> Value {
+    let capabilities: Vec<Value> = [
+        &diagnosis.capabilities.screen,
+        &diagnosis.capabilities.output,
+    ]
+    .iter()
+    .map(|c| {
+        json!({
+            "feature": c.feature,
+            "status": c.status.as_str(),
+            "reason": c.reason,
+            "fallback": c.fallback,
+        })
+    })
+    .collect();
+    let pending: Vec<Value> = PENDING
+        .iter()
+        .map(|(item, lot, _)| json!({ "item": item, "lot": lot }))
+        .collect();
+    json!({
+        "schema": SCHEMA,
+        "status": "ok",
+        "exit_code": 0,
+        "system": {
+            "platform": diagnosis.platform,
+            "arch": std::env::consts::ARCH,
+            "kropa_version": env!("CARGO_PKG_VERSION"),
+        },
+        "backend": diagnosis.backend,
+        "capabilities": capabilities,
+        "fallbacks": diagnosis.active_fallbacks(),
+        "facts": diagnosis.facts.iter().map(fact_json).collect::<Vec<_>>(),
+        "paths": {
+            "config_file": paths.config_file.as_ref().map(|p| p.display().to_string()),
+            "config_error": paths.config_error,
+            "captures_dir": paths.captures_dir.as_ref().map(|p| p.display().to_string()),
+        },
+        "not_available_yet": pending,
+    })
+}
+
+fn fact_value_text(value: &FactValue, loc: &Localizer) -> String {
+    match value {
+        FactValue::Text(t) => t.clone(),
+        FactValue::Number(n) => n.to_string(),
+        FactValue::Bool(true) => loc.message("doctor-value-yes"),
+        FactValue::Bool(false) => loc.message("doctor-value-no"),
+        FactValue::Absent => loc.message("doctor-value-absent"),
+        FactValue::NotProbed => loc.message("doctor-value-not-probed"),
+    }
+}
+
+/// One `label: value` line, indented.
+fn labelled(loc: &Localizer, label: &str, value: &str) -> String {
+    format!(
+        "  {}",
+        loc.message_args("doctor-fact", &[("label", label), ("value", value)])
+    )
+}
+
+fn render(diagnosis: &Diagnosis, paths: &Paths, loc: &Localizer, session: &mut Session<'_, '_>) {
+    let section = |session: &mut Session<'_, '_>, id: &str| {
+        session.result("");
+        session.result(&loc.message(id));
+    };
+    session.result(&loc.message("doctor-title"));
+    section(session, "doctor-section-system");
+    let system = loc.message_args(
+        "doctor-system",
+        &[
+            ("platform", diagnosis.platform),
+            ("arch", std::env::consts::ARCH),
+            ("version", env!("CARGO_PKG_VERSION")),
+        ],
+    );
+    session.result(&format!("  {system}"));
+
+    section(session, "doctor-section-capabilities");
+    for cap in [
+        &diagnosis.capabilities.screen,
+        &diagnosis.capabilities.output,
+    ] {
+        let feature = loc.message(&fluent_id("doctor-feature", cap.feature));
+        let status = loc.message(&format!("doctor-status-{}", cap.status.as_str()));
+        let head = loc.message_args(
+            "doctor-capability",
+            &[("feature", &feature), ("status", &status)],
+        );
+        session.result(&format!("  {head}"));
+        if let Some(reason) = cap.reason {
+            let text = loc.message(&fluent_id("doctor-reason", reason));
+            let why = loc.message_args("doctor-why", &[("reason", &text)]);
+            session.result(&format!("    {why}"));
+        }
+        if let Some(fallback) = cap.fallback {
+            let text = loc.message(&fluent_id("doctor-fallback", fallback));
+            let instead = loc.message_args("doctor-instead", &[("fallback", &text)]);
+            session.result(&format!("    {instead}"));
+        }
+    }
+
+    section(session, "doctor-section-details");
+    for fact in &diagnosis.facts {
+        let label = loc.message(&fluent_id("doctor-fact", fact.key));
+        session.result(&labelled(loc, &label, &fact_value_text(&fact.value, loc)));
+    }
+
+    section(session, "doctor-section-paths");
+    let shown = |p: Option<&PathBuf>| {
+        p.map_or_else(
+            || loc.message("doctor-value-absent"),
+            |p| p.display().to_string(),
+        )
+    };
+    let config = loc.message("doctor-path-config");
+    session.result(&labelled(loc, &config, &shown(paths.config_file.as_ref())));
+    if let Some(error) = &paths.config_error {
+        let label = loc.message("doctor-path-config-error");
+        session.result(&labelled(loc, &label, error));
+    }
+    let captures = loc.message("doctor-path-captures");
+    session.result(&labelled(
+        loc,
+        &captures,
+        &shown(paths.captures_dir.as_ref()),
+    ));
+
+    section(session, "doctor-section-pending");
+    for (_, _, id) in PENDING {
+        session.result(&format!("  {}", loc.message(id)));
+    }
+}
+
+/// Prints the report. Always succeeds: what is missing is part of the report.
+pub fn run(
+    backend: &dyn CaptureBackend,
+    config_dir_arg: Option<&Path>,
+    ctx: &Context<'_>,
+    session: &mut Session<'_, '_>,
+) -> ExitCode {
+    let diagnosis = backend.diagnose();
+    let paths = paths(config_dir_arg);
+    if session.json {
+        session.document(&document(&diagnosis, &paths));
+    } else {
+        render(&diagnosis, &paths, ctx.loc, session);
+    }
+    ExitCode::Ok
+}
