@@ -27,7 +27,7 @@ use crate::error::{Retry, UploadError};
 use crate::http::{HttpClient, network_error};
 use crate::masked::{CheckedOutput, MaskedText, SecretSet, register_secret};
 use crate::origin::{canonical_origin, is_loopback_literal, origin_of};
-use crate::secret::{Placement, SHORT_SECRET_LEN, SecretError, SecretSource, SecretValue};
+use crate::secret::{Placement, SHORT_SECRET_LEN, SecretSource, SecretValue};
 use crate::sensitive::is_sensitive_name;
 use crate::template::{Env, Function, Group, Template};
 
@@ -212,13 +212,6 @@ fn normalized(p: &Placement) -> Placement {
     match p {
         Placement::Header(n) => Placement::header(n),
         other => other.clone(),
-    }
-}
-
-fn store_error(e: SecretError) -> UploadError {
-    match e {
-        SecretError::NotDelivered => UploadError::SecretStoreNotDelivered,
-        SecretError::Unavailable(text) => UploadError::SecretStore(text),
     }
 }
 
@@ -416,7 +409,7 @@ impl<'a> Uploader<'a> {
             let entry = self
                 .secrets
                 .load(&compiled.id, &slot.name)
-                .map_err(store_error)?
+                .map_err(UploadError::from)?
                 .ok_or_else(|| UploadError::SecretMissing {
                     name: slot.name.clone(),
                 })?;

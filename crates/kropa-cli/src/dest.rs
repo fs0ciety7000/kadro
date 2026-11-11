@@ -98,7 +98,7 @@ fn secret_state(ctx: &Context<'_>, profile: &str, name: &str) -> &'static str {
         Ok(Some(_)) => "set",
         Ok(None) => "missing",
         Err(SecretError::NotDelivered) => "unknown",
-        Err(SecretError::Unavailable(_)) => "unavailable",
+        Err(_) => "unavailable",
     }
 }
 
@@ -461,10 +461,7 @@ pub fn import_command(
             placements: vec![secret.placement],
         };
         ctx.secrets.put(&id, &secret.name, entry).map_err(|e| {
-            let error = match e {
-                SecretError::NotDelivered => UploadError::SecretStoreNotDelivered,
-                SecretError::Unavailable(text) => UploadError::SecretStore(text),
-            };
+            let error = UploadError::from(e);
             let mut error = cli_error(&error, loc);
             error.step = Some("import");
             error
