@@ -42,7 +42,10 @@ pub(super) fn screen_recording_granted() -> bool {
 
 /// Checks the permission and asks for it once when it is missing (this may show the system dialog).
 pub(super) fn ensure_screen_recording() -> Permission {
-    apple::ensure_permission(CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess)
+    apple::ensure_permission(
+        || CGPreflightScreenCaptureAccess(),
+        || CGRequestScreenCaptureAccess(),
+    )
 }
 
 /// The `.app` this executable runs from, if any.

@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 
 use objc2::MainThreadMarker;
-use objc2::rc::Retained;
 use objc2_app_kit::NSScreen;
 use objc2_core_graphics::{
     CGDirectDisplayID, CGDisplayBounds, CGDisplayCopyDisplayMode, CGDisplayMode,
@@ -44,7 +43,7 @@ fn names() -> HashMap<CGDirectDisplayID, String> {
     };
     let key = NSString::from_str("NSScreenNumber");
     let mut out = HashMap::new();
-    for screen in NSScreen::screens(mtm) {
+    for screen in NSScreen::screens(mtm).iter() {
         let description = screen.deviceDescription();
         let Some(value) = description.objectForKey(&key) else {
             continue;
@@ -60,8 +59,6 @@ fn names() -> HashMap<CGDirectDisplayID, String> {
 }
 
 fn scale_of(id: CGDirectDisplayID) -> f64 {
-    let mode: Option<Retained<CGDisplayMode>> = None;
-    let _ = mode;
     let mode = CGDisplayCopyDisplayMode(id);
     let points = CGDisplayMode::width(mode.as_deref());
     let pixels = CGDisplayMode::pixel_width(mode.as_deref());
