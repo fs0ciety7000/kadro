@@ -317,8 +317,9 @@ stdin porte un fichier). Pas de `--password`, pas de `KROPA_PASSWORD`.
   gabarit de corps** : changer le gabarit vaut changer d'emplacement.
 - Fixés à la création de l'entrée : préréglage (Zipline : `header:Authorization`), lieu où l'import a trouvé la
   valeur (§ 5), ou, pour `secrets set` d'une entrée neuve, lieux du gabarit du profil **montrés** et confirmés. Une
-  entrée existante garde ses emplacements quand sa valeur est remplacée.
-- **Interdits partout** : hôte et chemin de l'URL (choix v1, **U2**), nom de fichier, tout gabarit de réponse.
+  entrée existante garde ses emplacements quand sa valeur est remplacée. Exigence (N6, 1.8) : `secrets set` sur une
+  entrée vide créée par import remontre ses origines et emplacements et les fait confirmer, comme une entrée neuve.
+- **Interdits partout** : hôte et chemin de l'URL (v1, **U2 tranchée**), nom de fichier, tout gabarit de réponse.
   Vérifié **au chargement** de la config (code 6).
 - **À la résolution** (`kropa-upload`, juste avant l'envoi) : la requête est construite sans secret, son origine
   calculée ; chaque `{secret:x}` exige que l'origine figure dans `origins` de `x` **et** que son emplacement figure dans
@@ -342,7 +343,7 @@ Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** av
   et minuscule, `+` pour l'espace) ; échappement JSON (`\/`, `\uXXXX`) ; échappement HTML ; base64 standard et URL-safe,
   avec ou sans `=`, aux **trois alignements** (partie stable de l'encodage). On cherche aussi la forme brute dans la
   sortie décodée une fois (percent, HTML). Un secret de moins de 8 octets est accepté avec un avertissement (faux
-  positifs possibles : on refuse alors, côté sûr).
+  positifs possibles : on refuse alors, côté sûr) ; moins de 4 octets : refusé (N4).
 - **Sorties contrôlées** : URL, miniature, suppression, texte du lien (URL, Markdown, HTML), entrée d'historique
   SQLite, presse-papiers, notification, stdout, JSON. Les API d'historique, de presse-papiers et de sortie n'acceptent
   qu'un type `CheckedOutput` dont le seul constructeur applique le contrôle.
@@ -350,8 +351,28 @@ Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** av
   d'échec sans URL, stdout reçoit le chemin du fichier local, JSON avec `upload.status = "failed"`, `url = null`,
   avertissement « le fichier a peut-être été envoyé ; lien retenu ». Échec définitif (pas de nouvel essai en file).
   Le message ne cite jamais la valeur.
-- **`error` et extrait de réponse** (500 caractères) : masqués (`***`) par le même détecteur, avertissement
-  `secret_echoed` ; l'envoi a déjà échoué (code 9).
+- **`error` et extrait de réponse : type `MaskedText` (N1).** Ces textes sont masqués (`***`) et non refusés
+  (l'envoi a déjà échoué, code 9), avertissement `secret_echoed`. Le seul constructeur,
+  `MaskedText::from_response(corps, secrets, limite)`, applique dans cet ordre :
+  1. décodage du corps **entier** (≤ 1 Mio, UTF-8 avec remplacement), jamais d'un extrait ;
+  2. détection de toutes les formes ci-dessus sur ce texte entier ; chaque correspondance donne un intervalle ;
+  3. **extension** de chaque intervalle à la **suite maximale** de caractères de l'alphabet de la forme trouvée, des
+     deux côtés : base64 standard `A–Z a–z 0–9 + / =` et URL-safe `- _` (les 1 à 2 caractères de bord mêlent des bits
+     du secret à ceux du voisin) ; percent : triplets `%XX` et caractères non réservés `A–Z a–z 0–9 - . _ ~`, `+` ;
+     JSON : séquences `\uXXXX` et `\/` et caractères non réservés ; HTML : entités `&…;` et caractères non réservés ;
+     brute : caractères non réservés et ceux du secret. Intervalles fusionnés s'ils se touchent ou se chevauchent ;
+  4. remplacement de chaque intervalle par `***` (longueur fixe, aucune longueur révélée) ;
+  5. **ensuite seulement**, coupe à 500 caractères sur une frontière de caractère, `…` ajouté.
+  `MaskedText` n'a ni `From<String>` ni constructeur public autre ; stderr, journaux (`tracing`), message d'erreur
+  Fluent, `error.message` et `upload.error` du JSON, colonne d'erreur de l'historique et notification n'acceptent que
+  `MaskedText` (ou `CheckedOutput`) pour tout texte tiré de la réponse. *Test* : jeton (brut, percent, JSON, base64
+  aux trois alignements) placé à chaque position de 495 à 530 d'un corps de 1 000 caractères → aucune sous-chaîne de
+  4 caractères ou plus d'une forme du secret dans la sortie, et la suite base64 entière remplacée.
+- **Exigences d'implémentation (contre-revue, 1.7)** : N4 — avant détection, normaliser percent (deux passes), HTML et
+  JSON (deux passes, `+` d'un échappement partiel compris), ignorer les blancs et retours à la ligne dans le base64,
+  chercher aussi l'hex (minuscules et majuscules) ; secret de moins de 4 octets refusé à la saisie (code 11). N5 —
+  l'ensemble `secrets` du détecteur et de l'expurgation = **tout secret chargé dans le processus** depuis son
+  démarrage, pas seulement ceux de la requête en cours.
 - **Réponse hostile** : corps lu en flux et coupé à 1 Mio, délais de connexion et totaux, annulation ; `regex` 1.13
   seul (temps linéaire, `size_limit` et `dfa_size_limit` bornés), jamais `fancy-regex` ; XML par `roxmltree` 0.21
   sans DTD ; URL extraite `http(s)`, sans caractère de contrôle, de bidi (U+202A–202E, U+2066–2069) ni de largeur nulle ;
@@ -361,7 +382,7 @@ Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** av
 
 - **HTTPS obligatoire** dès qu'un secret est résolu. `localhost` jamais (passe par le résolveur). `http://127.0.0.1`
   et `http://[::1]` acceptés **seulement dans les builds de test** (fonction Cargo non livrée) : un autre utilisateur
-  peut écouter un port libre du bouclage (I4). Option par profil : **U3**.
+  peut écouter un port libre du bouclage (I4). **Aucune option par profil** (U3 tranchée).
 - TLS par rustls avec **`rustls-platform-verifier` 0.7.1** (magasin système : une CA privée s'y installe) ; aucune
   option pour ignorer la vérification.
 - Client `reqwest` unique, **`.no_proxy()`** (pas de lecture de `HTTP(S)_PROXY`) ; proxy explicite par config : hors
@@ -391,9 +412,11 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
 - **`{secret:x}` dans un TOML importé** : crée une entrée **vide** (« manquante », `dest show`), à remplir par
   `kropa secrets set`. Un import ne réutilise **jamais** une entrée existante, d'aucun profil.
 - **`id` déjà pris** : refus, sauf `--id <autre>` ou confirmation interactive « remplacer le profil X : ses secrets
-  seront supprimés ». Pas d'écrasement sans confirmation, jamais d'héritage de secrets.
+  seront supprimés ». Pas d'écrasement sans confirmation, jamais d'héritage de secrets. Exigence (N2, 1.7 et 1.8) :
+  « pris » = profil présent dans la config **ou** entrée `<id>/*` présente dans le magasin (orphelin d'un profil
+  renommé ou retiré à la main) ; `doctor` liste les entrées orphelines, sans valeur.
 - **Secret dans le chemin** de l'URL (segment à forte entropie : seul usage restant de l'entropie, Q7) : import refusé
-  en v1 avec un message explicite (« jeton dans l'URL non pris en charge ») — **U2**.
+  en v1 avec un message explicite (« jeton dans l'URL non pris en charge ») — **U2 tranchée**.
 - **`{inputbox:}` d'authentification** (dans un emplacement de secret) : converti en secret à l'import, saisi masqué ;
   `--var` qui viserait un emplacement de secret → code 11 (secret en argument).
 - **Confirmation** : résumé (origine, HTTPS ou non, emplacements, secrets détectés et masqués, query signalée) ;
@@ -408,7 +431,8 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   limité. Test qui échoue si un type secret dérive `Debug`.
 - Couche `tracing` d'expurgation : en-têtes en **liste blanche** (`content-type`, `content-length`, `retry-after`,
   `location` sans query) ; le reste → `***`. Passe finale avec le **détecteur du § 4.4** (formes dérivées comprises)
-  sur messages, erreurs, extraits de réponse et `--json`. Jamais de corps de requête journalisé.
+  sur messages, erreurs et `--json` ; extraits de réponse et `error` n'y arrivent que sous forme de `MaskedText`
+  (§ 4.4, N1). Jamais de corps de requête journalisé.
 - `-vv` n'ouvre que `kropa*=debug` ; `hyper`, `h2`, `reqwest`, `rustls`, `russh`, `zbus`, `object_store` restent à
   `info`, sans réglage pour les ouvrir en release.
 - Erreurs : `kropa-upload` renvoie des erreurs typées sans valeur ; erreurs de `reqwest` reformulées (URL avec query
@@ -454,16 +478,18 @@ un dialogue reste dans le presse-papiers — le dialogue propose de le vider s'i
 | IPC usurpée (client ou serveur) | Contrôle d'UID des deux côtés, dossier `0700`, pas de `/tmp` | identifiants de pair injectés + CI `sudo -u nobody`, dans les deux sens → refus, rien envoyé |
 | Coffre laissé ouvert | 15 min sans action humaine, 8 h, `LockedHint`, veille | horloge injectable ; envois périodiques sans TTY ne prolongent pas ; signaux logind simulés sur bus privé ; compteur de `Drop` des tampons |
 | Invites Keychain à chaque mise à jour | Un élément, modification en place, courtier (U1) | manuel 1.6 : deux binaires × deux builds, invites relevées |
+| Courtier appelé par un autre que `kropa-app` | § 2.2.1 : pair = parent, jeton d'audit, exigence de signature, réponse limitée au profil | `kropa __store-broker` depuis un shell, avec fd 3 forgé, ou parent signé autrement → refus, zéro requête à `securityd` |
+| Secret coupé par l'extrait | `MaskedText` : détection sur le corps entier, masque étendu, coupe ensuite | jeton aux positions 495–530, toutes formes → aucun fragment ≥ 4 caractères |
 | Usurpation d'hôte SFTP | `known_hosts` strict | clé changée → refus |
 | `.sxcu` partagé avec le jeton de l'auteur | Extraction, masquage, entrées neuves | fixtures Zipline (en-tête), `Data` JSON, jeton dans le chemin (→ refus v1) |
 
 ## 8. Questions ouvertes
 
-Toutes les questions de S.1 ont reçu une réponse (§ 0.1). Restent : décisions **U1–U4** (§ 0.2), et le **non
-vérifié** : invites Keychain réelles (15, 26), `LockedHint` par bureau, échec d'un service sans DH, possibilité
-d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSec des crates de stockage (à leur ajout).
+Toutes les questions de S.1 ont reçu une réponse (§ 0.1) et U1–U4 sont tranchées (§ 0.2). Reste le **non vérifié** :
+invites Keychain réelles (15, 26), points du § 2.2.1 (7) sur le courtier, `LockedHint` par bureau, échec d'un service
+sans DH, possibilité d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSec des crates de stockage (à leur ajout).
 
-## 9. Changements proposés à `cli.md` (non appliqués, validation : U4)
+## 9. Changements de `cli.md` (acceptés, U4 ; reportés en S.4)
 
 1. **§ 2.4 `secrets`** : ajouter `kropa secrets allow <PROFIL> <NOM> (--origin <URL> | --placement <P>)`,
    interactif seulement (code 12 sans TTY, `--yes` sans effet) ; `kropa secrets use keyring|vault` ;
@@ -486,12 +512,12 @@ d'éviter `unlock_all` avec le magasin 1.0.1, audit RustSec des crates de stocka
 7. **§ 2.1 `--var`** : refusé (code 11) quand la variable alimente un emplacement de secret.
 8. **§ 2.4 `secrets set|remove <PROFIL> <NOM>`** : inchangé, cohérent avec la portée par profil (B2).
 
-## 10. Suites hors de ce fichier (non modifiés en S.3)
+## 10. Suites hors de ce fichier (non modifiés en S.3 ni S.4, sauf `cli.md`)
 
 - `uploads.md` § 2.2 : exemple `ref = "kropa/maison/token"` obsolète (→ `token = {}`) ; § 4.5 point 5 : exception
   `localhost` retirée (§ 4.5, U3) ; § 2.4 : `.toml` importé comme `.sxcu`.
 - `platform-macos.md` § 4.4 : l'auto-signé n'évite pas l'invite Keychain (partition `cdhash:`).
-- `architecture.md` (IPC) : contrôles du client et absence de repli du § 1.2 ; courtier macOS si U1 = (b).
+- `architecture.md` (IPC) : contrôles du client et absence de repli du § 1.2 ; courtier macOS (U1 = b, § 2.2.1).
 
 ## Sources
 
