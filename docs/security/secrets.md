@@ -138,14 +138,50 @@ accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets �
   » **par binaire** qui lit l'élément (`kropa` et `kropa-app` ont des cdhash distincts) ; « Toujours autoriser »
   ajoute le nouveau cdhash. Le certificat auto-signé garde son intérêt pour TCC (qui ne lit que la DR) et pour l'ACL,
   pas pour la partition. `platform-macos.md` § 4.4 (« pas d'invite ») est à corriger (§ 10).
-- **Replis proposés** (choix : **U1**) :
-  - *Courtier unique* (recommandé) : seul `kropa` (la CLI, présente dans le paquet et dans `Kropa.app`) ouvre le
-    trousseau. `kropa-app` lance `kropa __store-broker` en processus fils, sans socket : requête et document passent
-    par un **tube anonyme hérité** (`CLOEXEC` ailleurs), le fils vérifie que son parent est le `kropa-app` du même
-    paquet (chemin et signature), sert une requête et sort. → **1 invite par mise à jour**. Coût : `kropa-app` dépend
-    du binaire `kropa` voisin.
-  - *Coffre `age`* sur macOS : aucune invite Keychain, phrase de passe à chaque session du résident.
-  - *Accepter 2 invites* par mise à jour.
+- **Retenu (U1 = b) : courtier unique.** Seul `kropa` (la CLI, présente dans le paquet et dans `Kropa.app`) ouvre le
+  trousseau → **1 invite par mise à jour**. `kropa-app` ne lit jamais le Keychain ; il lance `kropa __store-broker` pour
+  chaque opération. Coût : `kropa-app` dépend du binaire `kropa` voisin. Repli au choix de l'utilisateur : coffre `age`
+  (aucune invite Keychain, phrase de passe à chaque session du résident). Le chemin direct de `kropa` (CLI) est
+  inchangé : il lit l'élément lui-même.
+
+#### 2.2.1 Courtier : vérification du demandeur (N3)
+
+C'est le seul canal qui **rend** des valeurs à un autre processus (l'IPC du § 1.2 n'en rend aucune). Lancer
+`kropa __store-broker` soi-même ne doit rien donner : sinon le courtier offrirait le document sans l'invite Keychain
+que le chemin direct impose à un binaire inconnu.
+
+1. **Canal** : `kropa-app` crée une paire `socketpair(AF_UNIX, SOCK_STREAM)` (`CLOEXEC`), lance le courtier par
+   `posix_spawn` avec l'environnement vidé, une extrémité dupliquée en fd 3 seulement (fd 0, 1, 2 sur `/dev/null`), et
+   garde l'autre. Pas de `pipe(2)` : un tube n'a ni `audit_token` ni pair identifiable. Pas de socket nommé.
+2. **Contrôles, tous avant le moindre appel au Keychain**, dans cet ordre :
+   - `ppid = getppid()` ; `ppid == 1` (parent mort ou lancé par launchd) → refus ;
+   - fd 3 est un socket `AF_UNIX` connecté (`fstat` + `getsockopt(SO_TYPE)`), sinon refus (lancé depuis un shell) ;
+   - `getsockopt(SOL_LOCAL, LOCAL_PEERTOKEN)` → `audit_token_t` du pair, et `LOCAL_PEERPID` ; PID du jeton = `ppid`,
+     sinon refus (la paire vient d'un autre processus que le parent) ;
+   - `SecCodeCopyGuestWithAttributes(nil, {kSecGuestAttributeAudit: jeton})`, puis `SecCodeCheckValidity` avec
+     `kSecCSStrictValidate` contre l'**exigence** : identifiant de `kropa-app` **et** feuille de certificat = empreinte
+     du certificat auto-signé du projet (la DR de `kropa-app`, compilée dans `kropa`). Le jeton porte la version de
+     PID : un jeton périmé (processus réutilisé ou `exec` depuis la création de la paire) doit faire échouer l'appel ;
+   - `SecCodeCopySelf` : le courtier lui-même est signé du même certificat, sinon refus (build non signé ou
+     développement : courtier désactivé, `kropa-app` utilise le coffre ou signale `keychain_broker_unavailable`).
+3. **Requête** : une ligne JSON ≤ 64 Kio, une seule par lancement, puis sortie. Opérations : `read <profil>` (entrées
+   `<profil>/*` seulement, avec `origins` et `placements`), `write <profil>/<nom>` et `remove <profil>/<nom>` (sous
+   `store.lock`, § 3.4), `status` (noms et compteurs, aucune valeur). **Jamais le document entier.** Avant de répondre,
+   `getppid() == ppid` est revérifié (parent mort entre-temps → rien écrit). Délai total de 120 s (invite comprise).
+4. **Refus** : `ppid` 1, fd 3 absent ou non socket, pair ≠ parent, signature invalide ou autre exigence, jeton périmé,
+   courtier non signé, requête inconnue, malformée, multiple ou trop longue, profil absent. Refus = sortie non nulle,
+   **zéro accès Keychain**, aucun détail sur stderr au-delà de la raison ; `kropa-app` le rend en code 7,
+   `error.reason = "keychain_broker_refused"`.
+5. **Ce qui tient la vérification** : `kropa-app` est signé avec le runtime renforcé, sans `get-task-allow` (§ 6) : un
+   processus du même utilisateur ne peut ni s'y injecter (`DYLD_*`, `task_for_pid`) ni le déboguer. Sans cela,
+   « le pair est `kropa-app` » ne prouverait rien.
+6. **Non vérifié, à prouver sur le Mac de l'utilisateur (1.6, puis test de 1.8)** : `LOCAL_PEERTOKEN` sur une paire
+   `socketpair` rend bien le jeton du créateur ; un `exec` après création de la paire fait échouer
+   `SecCodeCopyGuestWithAttributes` avec ce jeton (sinon : `kropa-app` crée la paire et lance le courtier dans le même
+   appel, et le courtier exige en plus `LOCAL_PEERPID == ppid` et un parent dont le binaire est celui du même
+   `Kropa.app`) ; l'exigence avec feuille auto-signée est acceptée par `SecCodeCheckValidity` ; l'invite Keychain
+   nomme `kropa` et ne revient qu'une fois par mise à jour ; `kropa __store-broker` lancé depuis Terminal (avec ou sans
+   fd 3 forgé) → refus et **aucune** requête à `securityd` (`log stream --predicate 'subsystem == "com.apple.securityd"'`).
 - Mitigations communes : un seul élément ; **modification en place** (le magasin Apple fait recherche puis
   modification [4], jamais suppression/recréation qui réinitialise l'ACL) ; notes de version qui annoncent l'invite.
   Jamais d'ajout de `unsigned:` ni de `apple-tool:` (partition de `security(1)` [11]), jamais de
@@ -153,8 +189,8 @@ accepté : Seahorse/Trousseaux n'affichent qu'une entrée « Kropa — secrets �
 - Invite refusée = `keychain_denied` (code 4), la tâche passe `waiting_unlock`, jamais de repli implicite.
 - **Vérification prévue en 1.6** (Mac de l'utilisateur, macOS 15 et plus si possible 26) : build N signé, secret
   rangé et lu par `kropa` **et** `kropa-app` ; build N+1 signé du même certificat ; relever le nombre d'invites par
-  binaire, l'effet de « Toujours autoriser », la survie de TCC ; refaire avec le courtier. Résultat dans
-  `decisions.md`, qui tranche U1 si l'utilisateur ne l'a pas fait.
+  binaire, l'effet de « Toujours autoriser », la survie de TCC ; refaire avec le courtier (§ 2.2.1, point 6).
+  Résultat dans `decisions.md`.
 
 ### 2.3 Document stocké (trousseau et coffre)
 
