@@ -11,6 +11,8 @@
 - **Vidéo et GIF retirés du produit** (hors périmètre, pas seulement repoussés) : enregistrement, audio, affichage des
   clics et touches, coupe avant export.
 - Identité visuelle : **A « Repère »**.
+- **Dépôt public** (minutes GitHub Actions gratuites et illimitées sur Linux et macOS) ; CI Linux + macOS 15 à chaque
+  PR. Aucun secret dans l'historique (vérifié le 11/11/2026 : uniquement des documents).
 - Nom : « Kadro » à remplacer (homonyme) ; recherche de nom en cours. Le reste du périmètre v1 proposé par Produit est
   retenu par défaut.
 
