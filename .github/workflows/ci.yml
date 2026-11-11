@@ -67,7 +67,8 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Tests
-        run: cargo nextest run --workspace --locked
+        # --no-tests=pass: the skeleton crates have no test yet (nextest exits 4 otherwise); drop it once tests exist.
+        run: cargo nextest run --workspace --locked --no-tests=pass
       - name: Doctests
         run: cargo test --doc --workspace --locked
 
