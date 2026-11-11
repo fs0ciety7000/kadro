@@ -1629,6 +1629,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kropa-keychain"
+version = "0.0.1"
+dependencies = [
+ "core-foundation",
+ "libc",
+ "security-framework",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "kropa-macos"
 version = "0.0.1"
 

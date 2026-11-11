@@ -67,9 +67,7 @@ fn read_request(stream: &mut UnixStream) -> Result<Zeroizing<Vec<u8>>, Refusal> 
         .map_err(|e| io_refusal(&e))?;
     // Allocated once, so that reading never reallocates and leaves a copy of a value behind.
     let mut line = Zeroizing::new(Vec::with_capacity(MAX_REQUEST_LEN + 1));
-    stream
-        .by_ref()
-        .take(MAX_REQUEST_LEN as u64 + 1)
+    Read::take(&mut *stream, MAX_REQUEST_LEN as u64 + 1)
         .read_to_end(&mut line)
         .map_err(|e| io_refusal(&e))?;
     if line.len() > MAX_REQUEST_LEN {

@@ -127,10 +127,7 @@ impl BrokerClient {
             .and_then(|()| channel.shutdown(Shutdown::Write));
         drop(line);
         let mut answer = Zeroizing::new(Vec::with_capacity(4096));
-        let read = channel
-            .by_ref()
-            .take(MAX_REPLY_LEN as u64 + 1)
-            .read_to_end(&mut answer);
+        let read = Read::take(&mut channel, MAX_REPLY_LEN as u64 + 1).read_to_end(&mut answer);
         let status = reap(&mut child);
         if let Err(error) = &read
             && matches!(
