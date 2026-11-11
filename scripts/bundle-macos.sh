@@ -84,7 +84,7 @@ if [ "$universal" -eq 1 ] && [ -n "$bin" ]; then
 fi
 
 if [ -z "$version" ]; then
-    version=$(sed -n '/^\[workspace\.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p;}' "$repo/Cargo.toml" | head -n 1)
+    version=$(awk -F'"' '/^\[workspace\.package\]/ { in_section = 1; next } /^\[/ { in_section = 0 } in_section && /^version = / { print $2; exit }' "$repo/Cargo.toml")
 fi
 # CFBundleShortVersionString is made of up to three dot-separated numbers.
 case "$version" in
@@ -158,10 +158,10 @@ if [ "$sign" -eq 1 ]; then
     codesign --verify --strict --verbose=2 "$app" >&2
     {
         echo "signature of $APP_NAME:"
-        codesign --display --verbose=2 "$app" 2>&1 | sed -n 's/^\(Identifier\|Format\|CodeDirectory\|Signature\|Authority\|CDHash\)/  \1/p'
+        codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|CodeDirectory|Signature|Authority|CDHash)' | sed 's/^/  /'
         # The designated requirement is what TCC records. With "-" it holds the cdhash of this build
         # (permissions are lost at the next build); with a certificate it holds the certificate.
-        codesign --display --requirements - "$app" 2>&1 | sed -n 's/^designated => /  designated requirement: /p'
+        codesign --display --requirements - "$app" 2>&1 | grep '^designated => ' | sed 's/^designated => /  designated requirement: /'
     } >&2
     if [ "$identity" = "-" ]; then
         echo "bundle-macos: ad hoc signature: macOS will ask again for the permissions after the next build." >&2

@@ -71,6 +71,26 @@ jobs:
         run: cargo nextest run --workspace --locked --no-tests=pass
       - name: Doctests
         run: cargo test --doc --workspace --locked
+      # Kropa.app: the command line inside a bundle, universal, ad hoc signed (no certificate and no
+      # Screen Recording permission on a runner: only the build and the layout are checked here).
+      - name: Add the second macOS architecture
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build Kropa.app (universal, ad hoc signature)
+        if: runner.os == 'macOS'
+        run: scripts/bundle-macos.sh --universal --profile dev --out "$RUNNER_TEMP/bundle"
+      - name: Check Kropa.app
+        if: runner.os == 'macOS'
+        run: |
+          app="$RUNNER_TEMP/bundle/Kropa.app"
+          codesign --verify --strict --verbose=2 "$app"
+          archs=$(lipo -archs "$app/Contents/MacOS/kropa")
+          echo "architectures: $archs"
+          case "$archs" in *arm64*x86_64* | *x86_64*arm64*) ;; *) echo "not a universal binary" >&2; exit 1 ;; esac
+          "$app/Contents/MacOS/kropa" --json doctor > "$RUNNER_TEMP/doctor.json"
+          cat "$RUNNER_TEMP/doctor.json"
+          grep -q '"key":"app_bundle","state":"present"' "$RUNNER_TEMP/doctor.json"
+          grep -q '"key":"bundle_identifier","state":"present","value":"io.github.fs0ciety7000.Kropa"' "$RUNNER_TEMP/doctor.json"
 
   msrv:
     name: msrv (1.95)
