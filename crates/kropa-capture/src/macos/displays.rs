@@ -48,8 +48,7 @@ fn names() -> HashMap<CGDirectDisplayID, String> {
         let Some(value) = description.objectForKey(&key) else {
             continue;
         };
-        // SAFETY: the value of "NSScreenNumber" is documented to be an NSNumber; it is only
-        // used as one after `downcast` has checked its class.
+        // "NSScreenNumber" is documented to hold an NSNumber; `downcast` checks it.
         let Ok(number) = value.downcast::<NSNumber>() else {
             continue;
         };

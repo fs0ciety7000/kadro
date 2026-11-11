@@ -27,8 +27,10 @@ use crate::apple::{SckError, classify_sck_error};
 use crate::{CaptureError, Denial, Failure};
 
 /// How long `ScreenCaptureKit` gets to answer one request. A missing permission answers at once; a
-/// handler that never fires would otherwise hang the command forever.
-const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
+/// handler that never fires would otherwise hang the command forever. It is long because macOS 15
+/// may hold the answer behind its own dialog (the periodic "allow screen recording" question) until
+/// the user clicks.
+const ANSWER_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// An error object of `ScreenCaptureKit`, reduced to what is reported.
 #[derive(Debug)]
@@ -123,10 +125,11 @@ fn find_display(
     content: &SCShareableContent,
     id: u32,
 ) -> Result<Retained<SCDisplay>, CaptureError> {
-    // SAFETY: plain getters of an object we own.
+    // SAFETY: plain getters of objects we own, called on the thread that owns them.
     let displays = unsafe { content.displays() };
     displays
         .iter()
+        // SAFETY: as above.
         .find(|d| unsafe { d.displayID() } == id)
         .ok_or_else(|| {
             CaptureError::failed(

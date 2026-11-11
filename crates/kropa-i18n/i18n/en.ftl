@@ -226,7 +226,7 @@ error-capture-macos-too-old = Kropa needs macOS 15 (Sequoia) or later.
 error-capture-no-graphical-session = No graphical session to capture: this program does not run in a macOS login session (ssh, background service). Run kropa from a terminal on the Mac itself, logged in.
 error-capture-output-not-found = Screen not found: { $detail }. Run 'kropa doctor' to list the screens, then give a name or an id from that list.
 error-capture-screencapturekit-error = ScreenCaptureKit failed: { $detail }
-error-capture-screencapturekit-no-response = ScreenCaptureKit did not answer in time. Run the command again.
+error-capture-screencapturekit-no-response = ScreenCaptureKit did not answer in time. A macOS dialog may be waiting for your answer: if so, answer it and run the command again.
 error-capture-image-encoding-failed = The picture could not be turned into a PNG file: { $detail }
 error-write = Cannot write { $path }: { $detail }
 
