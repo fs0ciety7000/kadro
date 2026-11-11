@@ -1,0 +1,28 @@
+[package]
+name = "kropa-keychain"
+description = "Kropa macOS Keychain items and their broker (lot 1.8m)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+# macOS only: the Keychain and code signature services of Security.framework (safe wrappers, no C to
+# compile; the framework is the system one).
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation.workspace = true
+security-framework.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

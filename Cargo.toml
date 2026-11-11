@@ -14,11 +14,13 @@ ashpd = { version = "0.14.0", default-features = false, features = ["async-io", 
 base64 = "0.23.1"
 block2 = { version = "0.6.2", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive", "string"] }
+core-foundation = "0.10.1"
 directories = "6.0.0"
 fluent-bundle = "0.16.0"
 gethostname = "1.1.0"
 insta = { version = "1.49.0", features = ["json"] }
 jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
+libc = "0.2.191"
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"] }
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
@@ -34,6 +36,7 @@ rustls = { version = "0.23.46", default-features = false, features = ["std", "tl
 rustls-platform-verifier = "0.7.1"
 rustix = { version = "1.1.6", default-features = false, features = ["std", "termios"] }
 secret-service = { version = "5.2.0", default-features = false, features = ["rt-async-io-crypto-rust"] }
+security-framework = { version = "3.7.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_json_path = "0.7.2"
@@ -54,6 +57,7 @@ kropa-doc = { path = "crates/kropa-doc", version = "0.0.1" }
 kropa-render = { path = "crates/kropa-render", version = "0.0.1" }
 kropa-capture = { path = "crates/kropa-capture", version = "0.0.1" }
 kropa-upload = { path = "crates/kropa-upload", version = "0.0.1" }
+kropa-keychain = { path = "crates/kropa-keychain", version = "0.0.1" }
 kropa-store = { path = "crates/kropa-store", version = "0.0.1" }
 kropa-i18n = { path = "crates/kropa-i18n", version = "0.0.1" }
 
