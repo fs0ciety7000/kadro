@@ -380,7 +380,30 @@ impl Builder {
             }
             return Ok(value.to_owned());
         }
-        if public_slot || template.is_pure_call() || rest.len() < MIN_SECRET_LEN {
+        // A "pure" template holds no literal value. `{base64:user:password}` does: it is a credential.
+        if public_slot || template.is_pure_call() {
+            return Ok(value.to_owned());
+        }
+        if !matches!(slot, Slot::Body) {
+            let rest_template =
+                Template::parse(rest, Side::Request).map_err(|e| refuse(e.to_string()))?;
+            if let Some(literal) = rest_template.base64_literal() {
+                // `Basic {base64:user:password}`: the text inside goes to the store, the profile
+                // keeps the function, which is rendered when the request is built.
+                if literal.len() < MIN_SECRET_LEN {
+                    return Ok(value.to_owned());
+                }
+                let secret = self.unique(name);
+                self.add_secret(secret.clone(), slot, Some(literal))?;
+                return Ok(format!("{prefix}{{base64:{{secret:{secret}}}}}"));
+            }
+            if rest_template.has_base64_text() {
+                return Err(refuse(format!(
+                    "{name}: a {{base64:}} that mixes text with other text or functions is not supported"
+                )));
+            }
+        }
+        if rest.len() < MIN_SECRET_LEN {
             return Ok(value.to_owned());
         }
         let secret = self.unique(name);
@@ -462,6 +485,21 @@ fn migrate_legacy(text: &str) -> String {
         .into_owned()
 }
 
+/// A token in the path of the address is refused (decision U2): the path is not a place for a secret.
+/// Every import goes through here, `.sxcu` (`check_url`) and `.toml` or preset (`finish`).
+fn refuse_token_in_path(url: &Url) -> Result<(), UploadError> {
+    if url
+        .path_segments()
+        .is_some_and(|mut segments| segments.any(looks_like_token_segment))
+    {
+        return Err(UploadError::security(
+            "secret_in_path",
+            "the address holds what looks like a token in its path: not supported in v1",
+        ));
+    }
+    Ok(())
+}
+
 fn check_url(raw: &str) -> Result<(Url, Vec<(String, String)>), UploadError> {
     if raw.contains('{') {
         return Err(refuse(
@@ -480,15 +518,7 @@ fn check_url(raw: &str) -> Result<(Url, Vec<(String, String)>), UploadError> {
             "RequestURL: a fragment makes no sense in a request",
         ));
     }
-    if url
-        .path_segments()
-        .is_some_and(|mut segments| segments.any(looks_like_token_segment))
-    {
-        return Err(UploadError::security(
-            "secret_in_path",
-            "the address holds what looks like a token in its path: not supported in v1",
-        ));
-    }
+    refuse_token_in_path(&url)?;
     let query: Vec<(String, String)> = url
         .query_pairs()
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
@@ -717,6 +747,7 @@ fn finish(
     }
     let compiled = destination.compile().map_err(|e| refuse(e.to_string()))?;
     let url = compiled.url.clone();
+    refuse_token_in_path(&url)?;
     let https = url.scheme() == "https";
     if !https && !builder.secrets.is_empty() {
         return Err(UploadError::security(

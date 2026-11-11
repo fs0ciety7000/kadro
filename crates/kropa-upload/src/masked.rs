@@ -32,13 +32,15 @@ static LOADED: Mutex<Vec<Zeroizing<Vec<u8>>>> = Mutex::new(Vec::new());
 /// Remembers a secret for the detector, for the rest of the run. Values shorter than
 /// [`MIN_SECRET_LEN`] are ignored (they are refused earlier).
 ///
-/// # Panics
-/// Never in practice: the lock is poisoned only if another thread panicked while holding it.
+/// A poisoned lock (a panic elsewhere while it was held) is taken over: the list of values stays
+/// valid, and no later upload may fail for it.
 pub fn register_secret(value: &str) {
     if value.len() < MIN_SECRET_LEN {
         return;
     }
-    let mut loaded = LOADED.lock().expect("secret registry lock");
+    let mut loaded = LOADED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if !loaded.iter().any(|v| v.as_slice() == value.as_bytes()) {
         loaded.push(Zeroizing::new(value.as_bytes().to_vec()));
     }
@@ -68,12 +70,11 @@ impl SecretSet {
     }
 
     /// Every secret loaded so far.
-    ///
-    /// # Panics
-    /// Never in practice: see [`register_secret`].
     #[must_use]
     pub fn loaded() -> Self {
-        let loaded = LOADED.lock().expect("secret registry lock");
+        let loaded = LOADED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self {
             values: loaded.clone(),
         }

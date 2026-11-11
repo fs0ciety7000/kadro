@@ -17,7 +17,7 @@
 | I1 phrase faible | Refus si `zxcvbn` < 3 ou < 12 caractères ; phrase diceware de 6 mots proposée. | 3.2 |
 | I2 verrou perdu au `rename` | Verrou sur `store.lock` stable, relecture après verrou, jamais d'écriture depuis un cache. | 3.4 |
 | I3 IPC non authentifiée côté client | Le client vérifie l'UID du serveur et le dossier ; aucun repli hors `XDG_RUNTIME_DIR` (code 14) ; ligne ≤ 64 Kio ; `secrets.*` jamais journalisé. | 1.2 |
-| I4 bouclage HTTP squattable | `localhost` jamais ; IP littérales de bouclage seulement dans les builds de test. Option par profil : **décision U3**. | 4.5 |
+| I4 bouclage HTTP squattable | `localhost` jamais ; **aucune exception pour le bouclage** (les tests utilisent un vrai HTTPS, 1.7b). Option par profil : **décision U3**. | 4.5 |
 | I5 trousseau Linux bloquant | Sans interaction possible : lecture de `Locked`, échec `keyring_locked` sans prompt ; appels D-Bus en `spawn_blocking` avec délai ; `Ambiguous` expliqué par `doctor`. | 2.1 |
 | I6 deux binaires macOS | Un seul élément ; protocole 1.6 sur les deux binaires ; jamais `apple-tool:` ; courtier unique proposé (**U1**). | 2.2 |
 | I7 expurgation incomplète | Même détecteur que B1 (formes dérivées) ; `-vv` n'ouvre que `kropa*` ; `HeaderValue::set_sensitive(true)`. | 6 |
@@ -380,9 +380,11 @@ Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** av
 
 ### 4.5 Transport
 
-- **HTTPS obligatoire** dès qu'un secret est résolu. `localhost` jamais (passe par le résolveur). `http://127.0.0.1`
-  et `http://[::1]` acceptés **seulement dans les builds de test** (fonction Cargo non livrée) : un autre utilisateur
-  peut écouter un port libre du bouclage (I4). **Aucune option par profil** (U3 tranchée).
+- **HTTPS obligatoire** dès qu'un secret est résolu, **sans exception, bouclage compris** (`localhost`, `127.0.0.1`
+  et `[::1]` : un autre utilisateur peut écouter un port libre du bouclage, I4). Il n'y a plus de fonction Cargo ni de
+  constante pour l'assouplir (revue 1.7, I1) : les tests avec secret tournent sur un vrai serveur TLS de bouclage (CA et
+  certificat `rcgen` créés par test), et le client qui fait confiance à cette CA n'existe que sous `#[cfg(test)]`
+  dans `kropa-upload`. **Aucune option par profil** (U3 tranchée).
 - TLS par rustls avec **`rustls-platform-verifier` 0.7.1** (magasin système : une CA privée s'y installe) ; aucune
   option pour ignorer la vérification.
 - Client `reqwest` unique, **`.no_proxy()`** (pas de lecture de `HTTP(S)_PROXY`) ; proxy explicite par config : hors

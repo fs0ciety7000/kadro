@@ -26,7 +26,7 @@ use crate::destination::{
 use crate::error::{Retry, UploadError};
 use crate::http::{HttpClient, network_error};
 use crate::masked::{CheckedOutput, MaskedText, SecretSet, register_secret};
-use crate::origin::{canonical_origin, is_loopback_literal, origin_of};
+use crate::origin::{canonical_origin, origin_of};
 use crate::secret::{Placement, SHORT_SECRET_LEN, SecretSource, SecretValue};
 use crate::sensitive::is_sensitive_name;
 use crate::template::{Env, Function, Group, Template};
@@ -35,9 +35,6 @@ use crate::template::{Env, Function, Group, Template};
 pub const MAX_RESPONSE: usize = 1 << 20;
 /// Characters of a server text kept for a message.
 pub const MESSAGE_LIMIT: usize = 500;
-
-/// Whether this build lets a secret travel over `http://127.0.0.1` (test builds only, decision U3).
-pub const LOOPBACK_HTTP_WITH_SECRET: bool = cfg!(feature = "test-loopback");
 
 /// A 1x1 PNG, the "témoin" image of `kropa dest test`.
 pub const TEST_IMAGE_PNG: &[u8] = &[
@@ -198,6 +195,8 @@ pub struct Uploader<'a> {
 
 struct Resolved {
     values: HashMap<String, SecretValue>,
+    /// Every place a loaded secret is allowed in (normalised): a `--var` may not feed any of them.
+    placements: Vec<Placement>,
     warnings: Vec<UploadWarning>,
 }
 
@@ -250,7 +249,9 @@ struct RequestEnv<'a> {
     filename: &'a str,
     secrets: &'a HashMap<String, SecretValue>,
     vars: &'a Vars<'a>,
-    /// The slot is named like a credential: a variable may not feed it (`--var`, code 11).
+    /// The slot is a place of credentials: a variable may not feed it (`--var`, code 11). It is when
+    /// it is named like one, **or** holds a `{secret:}` itself (the body included), **or** is a
+    /// place a loaded secret is allowed in.
     sensitive_slot: bool,
 }
 
@@ -299,6 +300,7 @@ struct Plan {
 fn render_slot(
     template: &Template,
     slot_name: &str,
+    placement: &Placement,
     input: &UploadInput,
     resolved: &Resolved,
     vars: &Vars<'_>,
@@ -307,7 +309,9 @@ fn render_slot(
         filename: &input.name,
         secrets: &resolved.values,
         vars,
-        sensitive_slot: is_sensitive_name(slot_name),
+        sensitive_slot: is_sensitive_name(slot_name)
+            || !template.secrets().is_empty()
+            || resolved.placements.contains(placement),
     };
     let text = template.render(&env)?;
     let carries_secret = !template.secrets().is_empty();
@@ -328,6 +332,12 @@ impl<'a> Uploader<'a> {
             secrets,
             http: HttpClient::new()?,
         })
+    }
+
+    /// The engine on a given client (tests only: a client that trusts the CA of a test server).
+    #[cfg(test)]
+    pub(crate) fn with_client(secrets: &'a dyn SecretSource, http: HttpClient) -> Self {
+        Self { secrets, http }
     }
 
     /// Sends `input` to `destination`.
@@ -386,15 +396,15 @@ impl<'a> Uploader<'a> {
         let slots = compiled.secret_slots();
         let mut resolved = Resolved {
             values: HashMap::new(),
+            placements: Vec::new(),
             warnings: Vec::new(),
         };
         if slots.is_empty() {
             return Ok(resolved);
         }
         // Transport first: no secret is even read for a request that could not carry it.
-        let https = compiled.url.scheme() == "https";
-        let loopback_ok = LOOPBACK_HTTP_WITH_SECRET && is_loopback_literal(&compiled.url);
-        if !(https || loopback_ok) {
+        // No exception, not even for the loopback (decision U3): the tests use real HTTPS.
+        if compiled.url.scheme() != "https" {
             return Err(UploadError::security(
                 "https_required",
                 "a secret is used: the address must be https://",
@@ -444,6 +454,7 @@ impl<'a> Uploader<'a> {
                     ));
                 }
             }
+            resolved.placements.extend(allowed);
             resolved.values.insert(slot.name.clone(), entry.value);
         }
         Ok(resolved)
@@ -602,11 +613,26 @@ fn build_plan(
     for (name, template) in &compiled.query {
         plan.query.push((
             name.clone(),
-            render_slot(template, name, input, resolved, vars)?.0,
+            render_slot(
+                template,
+                name,
+                &Placement::Query(name.clone()),
+                input,
+                resolved,
+                vars,
+            )?
+            .0,
         ));
     }
     for (name, template) in &compiled.headers {
-        let (text, secret) = render_slot(template, name, input, resolved, vars)?;
+        let (text, secret) = render_slot(
+            template,
+            name,
+            &Placement::header(name),
+            input,
+            resolved,
+            vars,
+        )?;
         let header_name = HeaderName::from_bytes(name.as_bytes())
             .map_err(|_| UploadError::config(format!("header {name:?} is not valid")))?;
         let mut value = HeaderValue::from_str(&text).map_err(|_| {
@@ -618,11 +644,29 @@ fn build_plan(
     for (name, template) in &compiled.fields {
         plan.fields.push((
             name.clone(),
-            render_slot(template, name, input, resolved, vars)?.0,
+            render_slot(
+                template,
+                name,
+                &Placement::Form(name.clone()),
+                input,
+                resolved,
+                vars,
+            )?
+            .0,
         ));
     }
     if let Some(template) = &compiled.body_template {
-        plan.body_text = Some(render_slot(template, "body", input, resolved, vars)?.0);
+        plan.body_text = Some(
+            render_slot(
+                template,
+                "body",
+                &Placement::body(template.source()),
+                input,
+                resolved,
+                vars,
+            )?
+            .0,
+        );
     }
     Ok(plan)
 }

@@ -27,8 +27,6 @@ kropa-upload.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-# Test builds only: lets a secret travel over the loopback (decision U3), and runs mock servers.
-kropa-upload = { workspace = true, features = ["test-loopback"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 trycmd.workspace = true

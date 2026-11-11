@@ -22,7 +22,7 @@ use kropa_cli::{Io, Services, run_with_services};
 use kropa_core::FixedClock;
 use kropa_upload::origin::canonical_origin;
 use kropa_upload::secret::{MemorySecretSource, Placement, SecretSource, UnavailableSecretSource};
-use wiremock::matchers::{any, header, method, path};
+use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const TOKEN: &str = concat!("cli-", "Zq7kLm9", "Xt2vRw-abcdef");
@@ -286,23 +286,26 @@ async fn upload_errors_use_codes_8_9_and_the_reason() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn upload_with_a_secret_and_the_store_of_lot_1_8() {
+async fn upload_with_a_secret_needs_the_store_of_lot_1_8_and_https() {
     let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/api/upload"))
-        .and(header("authorization", TOKEN))
+    Mock::given(any())
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "files": [{"url": "https://z.example.org/u/abc.png"}]
         })))
-        .expect(1)
         .mount(&server)
         .await;
     let dir = tempfile::tempdir().unwrap();
-    let toml = format!(
-        "[[destination]]\nid = \"zipline\"\ntype = \"zipline\"\nurl = \"{}\"\n[destination.secrets]\ntoken = {{}}\n",
-        server.uri()
+    let destination = |url: &str| {
+        format!(
+            "[[destination]]\nid = \"zipline\"\ntype = \"zipline\"\nurl = \"{url}\"\n[destination.secrets]\ntoken = {{}}\n"
+        )
+    };
+    // The address is https here: the transport is checked first, then the store is asked.
+    config_with(
+        dir.path(),
+        &destination("https://z.example.org"),
+        Some("zipline"),
     );
-    config_with(dir.path(), &toml, Some("zipline"));
     let file = shot(dir.path());
     let c = cfg(dir.path());
 
@@ -322,7 +325,10 @@ async fn upload_with_a_secret_and_the_store_of_lot_1_8() {
     assert!(r.err.contains("lot 1.8"));
     assert_eq!(server.received_requests().await.unwrap().len(), 0);
 
-    // With a store holding the token for this origin and place.
+    config_with(dir.path(), &destination(&server.uri()), Some("zipline"));
+    // With a store holding the token for this origin and place, but an `http://` address: no
+    // exception, not even on the loopback (decision U3). Refused with code 11 before any connection;
+    // the upload with a secret over HTTPS is tested in `kropa-upload` (a real TLS server).
     let store = MemorySecretSource::new();
     store
         .insert(
@@ -334,48 +340,38 @@ async fn upload_with_a_secret_and_the_store_of_lot_1_8() {
         )
         .unwrap();
     let r = cli(
-        &["--config", &c, "upload", &file],
+        &["--lang", "en", "--json", "--config", &c, "upload", &file],
         Arc::new(store),
         false,
         false,
         false,
     )
     .await;
-    assert_eq!(r.code, 0, "{}", r.err);
-    assert_eq!(r.out, "https://z.example.org/u/abc.png\n");
+    assert_eq!(r.code, 11, "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["error"]["reason"], "https_required");
     assert!(!r.err.contains(TOKEN) && !r.out.contains(TOKEN));
+    assert_eq!(server.received_requests().await.unwrap().len(), 0);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_secret_echoed_in_the_link_gives_code_11_and_the_local_path() {
+    // The detector knows every secret loaded in the run (N5). One is registered here, and a server
+    // without any secret echoes it in the link: the CLI must withhold the link. (A secret never
+    // travels over `http://`, so this is the way to reach that path from the CLI tests.)
+    kropa_upload::masked::register_secret(TOKEN);
     let server = MockServer::start().await;
     Mock::given(any())
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "files": [{"url": format!("https://z.example.org/u/{TOKEN}.png")}]
+            "url": format!("https://z.example.org/u/{TOKEN}.png")
         })))
         .mount(&server)
         .await;
     let dir = tempfile::tempdir().unwrap();
-    let toml = format!(
-        "[[destination]]\nid = \"zipline\"\ntype = \"zipline\"\nurl = \"{}\"\n[destination.secrets]\ntoken = {{}}\n",
-        server.uri()
-    );
-    config_with(dir.path(), &toml, Some("zipline"));
+    config_with(dir.path(), &open_destination(&server), Some("open"));
     let file = shot(dir.path());
     let c = cfg(dir.path());
-    let make = || {
-        let store = MemorySecretSource::new();
-        store
-            .insert(
-                "zipline",
-                "token",
-                TOKEN,
-                &[canonical_origin(&server.uri()).unwrap().as_str()],
-                vec![Placement::header("Authorization")],
-            )
-            .unwrap();
-        Arc::new(store) as Arc<dyn SecretSource>
-    };
+    let make = none;
     // Human: stdout is the local file, never the link.
     let r = cli(
         &["--lang", "en", "--config", &c, "upload", &file],

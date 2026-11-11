@@ -3,8 +3,6 @@
 //! Origins (`docs/security/secrets.md` section 4.1): scheme, IDNA host in lower case without the
 //! final dot, and the port, explicit or the default of the scheme.
 
-use std::net::{Ipv4Addr, Ipv6Addr};
-
 use url::{Host, Url};
 
 /// Canonical origin of a URL, `scheme://host:port`; `None` for anything but `http` and `https`, a
@@ -36,22 +34,9 @@ pub fn canonical_origin(text: &str) -> Option<String> {
     origin_of(&Url::parse(text).ok()?)
 }
 
-/// Whether the host is the literal loopback address `127.0.0.1` or `[::1]`. `localhost` is never
-/// accepted: it goes through the resolver (decision U3, `docs/security/secrets.md` section 4.5).
-#[must_use]
-pub fn is_loopback_literal(url: &Url) -> bool {
-    match url.host() {
-        Some(Host::Ipv4(a)) => a == Ipv4Addr::LOCALHOST,
-        Some(Host::Ipv6(a)) => a == Ipv6Addr::LOCALHOST,
-        _ => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use url::Url;
-
-    use super::{canonical_origin, is_loopback_literal, origin_of};
+    use super::canonical_origin;
 
     #[test]
     fn canonical_forms() {
@@ -83,16 +68,5 @@ mod tests {
         assert_eq!(canonical_origin("https://user@host/"), None);
         assert_eq!(canonical_origin("ftp://host/"), None);
         assert_eq!(canonical_origin("not a url"), None);
-    }
-
-    #[test]
-    fn loopback_literals_only() {
-        let yes = |s: &str| is_loopback_literal(&Url::parse(s).unwrap());
-        assert!(yes("http://127.0.0.1:9/"));
-        assert!(yes("http://[::1]:9/"));
-        assert!(!yes("http://localhost:9/"));
-        assert!(!yes("http://127.0.0.2/"));
-        assert!(!yes("http://10.0.0.1/"));
-        assert!(origin_of(&Url::parse("https://a/").unwrap()).is_some());
     }
 }

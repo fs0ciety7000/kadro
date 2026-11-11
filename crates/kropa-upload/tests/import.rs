@@ -317,3 +317,183 @@ fn an_imported_profile_loads_and_is_ready_for_the_store() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Review 1.7 (B1, B2): what a template function carries, and the same rules for every format
+// ---------------------------------------------------------------------------------------------
+
+/// A password made at run time, so that no credential-like literal sits in the source.
+fn password() -> String {
+    format!("{}{}", "Pw-Zq7kLm9", "Xt2vRw-abcdef")
+}
+
+fn sxcu_with_header(url: &str, name: &str, value: &str) -> Vec<u8> {
+    serde_json::json!({
+        "Version": "16.0.1",
+        "Name": "Basic auth",
+        "DestinationType": "ImageUploader",
+        "RequestURL": url,
+        "Headers": { name: value },
+        "Body": "MultipartFormData",
+        "URL": "{json:link}"
+    })
+    .to_string()
+    .into_bytes()
+}
+
+fn toml_with_header(url: &str, name: &str, value: &str) -> Vec<u8> {
+    format!(
+        "[[destination]]\nid = \"basic\"\ntype = \"http\"\n[destination.request]\nurl = \"{url}\"\n[destination.request.headers]\n{name} = '{value}'\n[destination.response]\nurl = \"{{json:link}}\"\n"
+    )
+    .into_bytes()
+}
+
+/// The sonde of the review: `Authorization: Basic {base64:alice:<password>}` and the bare function.
+#[test]
+fn base64_with_a_literal_is_a_secret_in_both_formats() {
+    let pw = password();
+    for (header, value, template) in [
+        (
+            "Authorization",
+            format!("Basic {{base64:alice:{pw}}}"),
+            "Basic {base64:{secret:authorization}}",
+        ),
+        (
+            "X-Auth",
+            format!("{{base64:alice:{pw}}}"),
+            "{base64:{secret:x-auth}}",
+        ),
+    ] {
+        for format in [ImportFormat::Sxcu, ImportFormat::Toml] {
+            let bytes = match format {
+                ImportFormat::Sxcu => {
+                    sxcu_with_header("https://up.example.org/api", header, &value)
+                }
+                ImportFormat::Toml => {
+                    toml_with_header("https://up.example.org/api", header, &value)
+                }
+            };
+            let p = import(&bytes, format, None).unwrap();
+            // The text inside the function went to the store, tied to its place and origin.
+            assert_eq!(p.secrets.len(), 1, "{header} {format:?}");
+            assert_eq!(
+                p.secrets[0].value.as_ref().unwrap().expose(),
+                format!("alice:{pw}")
+            );
+            assert_eq!(p.secrets[0].slot, Slot::Header(header.into()));
+            assert_eq!(p.secrets[0].origin, "https://up.example.org:443");
+            // Never in the profile, hence never in the config file nor in `dest show`.
+            let text = p.destination.to_toml().unwrap();
+            assert!(!text.contains(&pw) && !text.contains("alice"), "{text}");
+            assert!(text.contains(template), "{text}");
+            assert!(!render(&p).contains(&pw));
+            // The profile still compiles, and its secret slot is in the plan.
+            let compiled = p.destination.compile().unwrap();
+            assert_eq!(compiled.secret_slots().len(), 1);
+        }
+    }
+}
+
+#[test]
+fn base64_with_a_literal_over_http_is_refused() {
+    // It used to be kept as is, and the request went out over `http://` with the password.
+    let pw = password();
+    let value = format!("Basic {{base64:alice:{pw}}}");
+    for bytes in [
+        (
+            sxcu_with_header("http://up.example.org/api", "Authorization", &value),
+            ImportFormat::Sxcu,
+        ),
+        (
+            toml_with_header("http://up.example.org/api", "Authorization", &value),
+            ImportFormat::Toml,
+        ),
+    ] {
+        let e = import(&bytes.0, bytes.1, None).unwrap_err();
+        assert_eq!(e.reason(), "https_required");
+        assert_eq!(e.exit_code().code(), 11);
+        assert!(!e.to_string().contains(&pw));
+    }
+}
+
+#[test]
+fn a_secret_taken_back_from_a_base64_returns_to_its_place() {
+    let pw = password();
+    let bytes = sxcu_with_header(
+        "https://up.example.org/api",
+        "Authorization",
+        &format!("Basic {{base64:alice:{pw}}}"),
+    );
+    let mut p = import(&bytes, ImportFormat::Sxcu, None).unwrap();
+    p.mark_public("authorization").unwrap();
+    let text = p.destination.to_toml().unwrap();
+    assert!(
+        text.contains(&format!("Basic {{base64:alice:{pw}}}")),
+        "{text}"
+    );
+}
+
+#[test]
+fn pure_templates_and_unrenderable_mixes() {
+    // Functions of the file name and of variables hold no value: kept, no secret.
+    let bytes = sxcu_with_header(
+        "https://up.example.org/api",
+        "X-Name",
+        "{base64:{filename}}",
+    );
+    let p = import(&bytes, ImportFormat::Sxcu, None).unwrap();
+    assert!(p.secrets.is_empty());
+    assert!(
+        p.destination
+            .to_toml()
+            .unwrap()
+            .contains("{base64:{filename}}")
+    );
+    // A `{base64:}` that mixes text and a function cannot be split into a secret: refused, with
+    // the name of the header and never the text.
+    let pw = password();
+    let mixed = sxcu_with_header(
+        "https://up.example.org/api",
+        "X-Auth",
+        &format!("pre {{base64:{{filename}}:{pw}}} post"),
+    );
+    let e = import(&mixed, ImportFormat::Sxcu, None).unwrap_err();
+    assert_eq!(e.reason(), "import_unsupported");
+    assert!(e.to_string().contains("X-Auth") && !e.to_string().contains(&pw));
+}
+
+/// A token made at run time, as in `token_in_path`.
+fn token() -> String {
+    format!("{}{}", "a8F3kQ9z", "TESTONLY0pX2vB7nC4mR1")
+}
+
+#[test]
+fn a_token_in_the_path_is_refused_in_toml_as_in_sxcu() {
+    let token = token();
+    let url = format!("https://h.example/u/{token}");
+    // A `.toml` with an `http` destination.
+    let http = toml_with_header(&url, "Accept", "application/json");
+    // A `.toml` with a preset.
+    let preset = format!(
+        "[[destination]]\nid = \"team\"\ntype = \"zipline\"\nurl = \"{url}\"\n[destination.secrets]\ntoken = {{}}\n"
+    );
+    // The `.sxcu`, once more, through the same function.
+    let sxcu = sxcu_with_header(&url, "Accept", "application/json");
+    for (bytes, format) in [
+        (http, ImportFormat::Toml),
+        (preset.into_bytes(), ImportFormat::Toml),
+        (sxcu, ImportFormat::Sxcu),
+    ] {
+        let e = import(&bytes, format, None).unwrap_err();
+        assert_eq!(e.reason(), "secret_in_path", "{format:?}");
+        assert_eq!(e.exit_code().code(), 11);
+        assert!(!e.to_string().contains(&token));
+    }
+    // A path made of ordinary words is still accepted.
+    let ok = toml_with_header(
+        "https://h.example/api/v1/upload",
+        "Accept",
+        "application/json",
+    );
+    assert!(import(&ok, ImportFormat::Toml, None).is_ok());
+}

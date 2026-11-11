@@ -27,3 +27,10 @@ pub mod secret;
 pub mod sensitive;
 pub mod template;
 pub use error::UploadError;
+
+// Tests that carry a secret run against a real HTTPS server on the loopback, in this crate only: the
+// client that trusts a test CA exists in test builds of this crate and nowhere else.
+#[cfg(test)]
+mod engine_tests;
+#[cfg(test)]
+mod testing;

@@ -236,15 +236,53 @@ impl Template {
         self.nodes.iter().all(|n| matches!(n, Node::Text(_)))
     }
 
-    /// Whether every node is a function call and nothing else but blanks (a "pure template" such
-    /// as `{filename}`).
+    /// Whether the template is made only of `{filename}`, `{input}` and `{var:}` (and `{base64:}` of
+    /// those) and blanks: a "pure template" that holds no literal value, hence no secret. A literal
+    /// text inside a function (`{base64:user:password}`) is a value like any other: not pure.
     #[must_use]
     pub fn is_pure_call(&self) -> bool {
-        !self.nodes.is_empty()
-            && self.nodes.iter().all(|n| match n {
-                Node::Call(_) => true,
-                Node::Text(t) => t.trim().is_empty(),
-            })
+        !self.nodes.is_empty() && self.only_public_calls()
+    }
+
+    fn only_public_calls(&self) -> bool {
+        self.nodes.iter().all(|n| match n {
+            Node::Text(t) => t.trim().is_empty(),
+            Node::Call(call) => match call.function {
+                Function::Filename | Function::Var => true,
+                Function::Base64 => call.args.iter().all(Self::only_public_calls),
+                _ => false,
+            },
+        })
+    }
+
+    /// The literal text of a template that is exactly one `{base64:text}` (and blanks), the text
+    /// holding no function: `{base64:user:password}`.
+    #[must_use]
+    pub fn base64_literal(&self) -> Option<String> {
+        let mut calls = self.nodes.iter().filter(|n| match n {
+            Node::Text(t) => !t.trim().is_empty(),
+            Node::Call(_) => true,
+        });
+        let (Some(Node::Call(call)), None) = (calls.next(), calls.next()) else {
+            return None;
+        };
+        let [arg] = call.args.as_slice() else {
+            return None;
+        };
+        (call.function == Function::Base64 && arg.is_literal() && !arg.source.is_empty())
+            .then(|| arg.source.clone())
+    }
+
+    /// Whether some `{base64:}` of the template holds literal text (a value to hide).
+    #[must_use]
+    pub fn has_base64_text(&self) -> bool {
+        let mut found = false;
+        self.walk(&mut |call| {
+            if call.function == Function::Base64 && !call.args.iter().all(Self::only_public_calls) {
+                found = true;
+            }
+        });
+        found
     }
 
     fn walk(&self, f: &mut dyn FnMut(&Call)) {
@@ -599,6 +637,10 @@ mod tests {
                 .unwrap()
                 .is_pure_call()
         );
+        let pure = |text: &str| Template::parse(text, Side::Request).unwrap().is_pure_call();
+        assert!(pure("{var:album}") && pure("{base64:{var:a}}"));
+        // A literal inside a function is a value, not a pure template.
+        assert!(!pure("{base64:user:pw}") && !pure("x{base64:{var:a}}"));
         let r = Template::parse("{json:$.a.b} {header:Location}", Side::Response).unwrap();
         assert_eq!(r.json_paths(), ["$.a.b"]);
         assert_eq!(r.header_reads(), ["Location"]);
@@ -609,5 +651,20 @@ mod tests {
         // The name is literal text: a nested call stays text and is not a secret reference.
         let t = Template::parse("{secret:{var:x}}", Side::Request);
         assert!(t.is_err() || t.unwrap().secrets() == ["{var:x}"]);
+    }
+
+    #[test]
+    fn base64_with_literal_text_is_found() {
+        let parse = |t: &str| Template::parse(t, Side::Request).unwrap();
+        assert_eq!(
+            parse("{base64:alice:pw}").base64_literal().as_deref(),
+            Some("alice:pw")
+        );
+        assert!(parse("{base64:alice:pw}").has_base64_text());
+        assert!(parse("x {base64:{var:a}:pw}").has_base64_text());
+        assert_eq!(parse("x{base64:a:b}").base64_literal(), None);
+        assert_eq!(parse("{base64:{var:a}}").base64_literal(), None);
+        assert!(!parse("{base64:{var:a}}").has_base64_text());
+        assert_eq!(parse("{filename}").base64_literal(), None);
     }
 }

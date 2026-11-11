@@ -34,6 +34,26 @@ pub struct HttpClient {
     pub(crate) inner: reqwest::Client,
 }
 
+fn tls_error<E>(_: E) -> UploadError {
+    UploadError::Network {
+        reason: "tls",
+        detail: "the TLS configuration could not be built".to_owned(),
+    }
+}
+
+type TlsBuilder = rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>;
+
+fn tls_builder() -> Result<(Arc<rustls::crypto::CryptoProvider>, TlsBuilder), UploadError> {
+    if !graviola::util::is_cpu_supported() {
+        return Err(UploadError::TlsUnsupported);
+    }
+    let provider = Arc::new(rustls_graviola::default_provider());
+    let builder = ClientConfig::builder_with_provider(Arc::clone(&provider))
+        .with_safe_default_protocol_versions()
+        .map_err(tls_error)?;
+    Ok((provider, builder))
+}
+
 impl HttpClient {
     /// Builds the client.
     ///
@@ -41,20 +61,31 @@ impl HttpClient {
     /// [`UploadError::TlsUnsupported`] when the processor lacks the instructions of the TLS
     /// provider, [`UploadError::Network`] (`tls`) if the system verifier cannot start.
     pub fn new() -> Result<Self, UploadError> {
-        if !graviola::util::is_cpu_supported() {
-            return Err(UploadError::TlsUnsupported);
-        }
-        let tls_error = |_| UploadError::Network {
-            reason: "tls",
-            detail: "the TLS configuration could not be built".to_owned(),
-        };
-        let provider = Arc::new(rustls_graviola::default_provider());
-        let mut config = ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .map_err(tls_error)?
+        let (_, builder) = tls_builder()?;
+        let config = builder
             .with_platform_verifier()
             .map_err(tls_error)?
             .with_no_client_auth();
+        Self::from_tls(config)
+    }
+
+    /// The client of the tests: the system roots **and** the CA of a test server. Compiled in test
+    /// builds of this crate only, so that no binary can trust a CA that the system does not.
+    #[cfg(test)]
+    pub(crate) fn with_extra_root(
+        root: rustls::pki_types::CertificateDer<'static>,
+    ) -> Result<Self, UploadError> {
+        let (provider, builder) = tls_builder()?;
+        let verifier = rustls_platform_verifier::Verifier::new_with_extra_roots([root], provider)
+            .map_err(tls_error)?;
+        let config = builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(verifier))
+            .with_no_client_auth();
+        Self::from_tls(config)
+    }
+
+    fn from_tls(mut config: ClientConfig) -> Result<Self, UploadError> {
         config.alpn_protocols = vec![b"http/1.1".to_vec()];
         let inner = reqwest::Client::builder()
             .use_preconfigured_tls(config)
@@ -94,12 +125,17 @@ pub(crate) fn network_error(e: &reqwest::Error) -> UploadError {
         if err.downcast_ref::<rustls::Error>().is_some() {
             tls = true;
         }
-        if let Some(io) = err.downcast_ref::<std::io::Error>()
-            && io
-                .get_ref()
-                .is_some_and(|inner| inner.downcast_ref::<rustls::Error>().is_some())
-        {
-            tls = true;
+        if let Some(io) = err.downcast_ref::<std::io::Error>() {
+            // `io::Error` wraps another one (hyper, then the TLS connector): look inside each.
+            let mut inner = io.get_ref();
+            while let Some(e) = inner {
+                if e.downcast_ref::<rustls::Error>().is_some() {
+                    tls = true;
+                }
+                inner = e
+                    .downcast_ref::<std::io::Error>()
+                    .and_then(std::io::Error::get_ref);
+            }
         }
         source = err.source();
     }
