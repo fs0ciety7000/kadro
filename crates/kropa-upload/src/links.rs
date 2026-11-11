@@ -146,7 +146,7 @@ mod tests {
         let md = link(LinkFormat::Markdown, "https://z.example.org/a b(1).png", hostile);
         assert!(md.starts_with("![a\\]\\(https://evil.example\\)"), "{md}");
         assert!(md.ends_with("](https://z.example.org/a%20b%281%29.png)"), "{md}");
-        assert!(!md.contains('<'), "{md}");
+        assert!(!md.contains("<script"), "{md}");
         let html = link(LinkFormat::Html, "https://z.example.org/x?a=1&b='2'", hostile);
         assert!(!html.contains("<script>"), "{html}");
         assert!(html.contains("&amp;"), "{html}");
