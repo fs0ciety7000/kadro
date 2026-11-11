@@ -20,6 +20,18 @@
       "labels": ["dependencies", "majeure"]
     },
     {
+      "description": "Cargo: keep Cargo.toml ranges as written; exact versions live in the committed Cargo.lock",
+      "matchManagers": ["cargo"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
+      "description": "Rust: minor updates of crates grouped in a single pull request (patches keep automerging, majors stay separate)",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "rust minor updates",
+      "automerge": false
+    },
+    {
       "description": "Never a major of a database engine: it needs a dump and a restore",
       "matchPackageNames": ["postgres", "/postgres/", "redis", "valkey/valkey", "mysql", "mariadb", "mongo"],
       "matchUpdateTypes": ["major"],
