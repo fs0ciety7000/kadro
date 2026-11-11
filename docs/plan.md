@@ -1,6 +1,6 @@
 # Plan de livraison — Kropa
 
-> État : **proposé, en attente de validation (V2).** Rédigé par `architect` à partir de `decisions.md` (prioritaire) et
+> État : **validé par l'utilisateur le 11/11/2026 (V2).** Rédigé par `architect` à partir de `decisions.md` (prioritaire) et
 > des documents d'équipe. Vidéo et GIF retirés. Développeur seul, sans délai.
 > Chaque PR : `code-reviewer` puis `qa-tester` ; `security-reviewer` en plus si elle touche aux secrets, au réseau, aux
 > dépendances, à la signature ou à la publication. Les tâches **[Utilisateur]** ne se délèguent pas.
@@ -40,7 +40,7 @@ Dépend de : rien. En parallèle : D1, S.
 - [ ] 0.1 **[Utilisateur]** Renommer le dépôt GitHub `kadro` → `kropa`. Fin : remote à jour, ancienne URL redirige.
 - [ ] 0.2 Créer `linux-desktop-dev` et `macos-desktop-dev` dans `.claude/agents/`. Agent : session principale. Fin : relus et validés.
 - [ ] 0.3 Workspace Cargo : `kropa-core`, `kropa-doc`, `kropa-render`, `kropa-capture`, `kropa-upload`, `kropa-store`, `kropa-i18n`, `kropa` (CLI), `kropa-gtk`, `kropa-macos` (binaire `kropa-app`, sous `cfg`). Édition 2024, `rust-toolchain.toml`, MSRV, `[workspace.dependencies]`, `Cargo.lock`, `LICENSE` GPL-3.0-or-later, SPDX. Agent : `backend-dev`. Fin : `cargo build --workspace --locked` et `cargo test` verts sur Linux et macOS ; `kropa --version` répond.
-- [ ] 0.4 CI GitHub Actions : fmt, clippy `-D warnings`, nextest + doctests sur `ubuntu-24.04` et `macos-15`, MSRV, `cargo-deny` (licences), `zizmor` ; actions épinglées par SHA, `permissions: contents: read`, Dependabot hebdomadaire. Agent : `devops`. Fin : PR verte en < 12 min ; une dépendance AGPL fait échouer `deny`.
+- [ ] 0.4 CI GitHub Actions : fmt, clippy `-D warnings`, nextest + doctests sur `ubuntu-24.04` et `macos-15`, MSRV, `cargo-deny` (licences), `zizmor` ; actions épinglées par SHA, `permissions: contents: read`, Renovate (`renovate.json`, à la place de Dependabot). Agent : `devops`. Fin : PR verte en < 12 min ; une dépendance AGPL fait échouer `deny`.
 - [ ] 0.5 `CLAUDE.md` et `AGENTS.md` (stack, commandes, règles : local d'abord, client HTTP unique, horloge injectable, jamais de succès simulé, secrets ni en argument ni en variable d'environnement, Fluent dès la première chaîne, `unsafe` confiné à macOS), `docs/memory/`. Agent : `architect`. Fin : relus par l'utilisateur.
 - [ ] 0.6 Spécification CLI v1 `docs/cli.md` (`capture screen|output|area`, `upload`, `dest`, `queue`, `secrets`, `history`, `edit`, `doctor`, `version` ; `--upload[=profil]`, `--no-upload`, `--copy url|markdown|html|none`, `--json`, `--output`, `--name`, `--delay`, `--last` ; codes de sortie, schéma JSON). Agents : `architect`, `copywriter`. Fin : validée par l'utilisateur.
 - [ ] 0.7 Kadro → Kropa dans `docs/` (historique conservé), `.kadro` → `.kropa` ; mettre à jour `uploads.md` (age, plus de vidéo). Agent : `copywriter`. Fin : `grep -ri kadro docs/` ne renvoie que l'historique.
