@@ -170,12 +170,7 @@ fn remove_if_temporary(path: &Path) {
 }
 
 fn temporary_roots() -> Vec<PathBuf> {
-    let mut roots = vec![std::env::temp_dir()];
-    // `/run/user/<uid>/doc` is the document portal's mount: not ours to clean.
-    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty()) {
-        roots.push(PathBuf::from(runtime).join("kropa"));
-    }
-    roots
+    vec![std::env::temp_dir()]
 }
 
 fn map_uri_error(error: UriError) -> CaptureError {

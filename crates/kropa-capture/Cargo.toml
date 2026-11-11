@@ -15,5 +15,12 @@ thiserror.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd.workspace = true
 
+[features]
+# Builders of small PNG files, for the tests of crates that fake a portal.
+test-support = []
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true
