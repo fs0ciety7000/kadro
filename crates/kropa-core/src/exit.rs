@@ -2,7 +2,7 @@
 
 //! Stable process exit codes (`docs/cli.md` section 3).
 
-/// Exit code of the `kropa` command. The numeric values are a stable contract (SemVer from v1.0).
+/// Exit code of the `kropa` command. The numeric values are a stable contract (`SemVer` from v1.0).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 #[non_exhaustive]
@@ -97,7 +97,11 @@ mod tests {
             (ExitCode::UploadFailed, 9, Some("upload_failed")),
             (ExitCode::CaptureFailed, 10, Some("capture_failed")),
             (ExitCode::SecurityRefused, 11, Some("security_refused")),
-            (ExitCode::InteractionRequired, 12, Some("interaction_required")),
+            (
+                ExitCode::InteractionRequired,
+                12,
+                Some("interaction_required"),
+            ),
             (ExitCode::DaemonUnavailable, 14, Some("daemon_unavailable")),
             (ExitCode::Io, 15, Some("io")),
             (ExitCode::Interrupted, 130, None),

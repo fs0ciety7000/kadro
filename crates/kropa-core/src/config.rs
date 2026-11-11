@@ -105,7 +105,10 @@ impl Config {
         match std::fs::read_to_string(path) {
             Ok(text) => Self::from_toml_str(&text, path),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(source) => Err(CoreError::Io { path: path.to_owned(), source }),
+            Err(source) => Err(CoreError::Io {
+                path: path.to_owned(),
+                source,
+            }),
         }
     }
 
@@ -126,21 +129,29 @@ impl Config {
     /// # Errors
     /// [`CoreError::ConfigValue`] naming the key.
     pub fn validate(&self) -> Result<(), CoreError> {
-        NameTemplate::parse(&self.name_template)
-            .map_err(|e| CoreError::ConfigValue { key: "name_template", reason: e.to_string() })?;
+        NameTemplate::parse(&self.name_template).map_err(|e| CoreError::ConfigValue {
+            key: "name_template",
+            reason: e.to_string(),
+        })?;
         if let Some(lang) = &self.language {
             let ok = (2..=35).contains(&lang.len())
-                && lang.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+                && lang
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
             if !ok {
                 return Err(CoreError::ConfigValue {
                     key: "language",
-                    reason: format!("{lang:?} is not a language tag (expected for example \"fr\" or \"en\")"),
+                    reason: format!(
+                        "{lang:?} is not a language tag (expected for example \"fr\" or \"en\")"
+                    ),
                 });
             }
         }
         if let Some(profile) = &self.default_destination {
             let ok = (1..=64).contains(&profile.len())
-                && profile.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+                && profile
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
             if !ok {
                 return Err(CoreError::ConfigValue {
                     key: "default_destination",
@@ -240,7 +251,10 @@ mod tests {
 
     #[test]
     fn roundtrip() {
-        let c = Config { default_destination: Some("s3-prod".into()), ..Config::default() };
+        let c = Config {
+            default_destination: Some("s3-prod".into()),
+            ..Config::default()
+        };
         let text = toml::to_string(&c).unwrap();
         assert_eq!(parse(&text).unwrap(), c);
     }
@@ -248,7 +262,12 @@ mod tests {
     #[test]
     fn parse_error_has_line_and_column() {
         let err = parse("language = \"fr\"\nimage_format = = \"png\"\n").unwrap_err();
-        let CoreError::ConfigParse { line, column, path, .. } = &err else { panic!("{err:?}") };
+        let CoreError::ConfigParse {
+            line, column, path, ..
+        } = &err
+        else {
+            panic!("{err:?}")
+        };
         assert_eq!((*line, *column), (2, 16));
         assert_eq!(path, Path::new("config.toml"));
         assert_eq!(err.exit_code(), ExitCode::Config);
@@ -258,9 +277,22 @@ mod tests {
     #[test]
     fn unknown_key_and_wrong_type_are_errors() {
         let err = parse("a = 1\n").unwrap_err();
-        assert!(matches!(err, CoreError::ConfigParse { line: 1, column: 1, .. }), "{err:?}");
+        assert!(
+            matches!(
+                err,
+                CoreError::ConfigParse {
+                    line: 1,
+                    column: 1,
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
         let err = parse("image_format = \"bmp\"\n").unwrap_err();
-        assert!(matches!(err, CoreError::ConfigParse { line: 1, .. }), "{err:?}");
+        assert!(
+            matches!(err, CoreError::ConfigParse { line: 1, .. }),
+            "{err:?}"
+        );
         let err = parse("name_template = 3\n").unwrap_err();
         assert!(matches!(err, CoreError::ConfigParse { .. }), "{err:?}");
     }
@@ -284,9 +316,15 @@ mod tests {
     #[test]
     fn missing_file_gives_defaults_and_directory_is_io_error() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(Config::load_from(Some(dir.path())).unwrap(), Config::default());
+        assert_eq!(
+            Config::load_from(Some(dir.path())).unwrap(),
+            Config::default()
+        );
         std::fs::write(dir.path().join("config.toml"), "image_format = \"jpeg\"\n").unwrap();
-        assert_eq!(Config::load_from(Some(dir.path())).unwrap().image_format, ImageFormat::Jpeg);
+        assert_eq!(
+            Config::load_from(Some(dir.path())).unwrap().image_format,
+            ImageFormat::Jpeg
+        );
         let sub = tempfile::tempdir().unwrap();
         std::fs::create_dir(sub.path().join("config.toml")).unwrap();
         let err = Config::load_from(Some(sub.path())).unwrap_err();

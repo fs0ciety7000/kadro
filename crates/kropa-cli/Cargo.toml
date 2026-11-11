@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[lib]
+name = "kropa_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "kropa"
 path = "src/main.rs"

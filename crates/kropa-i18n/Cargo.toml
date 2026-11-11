@@ -13,6 +13,5 @@ workspace = true
 
 [dependencies]
 fluent-bundle.workspace = true
-fluent-langneg.workspace = true
 thiserror.workspace = true
 unic-langid.workspace = true

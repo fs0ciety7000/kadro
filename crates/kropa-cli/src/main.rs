@@ -2,13 +2,12 @@
 
 //! Entry point of the `kropa` command.
 
-use clap::Parser;
+use std::ffi::OsString;
+use std::process::ExitCode;
 
-/// Capture, annotate and upload screenshots.
-#[derive(Parser)]
-#[command(name = "kropa", version, about)]
-struct Cli {}
-
-fn main() {
-    let _cli = Cli::parse();
+fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    // Only the standard locale variables are ever looked up (see `kropa_i18n::ENV_VARS`).
+    let lookup = |name: &str| std::env::var(name).ok();
+    kropa_cli::run(&args, &lookup).into()
 }

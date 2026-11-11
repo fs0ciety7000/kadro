@@ -8,7 +8,6 @@
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource};
-use fluent_langneg::{NegotiationStrategy, negotiate_languages};
 use unic_langid::LanguageIdentifier;
 
 const EN_FTL: &str = include_str!("../i18n/en.ftl");
@@ -86,10 +85,10 @@ fn is_c_locale(value: &str) -> bool {
 fn from_locale(value: &str) -> Option<Lang> {
     let tag = value.split(['.', '@']).next()?.replace('_', "-");
     let requested: LanguageIdentifier = tag.parse().ok()?;
-    let available: Vec<LanguageIdentifier> = Lang::ALL.iter().map(|l| l.langid()).collect();
-    let chosen = negotiate_languages(&[requested], &available, None, NegotiationStrategy::Filtering);
-    let first = chosen.first()?;
-    Lang::ALL.into_iter().find(|l| l.langid() == **first)
+    // Only two languages: match on the primary language subtag (fr-CA -> fr).
+    Lang::ALL
+        .into_iter()
+        .find(|l| l.code() == requested.language.as_str())
 }
 
 /// Negotiates the language: `cli` (value of `--lang`) wins when it is supported, then the first of
@@ -103,7 +102,13 @@ pub fn negotiate(cli: Option<&str>, env: &dyn Fn(&str) -> Option<String>) -> Lan
     ENV_VARS
         .iter()
         .find_map(|name| env(name).filter(|v| !v.is_empty()))
-        .and_then(|v| if is_c_locale(&v) { None } else { from_locale(&v) })
+        .and_then(|v| {
+            if is_c_locale(&v) {
+                None
+            } else {
+                from_locale(&v)
+            }
+        })
         .unwrap_or_default()
 }
 
@@ -116,7 +121,9 @@ pub struct Localizer {
 
 impl std::fmt::Debug for Localizer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Localizer").field("lang", &self.lang).finish_non_exhaustive()
+        f.debug_struct("Localizer")
+            .field("lang", &self.lang)
+            .finish_non_exhaustive()
     }
 }
 
@@ -138,8 +145,16 @@ impl Localizer {
     /// # Errors
     /// [`I18nError::BadResource`] if an embedded resource is invalid.
     pub fn new(lang: Lang) -> Result<Self, I18nError> {
-        let fallback = if lang == Lang::En { None } else { Some(bundle(Lang::En)?) };
-        Ok(Self { lang, primary: bundle(lang)?, fallback })
+        let fallback = if lang == Lang::En {
+            None
+        } else {
+            Some(bundle(Lang::En)?)
+        };
+        Ok(Self {
+            lang,
+            primary: bundle(lang)?,
+            fallback,
+        })
     }
 
     /// The language in use.
@@ -174,10 +189,14 @@ mod tests {
 
     use fluent_bundle::FluentResource;
 
-    use super::{FR_FTL, EN_FTL, I18nError, Lang, Localizer, negotiate};
+    use super::{EN_FTL, FR_FTL, I18nError, Lang, Localizer, negotiate};
 
     fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |name| vars.iter().find(|(k, _)| *k == name).map(|(_, v)| (*v).to_owned())
+        move |name| {
+            vars.iter()
+                .find(|(k, _)| *k == name)
+                .map(|(_, v)| (*v).to_owned())
+        }
     }
 
     fn ids(source: &str) -> BTreeSet<String> {
@@ -186,7 +205,10 @@ mod tests {
         source
             .lines()
             .filter_map(|l| l.split_once(" = ").map(|(id, _)| id))
-            .filter(|id| id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+            .filter(|id| {
+                id.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            })
             .map(str::to_owned)
             .collect()
     }
@@ -199,21 +221,37 @@ mod tests {
 
     #[test]
     fn cli_wins_over_environment() {
-        assert_eq!(negotiate(Some("fr"), &env(&[("LANG", "en_US.UTF-8")])), Lang::Fr);
-        assert_eq!(negotiate(Some("EN"), &env(&[("LC_ALL", "fr_FR.UTF-8")])), Lang::En);
+        assert_eq!(
+            negotiate(Some("fr"), &env(&[("LANG", "en_US.UTF-8")])),
+            Lang::Fr
+        );
+        assert_eq!(
+            negotiate(Some("EN"), &env(&[("LC_ALL", "fr_FR.UTF-8")])),
+            Lang::En
+        );
     }
 
     #[test]
     fn environment_precedence() {
-        let all = [("LC_ALL", "fr_FR.UTF-8"), ("LC_MESSAGES", "en_US.UTF-8"), ("LANG", "en_US.UTF-8")];
+        let all = [
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LC_MESSAGES", "en_US.UTF-8"),
+            ("LANG", "en_US.UTF-8"),
+        ];
         assert_eq!(negotiate(None, &env(&all)), Lang::Fr);
         let msg = [("LC_MESSAGES", "fr_BE.UTF-8"), ("LANG", "en_US.UTF-8")];
         assert_eq!(negotiate(None, &env(&msg)), Lang::Fr);
         assert_eq!(negotiate(None, &env(&[("LANG", "fr_CA@euro")])), Lang::Fr);
         // An empty LC_ALL is ignored.
-        assert_eq!(negotiate(None, &env(&[("LC_ALL", ""), ("LANG", "fr_FR")])), Lang::Fr);
+        assert_eq!(
+            negotiate(None, &env(&[("LC_ALL", ""), ("LANG", "fr_FR")])),
+            Lang::Fr
+        );
         // The first set variable decides even if it is not supported.
-        assert_eq!(negotiate(None, &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])), Lang::En);
+        assert_eq!(
+            negotiate(None, &env(&[("LC_ALL", "de_DE.UTF-8"), ("LANG", "fr_FR")])),
+            Lang::En
+        );
     }
 
     #[test]
@@ -232,7 +270,10 @@ mod tests {
         assert_eq!(Lang::parse("fr").unwrap(), Lang::Fr);
         assert_eq!(Lang::parse("fr-FR").unwrap(), Lang::Fr);
         assert_eq!(Lang::parse("EN").unwrap(), Lang::En);
-        assert!(matches!(Lang::parse("de"), Err(I18nError::UnsupportedLanguage(_))));
+        assert!(matches!(
+            Lang::parse("de"),
+            Err(I18nError::UnsupportedLanguage(_))
+        ));
         assert!(Lang::parse("C").is_err());
         assert!(Lang::parse("").is_err());
     }
@@ -243,7 +284,10 @@ mod tests {
         let fr = Localizer::new(Lang::Fr).unwrap();
         assert_eq!(en.lang(), Lang::En);
         assert_ne!(en.message("cli-about"), fr.message("cli-about"));
-        assert_eq!(fr.message("cli-about"), "Capturer, annoter et envoyer des captures d'écran.");
+        assert_eq!(
+            fr.message("cli-about"),
+            "Capturer, annoter et envoyer des captures d'écran."
+        );
         assert_eq!(fr.message("cli-usage-heading"), "Utilisation :");
     }
 

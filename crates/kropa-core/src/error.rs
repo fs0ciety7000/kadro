@@ -83,7 +83,9 @@ impl CoreError {
     #[must_use]
     pub fn exit_code(&self) -> ExitCode {
         match self {
-            Self::ConfigParse { .. } | Self::ConfigValue { .. } | Self::NoHome(_) => ExitCode::Config,
+            Self::ConfigParse { .. } | Self::ConfigValue { .. } | Self::NoHome(_) => {
+                ExitCode::Config
+            }
             Self::Name(_) => ExitCode::Usage,
             Self::Io { .. } => ExitCode::Io,
         }
@@ -105,10 +107,16 @@ mod tests {
         };
         assert_eq!(parse.exit_code(), ExitCode::Config);
         assert_eq!(parse.to_string(), "c.toml:1:2: x");
-        let value = CoreError::ConfigValue { key: "k", reason: "r".into() };
+        let value = CoreError::ConfigValue {
+            key: "k",
+            reason: "r".into(),
+        };
         assert_eq!(value.exit_code(), ExitCode::Config);
         assert_eq!(CoreError::NoHome("config").exit_code(), ExitCode::Config);
-        assert_eq!(CoreError::from(NameError::Exhausted).exit_code(), ExitCode::Usage);
+        assert_eq!(
+            CoreError::from(NameError::Exhausted).exit_code(),
+            ExitCode::Usage
+        );
         let io = CoreError::Io {
             path: "p".into(),
             source: std::io::Error::other("boom"),

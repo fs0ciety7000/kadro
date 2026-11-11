@@ -19,6 +19,7 @@
 //! separator or a control character: they are sanitised, then the whole name is validated by
 //! [`validate_file_name`], so a rendered name is always a single, portable path component.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::{Clock, NameError};
@@ -29,8 +30,8 @@ const MAX_NAME_BYTES: usize = 255;
 const MAX_COUNTER_TRIES: u32 = 100_000;
 const FORBIDDEN: &[char] = &['/', '\\', '<', '>', ':', '"', '|', '?', '*'];
 const RESERVED: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
 /// Values available to a template.
@@ -52,7 +53,14 @@ pub struct NameContext {
 
 impl Default for NameContext {
     fn default() -> Self {
-        Self { kind: None, output: None, host: None, width: None, height: None, counter: 1 }
+        Self {
+            kind: None,
+            output: None,
+            host: None,
+            width: None,
+            height: None,
+            counter: 1,
+        }
     }
 }
 
@@ -95,7 +103,11 @@ impl NameTemplate {
                     chars.next();
                     literal.push('}');
                 }
-                '}' => return Err(NameError::Syntax("unmatched '}' (write '}}' for a literal brace)".into())),
+                '}' => {
+                    return Err(NameError::Syntax(
+                        "unmatched '}' (write '}}' for a literal brace)".into(),
+                    ));
+                }
                 '{' => {
                     let mut body = String::new();
                     loop {
@@ -120,7 +132,10 @@ impl NameTemplate {
         if !literal.is_empty() {
             parts.push(Part::Literal(literal));
         }
-        let template = Self { source: source.to_owned(), parts };
+        let template = Self {
+            source: source.to_owned(),
+            parts,
+        };
         template.check_sample()?;
         Ok(template)
     }
@@ -136,7 +151,8 @@ impl NameTemplate {
             height: Some(1080),
             counter: 1,
         };
-        let epoch = crate::FixedClock::new(jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC));
+        let epoch =
+            crate::FixedClock::new(jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC));
         self.render(&sample, &epoch, "png").map(|_| ())
     }
 
@@ -156,7 +172,12 @@ impl NameTemplate {
     ///
     /// # Errors
     /// [`NameError`] if a variable has no value, or if the result is not a safe file name.
-    pub fn render(&self, ctx: &NameContext, clock: &dyn Clock, ext: &str) -> Result<String, NameError> {
+    pub fn render(
+        &self,
+        ctx: &NameContext,
+        clock: &dyn Clock,
+        ext: &str,
+    ) -> Result<String, NameError> {
         validate_extension(ext)?;
         let now = clock.now();
         let mut name = String::new();
@@ -168,11 +189,15 @@ impl NameTemplate {
                         .map_err(|e| NameError::Syntax(format!("date format {fmt:?}: {e}")))?;
                     name.push_str(&sanitize(&text));
                 }
-                Part::Counter(width) => name.push_str(&format!("{:0width$}", ctx.counter)),
+                Part::Counter(width) => {
+                    let _ = write!(name, "{:0width$}", ctx.counter);
+                }
                 Part::Width => name.push_str(&required(ctx.width, "w")?.to_string()),
                 Part::Height => name.push_str(&required(ctx.height, "h")?.to_string()),
                 Part::Kind => name.push_str(&sanitize(required(ctx.kind.as_deref(), "kind")?)),
-                Part::Output => name.push_str(&sanitize(required(ctx.output.as_deref(), "output")?)),
+                Part::Output => {
+                    name.push_str(&sanitize(required(ctx.output.as_deref(), "output")?));
+                }
                 Part::Host => name.push_str(&sanitize(required(ctx.host.as_deref(), "host")?)),
             }
         }
@@ -254,11 +279,16 @@ fn parse_variable(body: &str) -> Result<Part, NameError> {
 
 fn check_format(variable: &str, fmt: &str) -> Result<String, NameError> {
     if fmt.is_empty() {
-        return Err(NameError::BadArgument { variable: variable.into(), reason: "empty format".into() });
+        return Err(NameError::BadArgument {
+            variable: variable.into(),
+            reason: "empty format".into(),
+        });
     }
     let probe = jiff::Timestamp::UNIX_EPOCH.to_zoned(jiff::tz::TimeZone::UTC);
-    jiff::fmt::strtime::format(fmt, &probe)
-        .map_err(|e| NameError::BadArgument { variable: variable.into(), reason: e.to_string() })?;
+    jiff::fmt::strtime::format(fmt, &probe).map_err(|e| NameError::BadArgument {
+        variable: variable.into(),
+        reason: e.to_string(),
+    })?;
     Ok(fmt.to_owned())
 }
 
@@ -266,7 +296,13 @@ fn check_format(variable: &str, fmt: &str) -> Result<String, NameError> {
 fn sanitize(value: &str) -> String {
     value
         .chars()
-        .map(|c| if c.is_control() || FORBIDDEN.contains(&c) { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || FORBIDDEN.contains(&c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -274,7 +310,9 @@ fn validate_extension(ext: &str) -> Result<(), NameError> {
     if (1..=8).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric()) {
         Ok(())
     } else {
-        Err(NameError::UnsafeName("extension must be 1 to 8 ASCII letters or digits"))
+        Err(NameError::UnsafeName(
+            "extension must be 1 to 8 ASCII letters or digits",
+        ))
     }
 }
 
@@ -347,7 +385,10 @@ mod tests {
     fn renders_variables() {
         assert_eq!(render("{date}_{time}").unwrap(), "2026-11-11_09-08-07.png");
         assert_eq!(render("{date:%Y%m%d}-{host}").unwrap(), "20261111-box.png");
-        assert_eq!(render("{kind}-{mode}-{output}-{w}x{h}").unwrap(), "screen-screen-DP-1-1920x1080.png");
+        assert_eq!(
+            render("{kind}-{mode}-{output}-{w}x{h}").unwrap(),
+            "screen-screen-DP-1-1920x1080.png"
+        );
         assert_eq!(render("shot-{n}").unwrap(), "shot-7.png");
         assert_eq!(render("shot-{n:4}").unwrap(), "shot-0007.png");
     }
@@ -360,28 +401,56 @@ mod tests {
 
     #[test]
     fn parse_errors() {
-        assert!(matches!(NameTemplate::parse("{date"), Err(NameError::Syntax(_))));
-        assert!(matches!(NameTemplate::parse("a}"), Err(NameError::Syntax(_))));
-        assert!(matches!(NameTemplate::parse("{nope}"), Err(NameError::UnknownVariable(v)) if v == "nope"));
-        assert!(matches!(NameTemplate::parse("{n:0}"), Err(NameError::BadArgument { .. })));
-        assert!(matches!(NameTemplate::parse("{n:10}"), Err(NameError::BadArgument { .. })));
-        assert!(matches!(NameTemplate::parse("{w:3}"), Err(NameError::BadArgument { .. })));
-        assert!(matches!(NameTemplate::parse("{date:}"), Err(NameError::BadArgument { .. })));
+        assert!(matches!(
+            NameTemplate::parse("{date"),
+            Err(NameError::Syntax(_))
+        ));
+        assert!(matches!(
+            NameTemplate::parse("a}"),
+            Err(NameError::Syntax(_))
+        ));
+        assert!(
+            matches!(NameTemplate::parse("{nope}"), Err(NameError::UnknownVariable(v)) if v == "nope")
+        );
+        assert!(matches!(
+            NameTemplate::parse("{n:0}"),
+            Err(NameError::BadArgument { .. })
+        ));
+        assert!(matches!(
+            NameTemplate::parse("{n:10}"),
+            Err(NameError::BadArgument { .. })
+        ));
+        assert!(matches!(
+            NameTemplate::parse("{w:3}"),
+            Err(NameError::BadArgument { .. })
+        ));
+        assert!(matches!(
+            NameTemplate::parse("{date:}"),
+            Err(NameError::BadArgument { .. })
+        ));
     }
 
     #[test]
     fn missing_variable_is_explicit() {
         let t = NameTemplate::parse("{host}").unwrap();
-        let err = t.render(&NameContext::default(), &clock(), "png").unwrap_err();
+        let err = t
+            .render(&NameContext::default(), &clock(), "png")
+            .unwrap_err();
         assert_eq!(err, NameError::MissingVariable("host"));
     }
 
     #[test]
     fn substituted_values_are_sanitised() {
         let t = NameTemplate::parse("{host}").unwrap();
-        let ctx = NameContext { host: Some("a/b\\c\nd".into()), ..NameContext::default() };
+        let ctx = NameContext {
+            host: Some("a/b\\c\nd".into()),
+            ..NameContext::default()
+        };
         assert_eq!(t.render(&ctx, &clock(), "png").unwrap(), "a_b_c_d.png");
-        let ctx = NameContext { host: Some("..".into()), ..NameContext::default() };
+        let ctx = NameContext {
+            host: Some("..".into()),
+            ..NameContext::default()
+        };
         assert!(t.render(&ctx, &clock(), "png").is_err());
         // A date format cannot smuggle a separator either.
         assert_eq!(render("{date:%Y/%m}").unwrap(), "2026_11.png");
@@ -389,13 +458,37 @@ mod tests {
 
     #[test]
     fn dangerous_templates_are_refused() {
-        for src in ["../x", "a/b", "/etc/passwd", "a\\b", "C:x", ".hidden", "x\u{0}y", "x\ny", "CON", "nul", "a..b", "x ", ""] {
+        for src in [
+            "../x",
+            "a/b",
+            "/etc/passwd",
+            "a\\b",
+            "C:x",
+            ".hidden",
+            "x\u{0}y",
+            "x\ny",
+            "CON",
+            "nul",
+            "a..b",
+            "x ",
+            "",
+        ] {
             assert!(render(src).is_err(), "{src:?} should be refused");
         }
         assert!(render("COM1").is_err());
         assert!(render("lpt9").is_err());
-        assert!(NameTemplate::parse("a").unwrap().render(&full_ctx(), &clock(), "p/ng").is_err());
-        assert!(NameTemplate::parse("a").unwrap().render(&full_ctx(), &clock(), "").is_err());
+        assert!(
+            NameTemplate::parse("a")
+                .unwrap()
+                .render(&full_ctx(), &clock(), "p/ng")
+                .is_err()
+        );
+        assert!(
+            NameTemplate::parse("a")
+                .unwrap()
+                .render(&full_ctx(), &clock(), "")
+                .is_err()
+        );
     }
 
     #[test]
@@ -420,7 +513,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("s.png"), b"").unwrap();
         let t = NameTemplate::parse("s").unwrap();
-        let path = t.render_unique(dir.path(), &NameContext::default(), &clock(), "png").unwrap();
+        let path = t
+            .render_unique(dir.path(), &NameContext::default(), &clock(), "png")
+            .unwrap();
         assert_eq!(path, dir.path().join("s.png"));
     }
 
@@ -429,7 +524,11 @@ mod tests {
         assert_eq!(joined.parent(), Some(dir));
         let last = joined.components().next_back().unwrap();
         assert!(matches!(last, Component::Normal(_)), "{name:?}");
-        assert_eq!(joined.components().count(), dir.components().count() + 1, "{name:?}");
+        assert_eq!(
+            joined.components().count(),
+            dir.components().count() + 1,
+            "{name:?}"
+        );
         assert_eq!(joined.file_name().unwrap().to_str(), Some(name));
     }
 
@@ -463,20 +562,20 @@ mod tests {
                 height: Some(1),
                 counter,
             };
-            if let Ok(t) = NameTemplate::parse(&src) {
-                if let Ok(name) = t.render(&ctx, &clock(), "png") {
-                    assert_stays_in(Path::new("/target/dir"), &name);
-                    prop_assert!(validate_file_name(&name).is_ok());
-                }
+            if let Ok(t) = NameTemplate::parse(&src)
+                && let Ok(name) = t.render(&ctx, &clock(), "png")
+            {
+                assert_stays_in(Path::new("/target/dir"), &name);
+                prop_assert!(validate_file_name(&name).is_ok());
             }
         }
 
         #[test]
         fn arbitrary_templates_never_panic_nor_escape(src in "\\PC{0,40}") {
-            if let Ok(t) = NameTemplate::parse(&src) {
-                if let Ok(name) = t.render(&NameContext::default(), &clock(), "png") {
-                    assert_stays_in(Path::new("/target/dir"), &name);
-                }
+            if let Ok(t) = NameTemplate::parse(&src)
+                && let Ok(name) = t.render(&NameContext::default(), &clock(), "png")
+            {
+                assert_stays_in(Path::new("/target/dir"), &name);
             }
         }
     }
