@@ -1,0 +1,4 @@
+/* Valeurs localisées de Info.plist. */
+"CFBundleName" = "Kropa";
+"CFBundleDisplayName" = "Kropa";
+"NSScreenCaptureUsageDescription" = "Kropa a besoin d'enregistrer l'écran pour faire des captures d'écran.";
