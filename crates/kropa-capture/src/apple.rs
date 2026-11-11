@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Decisions of the macOS backend that need no system call: what a version number allows, which
-//! `.app` a path belongs to, how a ScreenCaptureKit error is read, and the order of the permission
+//! `.app` a path belongs to, how a `ScreenCaptureKit` error is read, and the order of the permission
 //! check.
 //!
 //! They live outside the `macos` module so that Linux CI runs their tests too; the `macos` module
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 /// Oldest macOS Kropa supports (`docs/decisions.md`).
 pub const MIN_MACOS_MAJOR: u32 = 15;
 
-/// `SCStreamErrorUserDeclined`: ScreenCaptureKit's answer when the Screen Recording permission is
+/// `SCStreamErrorUserDeclined`: `ScreenCaptureKit`'s answer when the Screen Recording permission is
 /// missing or does not apply to this process.
 pub const SC_USER_DECLINED: isize = -3801;
 
@@ -59,7 +59,7 @@ pub fn bundle_of(exe: &Path) -> Option<PathBuf> {
     (is(macos_dir, "MacOS") && is(contents, "Contents") && is_app).then(|| app.to_owned())
 }
 
-/// How a ScreenCaptureKit error is to be reported.
+/// How a `ScreenCaptureKit` error is to be reported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SckError {
     /// The permission is missing, or macOS does not link it to this process.
@@ -68,7 +68,7 @@ pub enum SckError {
     Other,
 }
 
-/// Classifies an `NSError` of ScreenCaptureKit from its domain and code.
+/// Classifies an `NSError` of `ScreenCaptureKit` from its domain and code.
 #[must_use]
 pub fn classify_sck_error(domain: &str, code: isize) -> SckError {
     if code == SC_USER_DECLINED && domain.contains("ScreenCaptureKit") {

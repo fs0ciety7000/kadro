@@ -3,7 +3,7 @@
 //! Screen capture abstraction of Kropa, with an explicit status and fallback per platform.
 //!
 //! [`CaptureBackend`] is the contract every platform fills: the Linux portal backend lives in
-//! `linux` (compiled on Linux only), the macOS ScreenCaptureKit one in `macos` (macOS only). A
+//! `linux` (compiled on Linux only), the macOS `ScreenCaptureKit` one in `macos` (macOS only). A
 //! backend never reports a success it did not get: what it cannot do is a [`CaptureError`] with a
 //! stable reason, and what is degraded shows in its [`Diagnosis`]. Nothing here depends on a
 //! toolkit; the async runtime needed by D-Bus stays inside the Linux backend, and the Objective-C
@@ -73,7 +73,7 @@ pub struct CaptureRequest<'a> {
 pub enum BackendId {
     /// The `org.freedesktop.portal.Screenshot` portal.
     PortalScreenshot,
-    /// `SCScreenshotManager` of ScreenCaptureKit (macOS).
+    /// `SCScreenshotManager` of `ScreenCaptureKit` (macOS).
     ScreenCaptureKit,
 }
 

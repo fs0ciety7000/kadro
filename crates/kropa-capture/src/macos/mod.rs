@@ -4,7 +4,7 @@
     reason = "Objective-C and CoreGraphics calls; each `unsafe` block says why it is sound"
 )]
 
-//! macOS backend: `SCScreenshotManager` of ScreenCaptureKit through the generated `objc2` bindings.
+//! macOS backend: `SCScreenshotManager` of `ScreenCaptureKit` through the generated `objc2` bindings.
 //!
 //! The Rust side is safe: everything that needs `unsafe` is in the private submodules, behind
 //! functions that take and return plain Rust values, and every block carries a `SAFETY` comment.
@@ -38,7 +38,7 @@ use crate::{
     sanitize_png,
 };
 
-/// Screenshots through ScreenCaptureKit.
+/// Screenshots through `ScreenCaptureKit`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ScreenCaptureKit;
 

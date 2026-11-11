@@ -17,7 +17,7 @@ pub enum Denial {
     NotAllowed,
     /// macOS: the Screen Recording permission (TCC) is not granted to Kropa.
     ScreenRecordingDenied,
-    /// macOS: the permission looks granted but ScreenCaptureKit still refuses, which is what a
+    /// macOS: the permission looks granted but `ScreenCaptureKit` still refuses, which is what a
     /// stale entry looks like after the application was replaced by a differently signed build.
     ScreenRecordingStale,
 }
@@ -56,9 +56,9 @@ pub enum Failure {
     NoGraphicalSession,
     /// The screen asked for does not exist, or its name designates several screens.
     OutputNotFound,
-    /// macOS: ScreenCaptureKit answered with an error that is not a refusal.
+    /// macOS: `ScreenCaptureKit` answered with an error that is not a refusal.
     ScreenCaptureKitError,
-    /// macOS: ScreenCaptureKit never answered.
+    /// macOS: `ScreenCaptureKit` never answered.
     ScreenCaptureKitNoResponse,
     /// The image could not be turned into a PNG file.
     ImageEncoding,

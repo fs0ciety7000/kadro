@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! ScreenCaptureKit calls, made blocking.
+//! `ScreenCaptureKit` calls, made blocking.
 //!
-//! ScreenCaptureKit answers through completion handlers that run on a queue of its own. Each
+//! `ScreenCaptureKit` answers through completion handlers that run on a queue of its own. Each
 //! function here starts the request, parks the calling thread on a channel until the handler has
 //! sent its result (or a timeout expired), and returns plain Rust values: no future and no
 //! Objective-C object other than the image leaves this module.
@@ -26,11 +26,11 @@ use super::system;
 use crate::apple::{SckError, classify_sck_error};
 use crate::{CaptureError, Denial, Failure};
 
-/// How long ScreenCaptureKit gets to answer one request. A missing permission answers at once; a
+/// How long `ScreenCaptureKit` gets to answer one request. A missing permission answers at once; a
 /// handler that never fires would otherwise hang the command forever.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// An error object of ScreenCaptureKit, reduced to what is reported.
+/// An error object of `ScreenCaptureKit`, reduced to what is reported.
 #[derive(Debug)]
 struct ErrorInfo {
     domain: String,
@@ -98,7 +98,7 @@ fn wait<T>(rx: &mpsc::Receiver<Answer<T>>, what: &str) -> Result<T, CaptureError
     }
 }
 
-/// The displays ScreenCaptureKit can capture. Needs the Screen Recording permission.
+/// The displays `ScreenCaptureKit` can capture. Needs the Screen Recording permission.
 fn shareable_content() -> Result<Retained<SCShareableContent>, CaptureError> {
     let (tx, rx) = mpsc::channel::<Answer<Retained<SCShareableContent>>>();
     let handler = RcBlock::new(move |content: *mut SCShareableContent, error: *mut NSError| {

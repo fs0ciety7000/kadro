@@ -26,7 +26,7 @@ pub(super) fn os_version() -> OsVersion {
 /// Whether this process belongs to a login session with a window server.
 ///
 /// Over ssh, or from a daemon started outside the user's session, macOS has no such session and
-/// ScreenCaptureKit cannot work: the capture must fail with a clear message instead of a crash or
+/// `ScreenCaptureKit` cannot work: the capture must fail with a clear message instead of a crash or
 /// a hang.
 pub(super) fn has_graphical_session() -> bool {
     CGSessionCopyCurrentDictionary().is_some()

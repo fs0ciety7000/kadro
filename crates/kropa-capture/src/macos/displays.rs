@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The screens that are connected: geometry from CoreGraphics (no permission needed), names from
-//! AppKit.
+//! The screens that are connected: geometry from `CoreGraphics` (no permission needed), names from
+//! `AppKit`.
 
 use std::collections::HashMap;
 
@@ -35,7 +35,7 @@ fn active_ids() -> Vec<CGDirectDisplayID> {
 
 /// Display names by screen number, from `NSScreen`.
 ///
-/// AppKit wants the main thread. The command line runs there; on any other thread (unit tests) the
+/// `AppKit` wants the main thread. The command line runs there; on any other thread (unit tests) the
 /// names are simply unknown and screens are designated by number.
 fn names() -> HashMap<CGDirectDisplayID, String> {
     let Some(mtm) = MainThreadMarker::new() else {
@@ -43,7 +43,7 @@ fn names() -> HashMap<CGDirectDisplayID, String> {
     };
     let key = NSString::from_str("NSScreenNumber");
     let mut out = HashMap::new();
-    for screen in NSScreen::screens(mtm).iter() {
+    for screen in &NSScreen::screens(mtm) {
         let description = screen.deviceDescription();
         let Some(value) = description.objectForKey(&key) else {
             continue;

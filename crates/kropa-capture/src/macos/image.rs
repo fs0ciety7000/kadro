@@ -80,9 +80,9 @@ pub(super) fn compose(
     CGBitmapContextCreateImage(Some(&context)).ok_or_else(|| "the canvas has no image".to_owned())
 }
 
-/// Encodes a picture as PNG with ImageIO, with the color profile of the display.
+/// Encodes a picture as PNG with `ImageIO`, with the color profile of the display.
 ///
-/// ImageIO may add its own chunks (resolution, text); the caller passes the bytes through
+/// `ImageIO` may add its own chunks (resolution, text); the caller passes the bytes through
 /// [`crate::sanitize_png`], which keeps only what the pixels need.
 pub(super) fn encode_png(image: &CGImage) -> Result<Vec<u8>, String> {
     let data = CFMutableData::new(None, 0).ok_or("no memory for the image")?;
