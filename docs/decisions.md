@@ -22,6 +22,13 @@
 - Spécification CLI v1 (`docs/cli.md`) **validée**, avec ses arbitrages (`--to`, `--copy image`, URL brute sur stdout,
   `queue clear`).
 - Dépôt GitHub **rendu public** par l'utilisateur (11/11/2026) ; renommage `kadro` → `kropa` encore à faire.
+- Secrets (décisions S.3, déléguées par l'utilisateur, recommandations retenues le 11/11/2026) :
+  - **macOS** : un seul binaire courtier accède au Keychain et sert l'autre par un tube anonyme → une seule invite
+    par mise à jour (pas de compte Developer). Le coffre `age` reste disponible en option.
+  - **Secret dans le chemin de l'URL** : refusé en v1 (en-tête, query et champ seulement).
+  - **HTTP en bouclage avec un secret** : builds de test seulement.
+  - **Ajouts à `cli.md`** (§ 9 de `security/secrets.md`) acceptés : `secrets allow`, `secrets use`, `secrets migrate`,
+    `dest import --expect-host`, `error.reason`, refus de `--var` vers un secret.
 - Tests manuels macOS : l'utilisateur dispose d'un Mac sous macOS 15 ou plus.
 - Licence : **GPL-3.0-or-later** (choix délégué ; aligné sur ShareX et Flameshot, garde ouverte une dépendance GPL
   future). Le reste du périmètre v1 proposé par Produit est
