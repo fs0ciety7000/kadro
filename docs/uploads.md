@@ -1,5 +1,7 @@
 # Kadro : envoi et intégrations
 
+> Proposition d'équipe du 11/11/2026. En cas de contradiction, docs/decisions.md prévaut.
+
 Équipe « Envoi et intégrations ». Proposition à valider, aucun code écrit. État vérifié en ligne le 11/11/2026
 (sources en fin de document). Principes rappelés : local d'abord, aucune requête réseau sans destination configurée,
 zéro télémétrie, aucune destination imposée, secrets jamais en clair.
@@ -16,14 +18,17 @@ création explicite d'un profil.
 | SFTP | `russh` 0.65.1 + `russh-sftp` 3.0.1 (Rust pur, Apache-2.0, tokio) · `ssh2` 0.9.7 (libssh2 en C, OpenSSL sous Linux, synchrone) | **russh + russh-sftp** | Pas de dépendance C ni OpenSSL à empaqueter sur macOS. Async, cohérent avec la file. Projet actif (versions en novembre 2026). Licence Apache-2.0 : voir § 8. |
 | JSONPath | `jsonpath-rust` 1.0.12 (RFC 9535, actif) · `serde_json_path` 0.7.2 (dernière version 02/2025) | **jsonpath-rust** | Actif et conforme à la RFC. ShareX utilise le `SelectToken` de Newtonsoft, qui en est proche pour les chemins usuels (`files[0].url`). |
 | Trousseau | `keyring` 4.2 (+ `keyring-core` 1.0) · `secret-service` 5.2 / `security-framework` 3.7 en direct | **keyring 4** avec `zbus-secret-service-keyring-store` (Linux) et `apple-native-keyring-store` (macOS) | Une seule API, et des magasins choisis à la compilation. zbus est en Rust pur, alors que la variante dbus dépend de libdbus. |
-| Coffre de repli | `age` 0.12.1 (phrase de passe via scrypt) · Argon2id (`argon2` 0.6) + XChaCha20-Poly1305 (`chacha20poly1305` 0.11) | **Argon2id + XChaCha20-Poly1305** | Voir § 4.2. |
+| Coffre de repli | `age` 0.12.1 (phrase de passe via scrypt) · ~~Argon2id (`argon2` 0.6) + XChaCha20-Poly1305 (`chacha20poly1305` 0.11)~~ | ~~Argon2id + XChaCha20-Poly1305~~ → **`age`** (décision du 11/11/2026) | Voir § 4.2 et `docs/security/secrets.md`. |
 | File | `rusqlite` 0.42 (SQLite) · un fichier JSON par tâche | **SQLite** | Voir § 5. |
-| Métadonnées | `img-parts` 0.4.2 (segments/chunks JPEG, PNG, WebP) · `little_exif` 0.6.23 (édition EXIF) · `rexiv2` (GPL-3, C++) | **img-parts** + FFmpeg pour la vidéo | Voir § 6. `rexiv2` est écarté (licence et C++). |
+| Métadonnées | `img-parts` 0.4.2 (segments/chunks JPEG, PNG, WebP) · `little_exif` 0.6.23 (édition EXIF) · `rexiv2` (GPL-3, C++) | **img-parts** (~~+ FFmpeg pour la vidéo~~ : vidéo retirée, décision du 11/11/2026) | Voir § 6. `rexiv2` est écarté (licence et C++). |
 
 Les versions sont celles de crates.io au 11/11/2026. On les revérifie et on lance `cargo audit` (dépôt RustSec) au
 moment de les ajouter.
 
 ## 1. Les quatre destinations intégrées
+
+> Décision du 11/11/2026 : Imgur est **retiré des destinations intégrées** (modèle de destination personnalisée, § 1.4).
+> Restent trois destinations intégrées : Zipline, S3 et compatibles, SFTP.
 
 ### 1.1 Zipline (v4, actuelle : 4.8.3, MIT)
 
@@ -80,7 +85,10 @@ moment de les ajouter.
 - **Particularités** : pas de lecture de `~/.ssh/config` en v1. `russh-config` existe mais il est jeune, c'est une
   question ouverte.
 
-### 1.4 Imgur : intégrée, mais dégradée et à requalifier
+### 1.4 Imgur : ~~intégrée, mais dégradée et à requalifier~~ modèle de destination personnalisée
+
+> Tranché le 11/11/2026 : **option B retenue**. Imgur n'est pas une destination intégrée ; il est fourni comme modèle
+> de destination personnalisée (§ 2). L'analyse ci-dessous est conservée comme justification.
 
 - **Protocole** : `POST https://api.imgur.com/3/image` (images) ou `/3/upload` (vidéo), multipart. Réponse
   `data.link` (URL publique) et `data.deletehash` (suppression : `DELETE /3/image/{deletehash}`). Pas d'envoi par
@@ -99,7 +107,7 @@ moment de les ajouter.
 - **Option A** : garder Imgur intégrée avec un `client_id` fourni par l'utilisateur.
   **Option B** : la rétrograder en modèle de destination personnalisée fourni en exemple.
   **Recommandation : B**, puisque l'écrasante majorité des utilisateurs ne pourra pas l'utiliser. On garde
-  l'intégration A seulement si l'enregistrement rouvre. Question ouverte n° 1.
+  l'intégration A seulement si l'enregistrement rouvre. ~~Question ouverte n° 1.~~ Résolu : B.
 
 ## 2. Destination personnalisée
 
@@ -122,7 +130,7 @@ utilisateurs de ShareX s'y retrouvent.
 id      = "maison"                      # nom de profil, utilisé par la CLI
 type    = "http"
 label   = "Mon serveur d'images"
-kinds   = ["image", "video", "file"]    # types acceptés (ShareX : DestinationType)
+kinds   = ["image", "file"]             # types acceptés (ShareX : DestinationType) ; "video" retiré du produit
 
 [destination.request]
 method  = "POST"
@@ -185,7 +193,7 @@ L'import affiche un résumé (hôte, champs, secrets détectés) et ne crée le 
 - **Plusieurs profils**, éventuellement du même type (deux buckets S3, Zipline perso et Zipline équipe). Identifiant
   court et stable.
 - **Défaut** : `default_destination` absent = enregistrement local seulement. Un défaut par **type de média**
-  (image, vidéo/GIF, fichier) est possible, car les vidéos vont souvent ailleurs.
+  (image, fichier ; ~~vidéo/GIF~~ retirés du produit) est possible.
 - **Envoi automatique** : désactivé par défaut. Il s'active par profil ou par chaîne d'actions (équipe « Après la
   capture »).
 - **CLI**, à harmoniser avec l'équipe CLI :
@@ -214,16 +222,21 @@ chaque version. On le documente ; c'est inévitable sans compte Developer.
 
 ### 4.2 Coffre de repli : algorithme
 
+> Tranché le 11/11/2026 : **`age`** (option A, fichier chiffré par phrase de passe). Le format maison ci-dessous
+> (option B) est **abandonné** ; voir `docs/security/secrets.md`. Le texte est conservé comme historique.
+
 - **Option A, `age` en mode phrase de passe (scrypt)** : format standard, déchiffrable avec `age`/`rage` en cas de
   secours. Mais il faut garder la phrase de passe en mémoire pour réécrire le coffre, et scrypt est moins résistant
   aux GPU qu'Argon2id.
-- **Option B, Argon2id + XChaCha20-Poly1305** (RustCrypto) : on garde en mémoire la **clé dérivée**, pas le mot de
-  passe. Nonce aléatoire de 192 bits à chaque réécriture, sans risque de collision.
-- **Choix : B**, format minimal et documenté : `magic | version | params Argon2 (m, t, p) | sel 16 o | nonce 24 o | chiffré`,
+- ~~**Option B, Argon2id + XChaCha20-Poly1305** (RustCrypto) : on garde en mémoire la **clé dérivée**, pas le mot de
+  passe. Nonce aléatoire de 192 bits à chaque réécriture, sans risque de collision.~~
+- ~~**Choix : B**, format minimal et documenté : `magic | version | params Argon2 (m, t, p) | sel 16 o | nonce 24 o | chiffré`,
   l'en-tête entier servant de données associées (AAD). Paramètres : Argon2id, m = 64 Mio, t = 3, p = 1, au-dessus
   du minimum OWASP (19 Mio, t = 2) ; on calibre pour ≈ 0,5 s et on stocke les paramètres pour les relever plus tard.
   Fichier `0600` dans le dossier de configuration, écriture atomique (temporaire puis `rename`). **À faire relire par
-  `security-reviewer`** : c'est de l'assemblage de primitives, pas une crypto maison, mais le format est à nous.
+  `security-reviewer`** : c'est de l'assemblage de primitives, pas une crypto maison, mais le format est à nous.~~
+- **Retenu : `age`.** Fichier `0600` dans le dossier de configuration, écriture atomique (temporaire puis `rename`).
+  Paramètres et gestion de la phrase de passe : `docs/security/secrets.md`.
 - Mot de passe perdu : les secrets sont perdus. On les ressaisit (jetons révocables côté service). C'est dit à la
   création.
 
@@ -321,9 +334,10 @@ Une config tierce (un `.sxcu` reçu, un TOML copié) ne doit pas pouvoir envoyer
     `tEXt zTXt iTXt eXIf tIME` et les chunks inconnus.
   - JPEG : on retire APP1 (EXIF/XMP), APP13 (IPTC) et COM. ICC conservé, avec option pour le retirer.
   - WebP : on retire EXIF et XMP.
-  - GIF : extensions de commentaire et d'application XMP, via le flux de l'équipe Vidéo.
-- **Vidéo (MP4)** : remultiplexage FFmpeg sans réencodage (`-map_metadata -1 -map_chapters -1 -fflags +bitexact
-  -c copy`). On retire titre, `creation_time` et la chaîne `encoder`. À valider par test.
+  - ~~GIF : extensions de commentaire et d'application XMP, via le flux de l'équipe Vidéo.~~ Retiré (décision du 11/11/2026).
+- ~~**Vidéo (MP4)** : remultiplexage FFmpeg sans réencodage (`-map_metadata -1 -map_chapters -1 -fflags +bitexact
+  -c copy`). On retire titre, `creation_time` et la chaîne `encoder`. À valider par test.~~ Retiré : plus de vidéo
+  dans le produit, donc plus de FFmpeg.
 - Le nettoyage s'applique à une **copie** placée dans la file. L'original local reste intact, sauf choix contraire.
 - **Limites, à dire clairement** :
   - Le contenu visible (secrets à l'écran) n'est pas couvert ici : c'est le rôle de la détection assistée de
@@ -346,7 +360,7 @@ Une config tierce (un `.sxcu` reçu, un TOML copié) ne doit pas pouvoir envoyer
 | Fuite par les métadonnées (GPS, appareil, logiciel, date) | Nettoyage par défaut avant envoi (§ 6) |
 | URL extraite piégée (`javascript:`, caractères de contrôle) copiée et collée | Validation `http(s)` stricte avant copie |
 | Réponse énorme ou serveur lent (déni de service local) | Corps de réponse limité à 1 Mio, délais d'attente, annulation |
-| Attaque hors ligne du coffre | Argon2id 64 Mio, paramètres relevables |
+| Attaque hors ligne du coffre | ~~Argon2id 64 Mio, paramètres relevables~~ `age` (scrypt) avec phrase de passe robuste ; voir `docs/security/secrets.md` |
 | Processus local du même utilisateur | Hors de portée (il lit déjà la mémoire et le trousseau déverrouillé) : à documenter |
 | Requête non désirée (« local d'abord ») | Aucun profil par défaut, aucune sonde, aucune vérification de mise à jour dans ce module |
 
