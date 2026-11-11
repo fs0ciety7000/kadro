@@ -105,7 +105,11 @@ pub fn schema_of(cmd: &Command) -> String {
 
 /// Lots that must be delivered for the command to work, per `docs/plan.md`.
 fn lots_of(cmd: &Command) -> Vec<&'static str> {
-    let platform_capture = if cfg!(target_os = "macos") { "1.5" } else { "1.4" };
+    let platform_capture = if cfg!(target_os = "macos") {
+        "1.5"
+    } else {
+        "1.4"
+    };
     match cmd {
         Command::Capture { mode } => {
             let (base, opts) = match mode {
@@ -146,7 +150,8 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
 }
 
 fn unsupported(cmd: &Command, loc: &Localizer) -> CliError {
-    let lots = lots_of(cmd);
+    let mut lots = lots_of(cmd);
+    lots.sort_unstable();
     let id = if lots.len() == 1 {
         "error-unsupported-one"
     } else {

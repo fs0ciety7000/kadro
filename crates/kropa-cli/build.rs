@@ -13,10 +13,10 @@ fn main() {
     let git_dir = Path::new("../../.git");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../../.git/HEAD");
-    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD")) {
-        if let Some(reference) = head.trim().strip_prefix("ref: ") {
-            println!("cargo:rerun-if-changed=../../.git/{reference}");
-        }
+    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
+        && let Some(reference) = head.trim().strip_prefix("ref: ")
+    {
+        println!("cargo:rerun-if-changed=../../.git/{reference}");
     }
     let commit = Command::new("git")
         .args(["rev-parse", "--short=12", "HEAD"])

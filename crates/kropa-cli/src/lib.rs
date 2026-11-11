@@ -169,7 +169,6 @@ fn report_usage_error(err: &clap::Error, loc: &Localizer, json: bool, io: &mut I
     ExitCode::Usage
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
@@ -197,7 +196,13 @@ mod tests {
                 err: &mut err,
                 stdin_is_tty: tty,
             };
-            run_with(&args(list), &|_| None, &mut io, &clock, Some("laptop".into()))
+            run_with(
+                &args(list),
+                &|_| None,
+                &mut io,
+                &clock,
+                Some("laptop".into()),
+            )
         };
         Run {
             code,
@@ -240,7 +245,12 @@ mod tests {
 
     #[test]
     fn usage_errors_are_localised_and_exit_2() {
-        let r = run(&["kropa", "--lang", "fr", "capture", "screen", "--delay", "99"], false);
+        let r = run(
+            &[
+                "kropa", "--lang", "fr", "capture", "screen", "--delay", "99",
+            ],
+            false,
+        );
         assert_eq!(r.code, ExitCode::Usage);
         assert!(r.out.is_empty());
         assert!(r.err.contains("valeur invalide '99'"), "{}", r.err);

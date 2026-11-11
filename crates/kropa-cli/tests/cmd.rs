@@ -4,8 +4,13 @@
 //!
 //! Each case runs the real `kropa` binary in a clean environment (no inherited variables), so the
 //! language comes from `--lang` or from the `env.add` of the case. Cases that need files run in a
-//! copy of a folder of `tests/cmd/ctx/`. Regenerate the expected output of a case after a
-//! deliberate change with `TRYCMD=overwrite cargo test -p kropa --test cmd`, then review the diff.
+//! copy of a folder of `tests/cmd/ctx/`.
+//!
+//! The expected files use `[..]` where the output depends on the machine: the version, commit and
+//! target of `kropa version`, and the lot that brings `capture screen|output` and `doctor`
+//! (1.4 on Linux, 1.5 on macOS). After a deliberate change, `TRYCMD=overwrite cargo test -p kropa
+//! --test cmd` rewrites the expected files with the real output: review the diff and put these
+//! wildcards back.
 
 #[test]
 fn fixtures() {

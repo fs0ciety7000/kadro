@@ -41,7 +41,12 @@ impl CliError {
             ExitCode::Usage => "error-name",
             _ => "error-io",
         };
-        Self::new(err.exit_code(), loc, id, &[("detail", &err.to_string())])
+        let text = err.to_string();
+        // The configuration message of the core already says "invalid configuration: ".
+        let detail = text
+            .strip_prefix("invalid configuration: ")
+            .unwrap_or(&text);
+        Self::new(err.exit_code(), loc, id, &[("detail", detail)])
     }
 }
 
@@ -70,9 +75,7 @@ fn ctx(err: &clap::Error, kind: ContextKind) -> String {
 fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
     let arg = ctx(err, ContextKind::InvalidArg);
     let text = match err.kind() {
-        ErrorKind::UnknownArgument => {
-            loc.message_args("error-unknown-argument", &[("arg", &arg)])
-        }
+        ErrorKind::UnknownArgument => loc.message_args("error-unknown-argument", &[("arg", &arg)]),
         ErrorKind::InvalidSubcommand => loc.message_args(
             "error-unknown-subcommand",
             &[("name", &ctx(err, ContextKind::InvalidSubcommand))],
@@ -80,7 +83,10 @@ fn message(err: &clap::Error, loc: &Localizer) -> Option<String> {
         ErrorKind::InvalidValue => {
             let mut text = loc.message_args(
                 "error-invalid-value",
-                &[("value", &ctx(err, ContextKind::InvalidValue)), ("arg", &arg)],
+                &[
+                    ("value", &ctx(err, ContextKind::InvalidValue)),
+                    ("arg", &arg),
+                ],
             );
             let valid = ctx(err, ContextKind::ValidValue);
             if !valid.is_empty() {
@@ -136,12 +142,13 @@ pub fn localize_clap_error(err: &clap::Error, loc: &Localizer) -> Option<String>
         }
     }
     let usage = ctx(err, ContextKind::Usage);
-    let usage = usage.trim().strip_prefix("Usage:").unwrap_or(usage.trim()).trim();
+    let usage = usage
+        .trim()
+        .strip_prefix("Usage:")
+        .unwrap_or(usage.trim())
+        .trim();
     if !usage.is_empty() {
-        out.push_str(&format!(
-            "\n{} {usage}\n",
-            loc.message("cli-usage-heading")
-        ));
+        out.push_str(&format!("\n{} {usage}\n", loc.message("cli-usage-heading")));
     }
     out.push_str(&format!("\n{}\n", loc.message("error-hint")));
     Some(out)

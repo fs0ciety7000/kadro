@@ -161,7 +161,10 @@ mod tests {
         assert_eq!(v["error"]["code"], "unsupported");
         assert_eq!(v["error"]["step"], serde_json::Value::Null);
         assert_eq!(v["error"]["lots"][0], "1.7");
-        assert_eq!(error_document("s", &err(ExitCode::Io))["error"]["code"], "io");
+        assert_eq!(
+            error_document("s", &err(ExitCode::Io))["error"]["code"],
+            "io"
+        );
     }
 
     #[test]

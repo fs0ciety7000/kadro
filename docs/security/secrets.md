@@ -455,6 +455,13 @@ d'emplacement ne l'arrêtent pas), root, machine compromise, serveur de destinat
 À documenter aussi : sous **X11**, la frappe dans un dialogue est lisible par tout client X ; le jeton **collé** dans
 un dialogue reste dans le presse-papiers — le dialogue propose de le vider s'il contient la valeur saisie.
 
+**Ce que le courtier (U1 = b) retire à l'option (a)** (N3) : avec (a), seul le code de `kropa` et de `kropa-app`, autorisé
+par cdhash, lit l'élément, et aucune de leurs commandes ne rend de valeur ; un autre binaire déclenche l'invite. Avec
+(b), le courtier **rend** des entrées à un processus : la barrière n'est plus l'invite de macOS mais les contrôles du
+§ 2.2.1, qui reposent sur le runtime renforcé de `kropa-app`. Restent possibles : une faille de `kropa-app` lui-même, et,
+si le point 7 du § 2.2.1 n'est pas confirmé, l'enchaînement « créer la paire, lancer le courtier, `exec` de
+`kropa-app` » ; dans les deux cas l'exposition est bornée aux entrées d'un profil par lancement.
+
 | Menace | Mitigation | Test qui le prouve |
 |---|---|---|
 | Secret lu sur disque (sauvegarde, dotfiles) | Trousseau ou coffre ; config avec noms seulement | grep des valeurs connues dans config, données, cache, journaux, SQLite, `*.tmp` → absentes |

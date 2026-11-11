@@ -129,7 +129,10 @@ fn localize(mut cmd: Command, path: &[String], loc: &Localizer) -> Command {
 
 /// Help layout with localised headings; sections that would be empty are left out.
 fn help_template(cmd: &Command, loc: &Localizer) -> String {
-    let mut t = format!("{{about}}\n\n{} {{usage}}\n", loc.message("cli-usage-heading"));
+    let mut t = format!(
+        "{{about}}\n\n{} {{usage}}\n",
+        loc.message("cli-usage-heading")
+    );
     if cmd.get_subcommands().next().is_some() {
         t.push_str(&format!(
             "\n{}\n{{subcommands}}\n",
@@ -191,7 +194,9 @@ mod tests {
         let loc = Localizer::new(Lang::Fr).unwrap();
         let cmd = build_command(&loc, ColorChoice::Never);
         let mut paths = Vec::new();
-        walk(&cmd, &mut Vec::new(), &mut |_, path| paths.push(path.to_vec()));
+        walk(&cmd, &mut Vec::new(), &mut |_, path| {
+            paths.push(path.to_vec())
+        });
         assert!(paths.len() > 25, "{}", paths.len());
         for path in paths {
             // Real parsing, so that the global options are propagated as in a run.
@@ -201,8 +206,19 @@ mod tests {
             let err = cmd.clone().try_get_matches_from(argv).unwrap_err();
             let help = err.to_string();
             // No English text from clap itself may leak into the French help.
-            for english in ["Usage:", "Options:", "Commands:", "Arguments:", "Print help", "default:", "<COMMAND>"] {
-                assert!(!help.contains(english), "{path:?}: {english} leaked\n{help}");
+            for english in [
+                "Usage:",
+                "Options:",
+                "Commands:",
+                "Arguments:",
+                "Print help",
+                "default:",
+                "<COMMAND>",
+            ] {
+                assert!(
+                    !help.contains(english),
+                    "{path:?}: {english} leaked\n{help}"
+                );
             }
             assert!(help.contains("Utilisation :"), "{path:?}");
         }

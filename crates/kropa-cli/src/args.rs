@@ -386,7 +386,13 @@ pub struct DestAddArgs {
     #[arg(value_name = "ID", value_parser = parse_profile_required)]
     pub id: String,
     /// Destination type.
-    #[arg(long = "type", id = "kind", value_enum, required = true, value_name = "TYPE")]
+    #[arg(
+        long = "type",
+        id = "kind",
+        value_enum,
+        required = true,
+        value_name = "TYPE"
+    )]
     pub kind: DestKind,
     /// Base URL.
     #[arg(long, value_name = "URL", value_parser = parse_url)]
@@ -544,10 +550,12 @@ pub enum HistoryCommand {
 // ---------------------------------------------------------------------------------------------
 
 fn parse_lang(value: &str) -> Result<String, ArgError> {
-    Lang::parse(value).map(|l| l.code().to_owned()).map_err(|_| ArgError {
-        id: "err-lang",
-        detail: value.to_owned(),
-    })
+    Lang::parse(value)
+        .map(|l| l.code().to_owned())
+        .map_err(|_| ArgError {
+            id: "err-lang",
+            detail: value.to_owned(),
+        })
 }
 
 fn parse_path(value: &str) -> Result<PathBuf, ArgError> {
@@ -777,7 +785,10 @@ mod tests {
     #[test]
     fn presign_is_at_most_seven_days() {
         assert_eq!(parse_presign("30m").unwrap(), Duration::from_secs(1800));
-        assert_eq!(parse_presign("7d").unwrap(), Duration::from_secs(7 * 86_400));
+        assert_eq!(
+            parse_presign("7d").unwrap(),
+            Duration::from_secs(7 * 86_400)
+        );
         for bad in ["8d", "169h", "0s", "d", "10", "1.5h", "-1h", ""] {
             assert!(parse_presign(bad).is_err(), "{bad}");
         }
@@ -787,7 +798,13 @@ mod tests {
     fn urls_and_dates() {
         assert!(parse_url("https://z.example.org/x").is_ok());
         assert!(parse_url("http://localhost:3000").is_ok());
-        for bad in ["ftp://x", "https://", "https:///x", "example.org", "https://a b"] {
+        for bad in [
+            "ftp://x",
+            "https://",
+            "https:///x",
+            "example.org",
+            "https://a b",
+        ] {
             assert!(parse_url(bad).is_err(), "{bad}");
         }
         assert!(parse_since("2026-11-11").is_ok());
