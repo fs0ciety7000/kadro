@@ -5,36 +5,31 @@
 
 - **Date** : 2026-11-11
 - **Fait cette session** :
-  - Conception complète par 7 équipes (`docs/*.md`), décisions validées (`docs/decisions.md`), renommage Kadro → **Kropa**,
-    identité A et logo validés, maquettes + `DESIGN.md` validés (avec outil Recadrer), modèle de secrets revu sans
-    bloquant (`docs/security/`), spec CLI v1 validée (`docs/cli.md`).
-  - Lot 0 : workspace Cargo, CI GitHub Actions (Linux + macOS 15, MSRV 1.95, cargo-deny, zizmor, bundle `Kropa.app`),
-    Renovate, équipe d'agents dans `.claude/agents/`.
-  - Lot 1 : 1.1-1.5, 1.7, 1.3b, 1.7b faits — config, modèles de nom, i18n FR/EN, CLI complète, capture Linux (portail),
-    capture macOS (ScreenCaptureKit, compilé seulement), moteur d'envoi HTTP + Zipline + import `.sxcu`/`.toml`.
-    283 tests verts, CI verte sauf GitGuardian (faux positifs, voir ci-dessous).
-- **En cours** (tâche, branche, PR) : rien en cours. Branche `claude/adoring-pascal-u36glt`, PR brouillon
-  [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1) vers `main` (surveillée par la session).
-- **Prochaine action exacte** : tâche **1.8** (`kropa-store`, secrets au trousseau, courtier Keychain macOS unique) selon `docs/security/secrets.md` (fournisseur TLS aws-lc-rs fait).
-  Graviola dans `crates/kropa-upload` (`http.rs`, clés de test de `testing.rs`), retirer la vérification
-  `cargo check --target aarch64-apple-darwin` depuis Linux si elle casse (la CI macOS compile nativement) ; puis tâche
-  **1.8** (`kropa-store`, secrets au trousseau, courtier Keychain macOS unique) selon `docs/security/secrets.md`.
+  - Conception complète, décisions validées, renommage **Kropa**, identité, maquettes, `DESIGN.md`, spec CLI,
+    modèle de secrets ; lot 0 (workspace, CI Linux + macOS 15, Renovate, équipe d'agents).
+  - Lot 1, toutes les tâches de code (1.1-1.5, 1.7-1.11) et D2.4, avec leurs revues de sécurité et de code
+    (`docs/reviews/`) : CLI, capture portail/ScreenCaptureKit, envoi HTTP + Zipline + `.sxcu`, TLS aws-lc-rs, secrets
+    (Secret Service ; Keychain en un seul élément via `kropa __store-broker`), liens échappés, journal expurgé,
+    presse-papiers (data-control avec relecture, NSPasteboard, GNOME `unavailable`), compose Zipline derrière TLS
+    local, test « zéro requête » (`unshare -rn` + `strace`), textes FR/EN relus et glossaire.
+  - 473 tests verts ; CI verte Linux + macOS 15 (tous les tests macOS exécutés), sauf GitGuardian (faux positifs).
+- **En cours** : rien. Branche `claude/adoring-pascal-u36glt`, PR brouillon
+  [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1) vers `main`, surveillée (contrôle programmé).
+- **Prochaine action exacte** : essais réels **1.12** par l'utilisateur (check-lists `docs/testing/manual-linux.md`,
+  `manual-macos.md`, `integration.md`), puis cadrage du **lot 2** (sélection, profils, S3, coffre `age`).
 - **Bloquant / questions ouvertes pour l'utilisateur** :
-  - Fournisseur TLS : `aws-lc-rs` (recommandé, mûr, repli CPU) ou Graviola (jeune, exige AVX2/ADX ou équivalent ARM).
-  - Marquer les 2 incidents GitGuardian de la PR comme faux positifs (chaînes de test, déjà retirées du code).
+  - Marquer faux positifs les incidents GitGuardian 39943012, 39943013, 39960789.
   - Tâches à lui : 0.8 réserver le crate `kropa`, 0.9 recherche de marques, 1.6 certificat auto-signé + test TCC,
-    1.12 essais réels GNOME/KDE/Mac (check-lists `docs/testing/manual-*.md`).
-  - Deux choix de l'agent 1.3b à valider s'il le souhaite : sous-commande inconnue non citée ; schéma `kropa.error/1`
-    pour les commandes sans schéma propre.
+    1.12 essais réels. Fusionner la PR Engram fs0ciety7000/engram#22.
+  - À trancher : code de sortie quand `--copy` explicite échoue (aujourd'hui 0 + avertissement) ; X11 seul sans
+    presse-papiers ; journal `-vv` en anglais seulement ; espaces insécables FR dans la CLI ; mot « lot » visible dans
+    des messages ; `unsafe` hors macOS (règle 12) pour un mineur de la revue 1.8.
 - **À savoir** :
-  - Le hook claude-kit bloque à tort les commandes contenant certains mots (fichiers d'environnement, champs `key`) :
-    passer par Write/Edit, ne pas contourner pour un vrai fichier de secrets.
-  - Le hook « commit and push » pousse le travail des agents en cours : la CI de la PR passe au rouge sur ces commits
-    intermédiaires ; seul le commit de fin de tâche fait foi.
-  - Le dépôt a été renommé : remote `https://github.com/fs0ciety7000/kropa` (après redémarrage du conteneur, revérifier
-    `git remote get-url origin`).
-  - Sur macOS, lancée depuis Terminal, la permission d'enregistrement d'écran revient probablement à Terminal et non à
-    Kropa : à vérifier en 1.12, décision à prendre ensuite.
-  - Les valeurs de test ressemblant à des jetons doivent être construites à l'exécution (dépôt public, GitGuardian).
-  - Le skill `rust-backend` du profil `rust` du kit concerne Windmill : retiré du projet ; à corriger dans le kit.
-  - Engram : fiche `kropa` et leçons dans la PR fs0ciety7000/engram#22 (à fusionner par l'utilisateur).
+  - Hook claude-kit : faux positifs sur certains mots (fichiers d'environnement, `*.key`, `env`) ; passer par
+    Write/Edit, ne jamais contourner pour un vrai secret.
+  - Hook « commit and push » : les commits `wip` intermédiaires peuvent rougir la CI ; seul le commit de fin fait foi.
+  - Après redémarrage du conteneur, `git remote get-url origin` peut revenir à `kadro` : remettre
+    `https://github.com/fs0ciety7000/kropa`.
+  - Disque serré (~3 Go libres) : supprimer `target/debug/incremental` avant les gros builds.
+  - Valeurs de test ressemblant à des secrets : construites à l'exécution ; dans les compose, passer par `secrets:`.
+  - macOS : sockets AF_UNIX (`shutdown`, `setsockopt` après fermeture) se comportent autrement que sous Linux.
