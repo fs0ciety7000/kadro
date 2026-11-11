@@ -68,7 +68,7 @@ while [ $# -gt 0 ]; do
         --no-sign) sign=0; shift ;;
         --version) need_value "$1" $#; version=$2; shift 2 ;;
         -h | --help)
-            sed -n '4,31p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '4,30p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) die "unknown option: $1" ;;
@@ -127,7 +127,6 @@ app="$out/$APP_NAME"
 mkdir -p -- "$out"
 rm -rf -- "$app"
 mkdir -p -- "$app/Contents/MacOS" "$app/Contents/Resources/en.lproj" "$app/Contents/Resources/fr.lproj"
-# `cp` then `chmod`: `install` would also strip nothing here and is not needed.
 cp -- "$bin" "$app/Contents/MacOS/kropa"
 chmod 0755 "$app/Contents/MacOS/kropa"
 sed "s/@VERSION@/$version/g" "$data/Info.plist" >"$app/Contents/Info.plist"
