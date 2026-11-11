@@ -11,3 +11,10 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 slow-timeout = { period = "60s", terminate-after = 2 }
 # Every failure of a run, not only the first one: a Mac is not at hand to run again.
 fail-fast = false
+
+# Real servers (tests/integration/run.sh, lot 1.11): one retry for a slow server start-up, 60 s per
+# test. The tests are `#[ignore]` and run with `--run-ignored only`.
+[profile.it]
+retries = 1
+slow-timeout = { period = "60s", terminate-after = 1 }
+fail-fast = false

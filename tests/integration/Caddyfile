@@ -1,0 +1,11 @@
+# TLS terminator of the integration compose. The certificate and key are made at run time by run.sh
+# (a throwaway CA, restricted to `localhost` by a name constraint) and mounted in /certs.
+{
+	admin off
+	auto_https off
+}
+
+https://localhost {
+	tls /certs/server.crt /certs/server.key
+	reverse_proxy zipline:3000
+}

@@ -87,7 +87,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [x] 1.9 Liens URL/Markdown/HTML échappés ; journaux expurgés. Agent : `backend-dev`. Fin : un test prouve qu'aucun secret n'apparaît dans les journaux.
 - [x] 1.9b Suites de la revue de sécurité 1.9 (`docs/reviews/2026-11-11-security-1.9.md`) : contrôle avant échappement Markdown, oracle par fragments, séquences de terminal neutralisées, gabarit `error` sur corps masqué. Agent : `backend-dev`.
 - [x] 1.10 Presse-papiers : `NSPasteboard`, data-control (KDE, wlroots), message honnête sur GNOME. Agents : plateformes. Fin : statut = effet réel.
-- [ ] 1.11 Compose de test (Zipline + PostgreSQL, Garage, OpenSSH ; digests épinglés), job d'intégration, test « zéro requête » (`unshare -rn`). Agents : `devops`, `qa-tester`.
+- [x] 1.11 Compose de test (Zipline + PostgreSQL, Garage, OpenSSH ; digests épinglés), job d'intégration, test « zéro requête » (`unshare -rn`). Agents : `devops`, `qa-tester`.
 - [ ] 1.12 **[Utilisateur]** Essai réel GNOME, KDE, Mac.
 **Critère** : sur les trois plateformes, fichier enregistré et lien Zipline réel sur stdout ; copié sur KDE et macOS ; refus explicite sur GNOME ; « zéro requête » vert.
 

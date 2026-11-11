@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Real servers for the integration tests (docs/testing/integration.md, docs/quality-release.md section 1.4).
+#
+# Drive it with `tests/integration/run.sh`, not with `docker compose` alone: the script generates the
+# secrets of the run (nothing is committed, no dotenv file exists), the TLS certificate and the
+# ports, and exports them. Compose refuses to start when one is missing.
+#
+# - default profile: Zipline 4 + PostgreSQL behind Caddy (TLS). Lot 1.11.
+# - profile `s3`: Garage (S3). Declared here, exercised from lot 2.7.
+# - profile `sftp`: OpenSSH (SFTP). Declared here, exercised from lot 4.9.
+#
+# Every published port is bound to 127.0.0.1. PostgreSQL and Zipline are not published at all and keep
+# their data in memory (tmpfs): `down` leaves nothing behind. Images are pinned by the digest of their
+# multi-architecture index, checked against the registry on 11/11/2026 (the tag stays for the reader);
+# Renovate keeps both up to date.
+
+name: kropa-it
+
+services:
+  postgres:
+    image: postgres:18.6-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b
+    environment:
+      POSTGRES_USER: zipline
+      POSTGRES_DB: zipline
+      POSTGRES_PASSWORD: ${KROPA_IT_POSTGRES_PASSWORD:?run tests/integration/run.sh}
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zipline -d zipline"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  zipline:
+    # `latest` pointed at the same index on 11/11/2026. run.sh makes Zipline return https links.
+    image: ghcr.io/diced/zipline:4.8.3@sha256:b51581d2834066a67050c08a7e54d5501f84082ac6f7a14a25a6df517a62765a
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CORE_SECRET: ${KROPA_IT_ZIPLINE_SECRET:?run tests/integration/run.sh}
+      DATABASE_URL: postgres://zipline:${KROPA_IT_POSTGRES_PASSWORD:?run tests/integration/run.sh}@postgres:5432/zipline
+      CORE_HOSTNAME: 0.0.0.0
+      CORE_PORT: "3000"
+    tmpfs:
+      - /zipline/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/healthcheck').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+
+  # TLS in front of Zipline: Kropa refuses a secret over plain HTTP, with no exception. The certificate
+  # comes from a throwaway CA made by run.sh, restricted to `localhost`.
+  caddy:
+    image: caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
+    depends_on:
+      zipline:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KROPA_IT_HTTPS_PORT:-18443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${KROPA_IT_CERT_DIR:?run tests/integration/run.sh}:/certs:ro
+
+  garage:
+    profiles: ["s3"]
+    image: dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
+    environment:
+      GARAGE_RPC_SECRET: ${KROPA_IT_GARAGE_RPC_SECRET:?run tests/integration/run.sh}
+      GARAGE_ADMIN_TOKEN: ${KROPA_IT_GARAGE_ADMIN_TOKEN:?run tests/integration/run.sh}
+    ports:
+      - "127.0.0.1:${KROPA_IT_S3_PORT:-13900}:3900"
+      - "127.0.0.1:${KROPA_IT_GARAGE_ADMIN_PORT:-13903}:3903"
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+    tmpfs:
+      - /var/lib/garage
+
+  openssh:
+    profiles: ["sftp"]
+    # `latest` pointed at the same index on 11/11/2026.
+    image: linuxserver/openssh-server:version-10.3_p1-r2@sha256:161e0b670b31d9539ca1718bc5943e981779331b4e1c9d32e8929d7652a1f22f
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      USER_NAME: kropa
+      PASSWORD_ACCESS: "true"
+      USER_PASSWORD: ${KROPA_IT_SSH_PASSWORD:?run tests/integration/run.sh}
+      SUDO_ACCESS: "false"
+      LOG_STDOUT: "true"
+    ports:
+      - "127.0.0.1:${KROPA_IT_SFTP_PORT:-12222}:2222"

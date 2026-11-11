@@ -2,10 +2,12 @@ name: CI
 
 # Only pull requests and pushes to main: the repository is private for now and
 # the Actions minutes quota is exhausted, so other branches must not trigger runs.
+# `workflow_dispatch` runs everything by hand, the integration job included.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 # Cancel superseded runs of a pull request; never cancel a run on main
 # (it is the only one allowed to write the Cargo cache).
@@ -70,13 +72,20 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends dbus gnome-keyring sway weston wl-clipboard
+          sudo apt-get install -y --no-install-recommends dbus gnome-keyring sway weston wl-clipboard strace
+      # The "zero request" test runs `kropa` in an empty network namespace (`unshare -rn`). Ubuntu 24.04
+      # refuses unprivileged user namespaces through AppArmor: allow them for the length of the job.
+      - name: Allow unprivileged user namespaces (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Tests
         env:
           # Linux: the real gnome-keyring tests must run (they fail if a tool is missing instead of skipping).
           KROPA_REQUIRE_KEYRING_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
           # Linux: sway, weston and wl-paste play the compositors of the clipboard tests (lot 1.10).
           KROPA_REQUIRE_WAYLAND_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: strace and an empty network namespace are required by the "zero request" test (lot 1.11).
+          KROPA_REQUIRE_NO_NETWORK_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
         run: cargo nextest run --profile ci --workspace --locked
       - name: Doctests
         run: cargo test --doc --workspace --locked
@@ -112,6 +121,37 @@ jobs:
           cat "$RUNNER_TEMP/doctor.json"
           grep -q '"key":"app_bundle","state":"present"' "$RUNNER_TEMP/doctor.json"
           grep -q '"key":"bundle_identifier","state":"present","value":"io.github.fs0ciety7000.Kropa"' "$RUNNER_TEMP/doctor.json"
+
+  # Real servers (Zipline 4 + PostgreSQL behind a TLS proxy), docs/testing/integration.md. Docker and the
+  # Actions quota make it costly: it runs on main and by hand, not on every pull request.
+  integration:
+    name: integration (Zipline)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@0.9.151
+      - name: Cache Cargo (saved from main only)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install a keyring (the token goes to a real GNOME Keyring)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus gnome-keyring
+      # Starts Zipline, PostgreSQL and Caddy, makes the throwaway CA known to the system trust store,
+      # creates the Zipline user through its API, runs the test, stops everything (even on failure).
+      - name: Zipline integration test
+        run: tests/integration/run.sh test --trust system
 
   msrv:
     name: msrv (1.95)
