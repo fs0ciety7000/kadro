@@ -2,8 +2,10 @@
 
 > Réécrit à la fin de chaque session de travail : où on en est, ce qui bloque, prochaines étapes (3 max).
 
-- **Fait** : conception par 7 équipes (`docs/*.md`), synthèse et décisions validées (`docs/decisions.md`), nom Kropa,
-  identité A, plan validé (`docs/plan.md`), équipe et skills installés (`.claude/`).
-- **En cours** : lots 0 (fondations), D1 (mot-symbole), S (modèle de secrets).
-- **Bloquant** : actions utilisateur — rendre le dépôt public, le renommer `kadro` → `kropa`.
-- **Prochaines étapes** : 1) fondations vertes en CI ; 2) modèle de secrets relu ; 3) lot 1 (v0.1 CLI).
+- **Fait** : conception validée (équipes, décisions, identité A, maquettes, modèle de secrets, spec CLI) ; lot 0 ;
+  lot 1 tâches 1.1-1.5, 1.7 et leurs corrections de revue (1.3b, 1.7b). 283 tests verts, CI verte Linux + macOS 15.
+- **En cours** : rien (PR brouillon fs0ciety7000/kropa#1 ouverte vers `main`).
+- **Bloquant** : choix du fournisseur TLS (aws-lc-rs recommandé) ; faux positifs GitGuardian à marquer par
+  l'utilisateur.
+- **Prochaines étapes** : 1) fournisseur TLS selon la décision ; 2) tâche 1.8 (stockage des secrets, courtier
+  Keychain) ; 3) tâches 1.9-1.11 puis essais réels 1.12.
