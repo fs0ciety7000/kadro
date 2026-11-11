@@ -195,13 +195,13 @@ pub trait ItemStore: Send + Sync {
     fn set_interactive(&self, _interactive: bool) {}
 }
 
-/// The account attribute of `<profile>/<name>`.
+/// The key of the entry `<profile>/<name>` in the store document.
 #[must_use]
 pub fn account(profile: &str, name: &str) -> String {
     format!("{profile}/{name}")
 }
 
-/// Splits an account into profile and name; `None` when it is not one of ours.
+/// Splits the key of an entry into profile and name; `None` when it is not one of ours.
 #[must_use]
 pub fn split_account(account: &str) -> Option<ItemName> {
     let (profile, name) = account.split_once('/')?;
