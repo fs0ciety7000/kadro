@@ -13,7 +13,12 @@
 - Identité visuelle : **A « Repère »**.
 - **Dépôt public** (minutes GitHub Actions gratuites et illimitées sur Linux et macOS) ; CI Linux + macOS 15 à chaque
   PR. Aucun secret dans l'historique (vérifié le 11/11/2026 : uniquement des documents).
-- Nom : « Kadro » à remplacer (homonyme) ; recherche de nom en cours. Le reste du périmètre v1 proposé par Produit est
+- Nom : **Kropa** (commande `kropa`), à la place de « Kadro » (homonyme). Voir `brand/naming.md`.
+- Distribution v1 : **.deb, .rpm, tap Homebrew personnel** (formule compilée localement) et archives sur GitHub
+  Releases ; `.dmg` macOS. **Pas de Flathub** (règles Flathub sur le contenu généré par IA), pas d'AUR.
+- Tests manuels macOS : l'utilisateur dispose d'un Mac sous macOS 15 ou plus.
+- Licence : **GPL-3.0-or-later** (choix délégué ; aligné sur ShareX et Flameshot, garde ouverte une dépendance GPL
+  future). Le reste du périmètre v1 proposé par Produit est
   retenu par défaut.
 
 ## Propositions convergentes
