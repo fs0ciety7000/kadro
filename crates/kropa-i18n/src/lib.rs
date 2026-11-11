@@ -169,6 +169,16 @@ impl Localizer {
         self.message_with(id, None)
     }
 
+    /// Message `id` with text arguments (`$name` placeables). An unknown id gives the id itself.
+    #[must_use]
+    pub fn message_args(&self, id: &str, args: &[(&str, &str)]) -> String {
+        let mut fluent_args = FluentArgs::new();
+        for (name, value) in args {
+            fluent_args.set(*name, *value);
+        }
+        self.message_with(id, Some(&fluent_args))
+    }
+
     /// Message `id` with arguments. An unknown id gives the id itself, never a panic.
     #[must_use]
     pub fn message_with(&self, id: &str, args: Option<&FluentArgs<'_>>) -> String {
@@ -289,6 +299,15 @@ mod tests {
             "Capturer, annoter et envoyer des captures d'écran."
         );
         assert_eq!(fr.message("cli-usage-heading"), "Utilisation :");
+    }
+
+    #[test]
+    fn text_arguments_are_substituted() {
+        let en = Localizer::new(Lang::En).unwrap();
+        assert_eq!(
+            en.message_args("cli-about", &[("x", "y")]),
+            en.message("cli-about")
+        );
     }
 
     #[test]
