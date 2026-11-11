@@ -186,7 +186,7 @@ vérifiée.
 |---|---|---|
 | **objc2 + crates générées** (`objc2` 0.6.5 du 2026-10-05 ; `objc2-app-kit`, `objc2-screen-capture-kit`, `objc2-vision`, `objc2-av-foundation`, `objc2-core-graphics`, `objc2-security` 0.3.2 du 2025-10-04, crates.io) | Rust pur, `cargo build` seul. Couverture du SDK 26 vérifiée : `SCScreenshotConfiguration`, `captureScreenshotWithFilter`, `setCaptureMicrophone`, `setShowMouseClicks` sont présents dans les sources de la 0.3.2. Gestion mémoire et blocs (`block2`) typés. Utilisé par Cap ([Cap][cap]) | Appels `unsafe` partout, à isoler dans un crate `kropa-macos`. Pas d'accès aux API réservées à Swift. Délai entre un SDK et sa génération. |
 | Pont Swift (`swift-rs` 1.0.9, `swift-bridge` 0.1.59) | Accès à toutes les API, y compris celles réservées à Swift. async/await natif | Il faut Xcode et `swiftc` pour compiler, ce qui gêne la formule et `cargo install`. Deux langages et une FFI à maintenir seul. |
-| `screencapturekit` 11.1.2 (crate de haut niveau) | API ergonomique, maintenue (2026-11-02) | Version majeure 11 : ruptures fréquentes. Ne couvre que SCK. |
+| `screencapturekit` 11.1.2 (crate de haut niveau) | API ergonomique, maintenue (2026-11-02) | Version majeure 11 : ruptures fréquentes. Ne couvre que SCK. **Vérifié au lot 1.5 : son `build.rs` compile un pont Swift (`swift-bridge/Package.swift`, `swiftc`)**, donc écartée tant que le pont Swift n'est pas décidé ; le lot 1.5 utilise `objc2-screen-capture-kit` 0.3.2. |
 | `cidre` 0.29.0 | Large couverture (SCK, AVF, VT), utilisé par Cap | Un seul mainteneur, version 0.x, licence non vérifiée. |
 
 **Choix : objc2 et ses crates générées**, enfermés dans un crate de plateforme avec une API sûre. Un petit shim Swift

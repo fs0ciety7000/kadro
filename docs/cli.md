@@ -69,6 +69,11 @@ kropa capture area   [--last] [OPTIONS]
 
 - `screen` : tous les écrans assemblés (ce que rend le portail Screenshot). `output` : un seul écran, désigné par son
   nom de connecteur (`DP-1`, `eDP-1`) ou son nom macOS ; sans nom, l'écran principal. `kropa doctor` liste les noms.
+  *Lot 1.5 (macOS, ScreenCaptureKit) : `output` accepte le nom de l'écran tel que le donne `kropa doctor` (casse libre) ou
+  son identifiant numérique ; un nom porté par deux écrans, ou inconnu, donne le code 10 `output_not_found` (le message
+  liste les identifiants), avant toute demande de permission. `screen` assemble les écrans sur une toile à l'échelle du
+  plus fin, les vides restant transparents. Permission « Enregistrement de l'écran » absente : code 4
+  `screen_recording_denied`, demandée avant le `--delay`.*
 - `area` : overlay de sélection sur l'image figée ; `Échap` annule (code 3).
 
 | Option | Effet |
