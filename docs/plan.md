@@ -55,7 +55,7 @@ Dépend de : rien. En parallèle : 0, S, 1.
 
 ## Lot S — Modèle de secrets (avant tout code de stockage)
 Dépend de : rien. En parallèle : 0, D1.
-- [ ] S.1 `docs/security/secrets.md` : trousseau (Secret Service, Keychain et ACL liées à la signature) ; repli `age` (scrypt, `zeroize`, `0600`, écriture atomique) ; bascule jamais silencieuse ; origines autorisées stockées avec le secret ; `{secret:}`, redirections, HTTPS, import `.sxcu`, journaux expurgés, `--password-fd`, mode non interactif ; modèle de menaces. Agent : `architect`.
+- [x] S.1 `docs/security/secrets.md` : trousseau (Secret Service, Keychain et ACL liées à la signature) ; repli `age` (scrypt, `zeroize`, `0600`, écriture atomique) ; bascule jamais silencieuse ; origines autorisées stockées avec le secret ; `{secret:}`, redirections, HTTPS, import `.sxcu`, journaux expurgés, `--password-fd`, mode non interactif ; modèle de menaces. Agent : `architect`.
 - [ ] S.2 Revue. Agent : `security-reviewer`. Fin : points classés bloquants ou non.
 - [ ] S.3 Corrections, puis **[Utilisateur]** validation.
 
