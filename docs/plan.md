@@ -85,6 +85,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 - [x] 1.8r Revue de sécurité de 1.8 : aucun bloquant, 6 importants (`docs/reviews/2026-11-11-security-1.8.md`). Agent : `security-reviewer`.
 - [x] 1.8b Suites de la revue 1.8 : preuve de l'absence de prompt (moniteur D-Bus), test de `set_interactive`, `RLIMIT_CORE` (§ 6 ; `PR_SET_DUMPABLE` écarté : portail), `doctor` (doublons, orphelins N2), `keyring_timeout` et rollback d'import silencieux, mise à jour de `docs/security/secrets.md` (§ 2-3, 7, 8). Agent : `backend-dev`.
 - [x] 1.9 Liens URL/Markdown/HTML échappés ; journaux expurgés. Agent : `backend-dev`. Fin : un test prouve qu'aucun secret n'apparaît dans les journaux.
+- [x] 1.9b Suites de la revue de sécurité 1.9 (`docs/reviews/2026-11-11-security-1.9.md`) : contrôle avant échappement Markdown, oracle par fragments, séquences de terminal neutralisées, gabarit `error` sur corps masqué. Agent : `backend-dev`.
 - [ ] 1.10 Presse-papiers : `NSPasteboard`, data-control (KDE, wlroots), message honnête sur GNOME. Agents : plateformes. Fin : statut = effet réel.
 - [ ] 1.11 Compose de test (Zipline + PostgreSQL, Garage, OpenSSH ; digests épinglés), job d'intégration, test « zéro requête » (`unshare -rn`). Agents : `devops`, `qa-tester`.
 - [ ] 1.12 **[Utilisateur]** Essai réel GNOME, KDE, Mac.

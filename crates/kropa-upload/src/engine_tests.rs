@@ -14,7 +14,7 @@ use wiremock::matchers::{any, header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::destination::{Destination, DestinationFile};
-use crate::engine::{UploadInput, Uploader};
+use crate::engine::{UploadInput, Uploader, is_hostile_char};
 use crate::error::{Retry, UploadError};
 use crate::origin::canonical_origin;
 use crate::secret::{MemorySecretSource, Placement};
@@ -451,6 +451,9 @@ async fn hostile_urls_are_refused() {
         "https://files.example.org/a\u{202e}gnp.exe",
         "https://files.example.org/\u{200b}a",
         "https://files.example.org/a\nb",
+        "https://files.example.org/a\u{200e}b",
+        "https://files.example.org/a\u{2028}b",
+        "https://files.example.org/a\u{ad}b",
         "not a url",
     ] {
         server.reset().await;
@@ -464,6 +467,115 @@ async fn hostile_urls_are_refused() {
             .await
             .unwrap_err();
         assert_eq!(err.reason(), "url_invalid", "{url:?}");
+    }
+}
+
+/// m7 of 1.9: an address that no link can carry is refused by the engine itself, with the code of
+/// the other unusable addresses (whose message says that the file may be on the server).
+#[tokio::test]
+async fn a_url_longer_than_a_link_can_carry_is_refused_by_the_engine() {
+    let server = Front::start().await;
+    let store = store_for(&server, "maison", vec![Placement::header("Authorization")]);
+    let dest = http_destination(&server, HTTP_TOML);
+    for length in [crate::links::MAX_URL_LEN, crate::links::MAX_URL_LEN + 1] {
+        server.reset().await;
+        let url = format!("https://files.example.org/{}", "a".repeat(length));
+        Mock::given(any())
+            .respond_with(ok_json(&url))
+            .mount(&server)
+            .await;
+        let err = server
+            .uploader(&store)
+            .upload(&dest, &input(), &[])
+            .await
+            .unwrap_err();
+        assert_eq!(err.reason(), "url_invalid", "{length}");
+    }
+    // Just under the limit, the engine accepts it.
+    server.reset().await;
+    let url = format!(
+        "https://files.example.org/{}",
+        "a".repeat(crate::links::MAX_URL_LEN - 40)
+    );
+    Mock::given(any())
+        .respond_with(ok_json(&url))
+        .mount(&server)
+        .await;
+    server
+        .uploader(&store)
+        .upload(&dest, &input(), &[])
+        .await
+        .expect("a URL under the limit");
+}
+
+/// I3 of 1.9: an error message from a hostile server cannot carry a sequence for the terminal
+/// (OSC 52 writes the clipboard) nor a mark that reorders the text.
+#[tokio::test]
+async fn a_server_cannot_send_terminal_sequences_in_an_error() {
+    let server = Front::start().await;
+    let store = store_for(&server, "maison", vec![Placement::header("Authorization")]);
+    let dest = http_destination(&server, HTTP_TOML);
+    let message = "\u{1b}]52;c;Zm9v\u{7}\u{9b}2K\u{202E}gnp\u{200F} done\r\n";
+    for body in [
+        serde_json::json!({"error": {"message": message}}),
+        serde_json::json!({"other": message}),
+    ] {
+        server.reset().await;
+        Mock::given(any())
+            .respond_with(ResponseTemplate::new(500).set_body_json(body))
+            .mount(&server)
+            .await;
+        let err = server
+            .uploader(&store)
+            .upload(&dest, &input(), &[])
+            .await
+            .unwrap_err();
+        let shown = format!("{err}");
+        assert!(!shown.chars().any(is_hostile_char), "{shown:?}");
+        let text = err
+            .server_message()
+            .expect("a server error")
+            .as_str()
+            .to_owned();
+        assert!(!text.chars().any(is_hostile_char), "{text:?}");
+    }
+}
+
+/// m5 of 1.7 and 1.9: the `error` template reads the body already masked, so that `{regex:}`
+/// cannot cut a fragment out of a secret that the detector has not seen whole.
+#[tokio::test]
+async fn an_error_template_cannot_cut_a_fragment_out_of_a_secret() {
+    let server = Front::start().await;
+    let store = store_for(&server, "maison", vec![Placement::header("Authorization")]);
+    let toml = HTTP_TOML.replace(
+        "error = \"{json:$.error.message}\"",
+        "error = \"{regex:(?s)rejected: (.{0,12})|1}\"",
+    );
+    let dest = http_destination(&server, &toml);
+    for body in [
+        format!("rejected: {TOKEN} and more"),
+        format!("rejected: {}", TOKEN.replace('-', "%2D")),
+        format!("rejected: {}", TOKEN.replace('-', "\\u002d")),
+    ] {
+        server.reset().await;
+        Mock::given(any())
+            .respond_with(ResponseTemplate::new(500).set_body_string(body.clone()))
+            .mount(&server)
+            .await;
+        let err = server
+            .uploader(&store)
+            .upload(&dest, &input(), &[])
+            .await
+            .unwrap_err();
+        let shown = format!("{err} {err:?}");
+        let windows: Vec<&str> = (0..=TOKEN.len() - 8).map(|i| &TOKEN[i..i + 8]).collect();
+        for w in windows {
+            assert!(
+                !shown.contains(w),
+                "{w:?} of the secret in {shown:?} (body {body:?})"
+            );
+        }
+        assert_eq!(err.reason(), "http_status");
     }
 }
 

@@ -24,6 +24,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
 use zeroize::Zeroizing;
 
+use crate::engine::is_hostile_char;
 use crate::secret::MIN_SECRET_LEN;
 
 /// Secrets loaded since the program started (N5).
@@ -626,7 +627,8 @@ pub const MASK: &str = "***";
 
 impl MaskedText {
     /// Masks the **whole** body, then cuts the result to `limit` characters (`…` is appended when it
-    /// was cut). The body is decoded as UTF-8 with replacement first.
+    /// was cut). The body is decoded as UTF-8 with replacement first, and every control, bidirectional
+    /// or invisible character ([`is_hostile_char`]) of the result is turned into a blank.
     #[must_use]
     pub fn from_response(body: &[u8], secrets: &SecretSet, limit: usize) -> Self {
         let text = String::from_utf8_lossy(body).into_owned();
@@ -656,6 +658,12 @@ impl MaskedText {
             cursor = e;
         }
         out.push_str(&text[cursor..]);
+        // Nothing the server wrote can steer a terminal (ESC, BEL, C1: OSC 52, cursor moves) or
+        // reorder what is read (bidirectional marks): once masked, such characters become blanks.
+        let out: String = out
+            .chars()
+            .map(|c| if is_hostile_char(c) { ' ' } else { c })
+            .collect();
         let cut: String = out.chars().take(limit).collect();
         let text = if cut.len() < out.len() {
             format!("{cut}…")
@@ -669,6 +677,13 @@ impl MaskedText {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.text
+    }
+
+    /// Keeps the fact that a secret was masked earlier, in the text this one was made from.
+    #[must_use]
+    pub(crate) fn or_masked(mut self, earlier: bool) -> Self {
+        self.masked |= earlier;
+        self
     }
 
     /// Whether a secret was found and masked (warning `secret_echoed`).
@@ -743,6 +758,7 @@ mod tests {
     use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE_NO_PAD};
 
     use super::{CheckedOutput, MaskedText, SecretSet};
+    use crate::engine::is_hostile_char;
 
     const TOKEN: &str = concat!("Zq7!", "kLm9#", "Xt2+/vRw");
 
@@ -806,6 +822,30 @@ mod tests {
             let text = format!("https://img.example.org/u/{form}.png");
             assert!(CheckedOutput::check(&text, &set).is_err(), "{form}");
         }
+    }
+
+    /// I3 of the review of 1.9: nothing a server writes keeps a character that steers a terminal
+    /// (ESC, BEL, C1, OSC 52) or reorders the text (U+202E and the other marks).
+    #[test]
+    fn hostile_characters_of_a_response_become_blanks() {
+        let secrets = set();
+        let hostile = "\u{1b}]52;c;Zm9v\u{7}\u{9b}31m\u{202E}x\u{200E}\u{2028}y\u{ad}z\r\n\t";
+        let masked = MaskedText::from_response(hostile.as_bytes(), &secrets, 500);
+        assert!(
+            !masked.as_str().chars().any(is_hostile_char),
+            "{:?}",
+            masked.as_str()
+        );
+        assert!(masked.as_str().contains("]52;c;Zm9v"), "{masked}");
+        // Raw bytes too (C1 as a lone byte is replaced by U+FFFD, which is not hostile).
+        let raw = MaskedText::from_response(b"a\x1b[2Kb\x07c\x00d", &secrets, 500);
+        assert_eq!(raw.as_str(), "a [2Kb c d");
+        // A secret next to such characters is still masked.
+        let with_secret = format!("\u{1b}[31m{}\u{7}", "name-with-secret-1");
+        let secrets = SecretSet::from_values(&["name-with-secret-1"]);
+        let masked = MaskedText::from_response(with_secret.as_bytes(), &secrets, 500);
+        // (the mask is widened to the run of the alphabet that touches the secret: `31m` goes too)
+        assert_eq!(masked.as_str(), " [*** ");
     }
 
     #[test]

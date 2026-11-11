@@ -929,30 +929,58 @@ fn journal_token() -> String {
     ["cli9-", "Zq7kLm9", "Xt2+vRw", "/abcdef-QW"].concat()
 }
 
-/// The forms of the secret that must not come out: raw, percent-encoded, hex, and the part of the
-/// base64 (both alphabets) that does not depend on the neighbours, at the three alignments.
+/// The parts of the secret that must not come out: every window of 8 characters of each form
+/// (raw, percent-encoded whole or in part, hex, JSON escapes, HTML entities, and the part of the
+/// base64 in both alphabets that does not depend on the neighbours, at the three alignments).
 fn leaked_forms(text: &str, secret: &str) -> Vec<String> {
     use base64::Engine as _;
     use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+    let special = |b: u8| !b.is_ascii_alphanumeric() && !matches!(b, b'-' | b'.' | b'_' | b'~');
     let mut forms = vec![secret.to_owned()];
     for lower in [false, true] {
-        let (mut pct, mut hex) = (String::new(), String::new());
-        for b in secret.bytes() {
-            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
-                pct.push(char::from(b));
-            } else if lower {
-                pct.push_str(&format!("%{b:02x}"));
-            } else {
-                pct.push_str(&format!("%{b:02X}"));
-            }
-            hex.push_str(&if lower {
+        let enc = |b: u8| {
+            if lower {
                 format!("{b:02x}")
             } else {
                 format!("{b:02X}")
-            });
+            }
+        };
+        let (mut pct, mut hex, mut json, mut uni, mut dec, mut hexent) = (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+        let (mut only_plus, mut only_slash) = (String::new(), String::new());
+        for b in secret.bytes() {
+            let c = char::from(b);
+            hex.push_str(&enc(b));
+            if special(b) {
+                pct.push_str(&format!("%{}", enc(b)));
+                uni.push_str(&format!("\\u00{}", enc(b)));
+                json.push_str(&if b == b'/' {
+                    "\\/".to_owned()
+                } else {
+                    format!("\\u00{}", enc(b))
+                });
+                dec.push_str(&format!("&#{b};"));
+                hexent.push_str(&format!("&#x{};", enc(b).trim_start_matches('0')));
+            } else {
+                for out in [&mut pct, &mut uni, &mut json, &mut dec, &mut hexent] {
+                    out.push(c);
+                }
+            }
+            for (only, target) in [(&mut only_plus, b'+'), (&mut only_slash, b'/')] {
+                if b == target {
+                    only.push_str(&format!("%{}", enc(b)));
+                } else {
+                    only.push(c);
+                }
+            }
         }
-        forms.push(pct);
-        forms.push(hex);
+        forms.extend([pct, hex, json, uni, dec, hexent, only_plus, only_slash]);
     }
     for pad in 0..3 {
         let mut bytes = vec![b'#'; pad];
@@ -964,10 +992,17 @@ fn leaked_forms(text: &str, secret: &str) -> Vec<String> {
             forms.push(e[4..e.len() - 4].to_owned());
         }
     }
-    forms
-        .into_iter()
-        .filter(|f| text.contains(f.as_str()))
-        .collect()
+    let mut found = Vec::new();
+    for form in forms {
+        let chars: Vec<char> = form.chars().collect();
+        for w in chars.windows(8) {
+            let w: String = w.iter().collect();
+            if text.contains(w.as_str()) && !found.contains(&w) {
+                found.push(w);
+            }
+        }
+    }
+    found
 }
 
 fn echoing(status: u16, body: serde_json::Value, secret: &str) -> ResponseTemplate {
@@ -1064,7 +1099,7 @@ async fn no_secret_reaches_stdout_stderr_or_the_json_at_vv() {
         seen.contains("kropa-upload: request: POST http://127.0.0.1:"),
         "{seen}"
     );
-    assert!(seen.contains("x-echo: ***"), "{seen}");
+    assert!(seen.contains("other header(s): ***"), "{seen}");
     assert!(seen.contains("set-cookie: ***"), "{seen}");
     assert_eq!(leaked_forms(&seen, &secret), Vec::<String>::new(), "{seen}");
 }
@@ -1093,4 +1128,99 @@ async fn a_hostile_link_never_reaches_stdout() {
         assert_eq!(r.code, 9, "{url}: {}", r.err);
         assert!(!r.out.contains(url), "{}", r.out);
     }
+}
+
+/// The CLI side of the HTTPS paths without the CA of the tests (decision U3: the CA exists in
+/// `kropa-upload` only). The secret is read from the store and the destination is `https://`; the
+/// server behind it speaks plain HTTP, so the handshake fails, but only after the lines `request:`
+/// and `request headers:` were written. They must show `api_key=***`, `ref=***` (not named like a
+/// secret: the detector alone hides it) and `authorization: ***` on stderr, and nothing of the
+/// secret on stdout, stderr or in the JSON.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_secret_read_from_the_store_is_hidden_in_the_request_lines_when_the_handshake_fails() {
+    let secret = journal_token();
+    let server = MockServer::start().await;
+    let https = server.uri().replacen("http://", "https://", 1);
+    let dir = tempfile::tempdir().unwrap();
+    let destination = format!(
+        r#"
+[[destination]]
+id = "journal"
+type = "http"
+[destination.request]
+url = "{https}/up"
+query = {{ api_key = "{{secret:token}}", ref = "{{secret:token}}", title = "{{filename}}" }}
+headers = {{ Authorization = "Bearer {{secret:token}}" }}
+[destination.secrets]
+token = {{}}
+[destination.response]
+url = "{{json:$.url}}"
+"#
+    );
+    config_with(dir.path(), &destination, Some("journal"));
+    let store = MemorySecretSource::new();
+    store
+        .insert(
+            "journal",
+            "token",
+            &secret,
+            &[canonical_origin(&https).unwrap().as_str()],
+            vec![
+                Placement::header("Authorization"),
+                Placement::Query("api_key".into()),
+                Placement::Query("ref".into()),
+            ],
+        )
+        .unwrap();
+    let store: Arc<dyn SecretStore> = Arc::new(store);
+    let file = shot(dir.path());
+    let c = cfg(dir.path());
+    let mut seen = String::new();
+    for json in [false, true] {
+        let mut args = vec!["--config", c.as_str(), "-vv", "--lang", "en"];
+        if json {
+            args.push("--json");
+        }
+        args.extend(["upload", file.as_str()]);
+        let r = cli(&args, store.clone(), false, false, false).await;
+        assert_ne!(r.code, 0, "{}", r.err);
+        for expected in [
+            "kropa-upload: request: POST https://127.0.0.1:",
+            "api_key=***",
+            "ref=***",
+            "kropa-upload: request headers: authorization: ***",
+        ] {
+            assert!(
+                r.err.contains(expected),
+                "{expected:?} missing in:\n{}",
+                r.err
+            );
+        }
+        seen.push_str(&format!("{}\n{}\n", r.out, r.err));
+    }
+    assert!(seen.contains("title=shot.png"), "{seen}");
+    assert_eq!(leaked_forms(&seen, &secret), Vec::<String>::new(), "{seen}");
+}
+
+/// The oracle above is not an empty one: it sees a part of the secret in several forms and nothing
+/// in a harmless text.
+#[test]
+fn the_cli_oracle_sees_partial_leaks() {
+    let secret = journal_token();
+    let pct = secret.replace('+', "%2B");
+    for part in [
+        &secret[3..15],
+        &pct[2..18],
+        &secret.replace('/', "\\/")[8..24],
+        &secret.replace('+', "\\u002b")[4..22],
+    ] {
+        assert!(
+            !leaked_forms(&format!("x {part} y"), &secret).is_empty(),
+            "{part}"
+        );
+    }
+    assert_eq!(
+        leaked_forms("kropa: nothing to see here", &secret),
+        Vec::<String>::new()
+    );
 }

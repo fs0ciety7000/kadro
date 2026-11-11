@@ -506,7 +506,13 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   public ; seul le type **privé** du document de magasin (§ 2.3) se sérialise, dans un tampon `Zeroizing`. `Clone`
   limité. Test qui échoue si un type secret dérive `Debug`.
 - Couche `tracing` d'expurgation : en-têtes en **liste blanche** (`content-type`, `content-length`, `retry-after`,
-  `location` sans query) ; le reste → `***`. Passe finale avec le **détecteur du § 4.4** (formes dérivées comprises)
+  `location`, ce dernier résolu contre l'URL de la requête puis passé par `redact_url` : sans identifiants ni
+  fragment, valeur d'un paramètre sensible et segment ressemblant à un jeton masqués) ; le reste → `***`. Les **noms**
+  des en-têtes d'une réponse ne sont écrits que s'ils sont dans une liste de noms connus ; les autres sont comptés
+  (`N other header(s): ***`), car un serveur peut renvoyer le secret comme nom d'en-tête (en minuscules, il échappe au
+  détecteur). Le texte venu d'une réponse (`MaskedText`) n'a ni caractère de contrôle, ni marque bidirectionnelle, ni
+  caractère invisible (remplacés par une espace : pas de séquence de terminal, OSC 52 compris). Le gabarit `error`
+  est rendu sur la réponse **déjà masquée**, de sorte qu'un `{regex:}` ne peut pas en extraire un fragment du secret. Passe finale avec le **détecteur du § 4.4** (formes dérivées comprises)
   sur messages, erreurs et `--json` ; extraits de réponse et `error` n'y arrivent que sous forme de `MaskedText`
   (§ 4.4, N1). Jamais de corps de requête journalisé.
 - `-vv` n'ouvre que `kropa*=debug` ; `hyper`, `h2`, `reqwest`, `rustls`, `russh`, `zbus`, `object_store` restent à

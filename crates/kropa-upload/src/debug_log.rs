@@ -7,9 +7,11 @@
 //! secret loaded in the process** (N5) before it is stored, so that a line cannot be written
 //! without the final pass. What is built on top of it:
 //!
-//! - headers on a white list (`content-type`, `content-length`, `accept`, `user-agent`,
-//!   `retry-after`, `location` without query); every other value is `***` (`Authorization`,
-//!   `Cookie`, `Set-Cookie`, the headers declared as secrets...);
+//! - headers on a white list (`content-type`, `content-length`, `retry-after`, `location` through
+//!   [`redact_url`]); every other value is `***` (`Authorization`, `Cookie`, `Set-Cookie`, the
+//!   headers declared as secrets...). The names of the headers of an answer are written only when
+//!   they are on a list of well-known names; the others are counted, never written (a server could
+//!   send a secret as a header name, which arrives in lower case and escapes the detector);
 //! - URLs without user info or fragment, with the value of a sensitive query parameter and any
 //!   path segment that looks like a token replaced by `***`;
 //! - never the body of a request; the body of an answer only when it is an error, masked and cut.
@@ -19,6 +21,7 @@ use std::sync::Mutex;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use url::Url;
 
+use crate::engine::is_hostile_char;
 use crate::masked::{MASK, MaskedText, SecretSet};
 use crate::sensitive::{is_sensitive_name, looks_like_token_segment};
 
@@ -28,13 +31,27 @@ const LINE_LIMIT: usize = 1000;
 pub(crate) const BODY_LIMIT: usize = 200;
 
 /// Header names whose value may be written.
-const LOGGED_HEADERS: [&str; 6] = [
-    "content-type",
-    "content-length",
-    "accept",
-    "user-agent",
-    "retry-after",
-    "location",
+const LOGGED_HEADERS: [&str; 4] = ["content-type", "content-length", "retry-after", "location"];
+
+/// Names of headers of an answer that are written (with `***` as the value unless they are on
+/// [`LOGGED_HEADERS`]). Any other name is only counted.
+const KNOWN_RESPONSE_HEADERS: [&str; 16] = [
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "www-authenticate",
+    "proxy-authenticate",
+    "x-api-key",
+    "server",
+    "date",
+    "etag",
+    "cache-control",
+    "vary",
+    "connection",
+    "content-encoding",
+    "content-disposition",
+    "transfer-encoding",
 ];
 
 /// Lines of one run, already redacted.
@@ -70,7 +87,7 @@ impl DebugLog {
         let line: String = masked
             .as_str()
             .chars()
-            .map(|c| if c.is_control() { ' ' } else { c })
+            .map(|c| if is_hostile_char(c) { ' ' } else { c })
             .collect();
         self.lines
             .lock()
@@ -124,40 +141,52 @@ pub fn redact_url(url: &Url) -> String {
     out
 }
 
-/// One header for the journal: the value only for the names of the white list.
-fn redact_header(name: &HeaderName, value: &HeaderValue) -> String {
+/// One header for the journal: the value only for the names of the white list. A `location` is
+/// resolved against `base` (the address of the request) and goes through [`redact_url`].
+fn redact_header(name: &HeaderName, value: &HeaderValue, base: Option<&Url>) -> String {
     let shown = LOGGED_HEADERS
         .contains(&name.as_str())
         .then(|| value.to_str().ok())
         .flatten()
         .filter(|_| !value.is_sensitive());
     match shown {
-        // Without the query or fragment of a `location`: they may carry a token.
-        Some(text) if name.as_str() == "location" => {
-            format!(
-                "{name}: {}",
-                text.split(['?', '#']).next().unwrap_or_default()
-            )
-        }
+        Some(text) if name.as_str() == "location" => match base.and_then(|b| b.join(text).ok()) {
+            Some(next) => format!("{name}: {}", redact_url(&next)),
+            None => format!("{name}: {MASK}"),
+        },
         Some(text) => format!("{name}: {text}"),
         None => format!("{name}: {MASK}"),
     }
 }
 
-/// Headers of a request or an answer, as `name: value; name: ***`.
+/// Headers of a request, as `name: value; name: ***`. The names come from the destination.
 pub(crate) fn redact_headers<'a>(
     headers: impl IntoIterator<Item = (&'a HeaderName, &'a HeaderValue)>,
 ) -> String {
     headers
         .into_iter()
-        .map(|(n, v)| redact_header(n, v))
+        .map(|(n, v)| redact_header(n, v, None))
         .collect::<Vec<_>>()
         .join("; ")
 }
 
-/// Headers of an answer.
-pub(crate) fn redact_header_map(headers: &HeaderMap) -> String {
-    redact_headers(headers.iter())
+/// Headers of an answer to the request to `base`: the names that are not well known are counted.
+pub(crate) fn redact_header_map(headers: &HeaderMap, base: &Url) -> String {
+    let mut parts = Vec::new();
+    let mut others = 0usize;
+    for (name, value) in headers {
+        if LOGGED_HEADERS.contains(&name.as_str())
+            || KNOWN_RESPONSE_HEADERS.contains(&name.as_str())
+        {
+            parts.push(redact_header(name, value, Some(base)));
+        } else {
+            others += 1;
+        }
+    }
+    if others > 0 {
+        parts.push(format!("{others} other header(s): {MASK}"));
+    }
+    parts.join("; ")
 }
 
 #[cfg(test)]
@@ -186,18 +215,28 @@ mod tests {
         for (n, v) in [
             ("content-type", "image/png"),
             ("authorization", "Bearer something"),
-            ("cookie", "a=b"),
+            ("cookie", "ck=1"),
             ("set-cookie", "s=t"),
             ("x-declared", "value"),
-            ("location", "https://h.example.org/p?token=zz"),
+            ("location", "https://u:pw@h.example.org/p?token=zz&a=b#frag"),
         ] {
             map.append(
                 HeaderName::from_bytes(n.as_bytes()).unwrap(),
                 HeaderValue::from_str(v).unwrap(),
             );
         }
-        let line = redact_header_map(&map);
-        for hidden in ["something", "a=b", "s=t", "value", "zz"] {
+        let base = Url::parse("https://h.example.org/up").unwrap();
+        let line = redact_header_map(&map, &base);
+        for hidden in [
+            "something",
+            "ck=1",
+            "s=t",
+            "value",
+            "zz",
+            "pw",
+            "frag",
+            "x-declared",
+        ] {
             assert!(!line.contains(hidden), "{line}");
         }
         for shown in [
@@ -205,11 +244,19 @@ mod tests {
             "authorization: ***",
             "cookie: ***",
             "set-cookie: ***",
-            "x-declared: ***",
-            "location: https://h.example.org/p",
+            "1 other header(s): ***",
+            "location: https://h.example.org/p?token=***&a=b",
         ] {
             assert!(line.contains(shown), "{shown} in {line}");
         }
+        // The name of a header that is not well known is counted, never written.
+        let mut odd = HeaderMap::new();
+        odd.append(
+            HeaderName::from_bytes(b"jrnl-zq7klm9xt2vrw").unwrap(),
+            HeaderValue::from_static("v"),
+        );
+        let line = redact_header_map(&odd, &base);
+        assert_eq!(line, "1 other header(s): ***");
         // A value flagged sensitive is hidden even under a name of the white list.
         let mut v = HeaderValue::from_static("text/secret");
         v.set_sensitive(true);
@@ -224,8 +271,10 @@ mod tests {
         let log = DebugLog::new(2);
         log.record(2, &format!("echo {token}\nnext line\r\u{1b}[31m"));
         log.record(3, "above the level");
+        log.record(2, "a\u{202E}b\u{200E}c\u{2028}d\u{ad}e\u{9b}f");
         let lines = log.take();
-        assert_eq!(lines.len(), 1);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[1].1, "a b c d e f");
         assert!(!lines[0].1.contains(&token), "{:?}", lines[0]);
         assert!(lines[0].1.contains("***"), "{:?}", lines[0]);
         assert!(!lines[0].1.chars().any(char::is_control), "{:?}", lines[0]);

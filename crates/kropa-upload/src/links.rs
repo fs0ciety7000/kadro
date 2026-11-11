@@ -123,14 +123,17 @@ fn escape_markdown_text(text: &str) -> String {
     out
 }
 
-/// A URL for a Markdown destination: nothing that closes it, opens a title or an autolink.
+/// A URL for a Markdown destination: nothing that closes it, opens a title or an autolink. A `&`
+/// is escaped (`\&`: CommonMark would decode `&amp;` in a destination) and a `|` is percent-encoded
+/// (it would split a cell of a GFM table).
 fn markdown_url(url: &Url) -> String {
     let mut out = String::with_capacity(url.as_str().len());
     for c in url.as_str().chars() {
         match c {
-            ' ' | '(' | ')' | '<' | '>' | '[' | ']' | '\\' | '`' | '"' | '\'' => {
+            ' ' | '(' | ')' | '<' | '>' | '[' | ']' | '\\' | '`' | '"' | '\'' | '|' => {
                 out.push_str(&format!("%{:02X}", u32::from(c)));
             }
+            '&' => out.push_str("\\&"),
             c => out.push(c),
         }
     }
@@ -151,6 +154,13 @@ pub fn format_link(
 ) -> Result<CheckedOutput, LinkError> {
     let parsed = validate_url(url.as_str())?;
     let shown = display_name(name);
+    // The secret is searched for in what is shown **before** any escaping: a Markdown escape
+    // (`sk\_live`) or an HTML entity hides it from a check made on the result alone. The check of
+    // the result below stays: it is the final one.
+    CheckedOutput::check(name, secrets)?;
+    CheckedOutput::check(url.as_str(), secrets)?;
+    CheckedOutput::check(shown.as_str(), secrets)?;
+    CheckedOutput::check(parsed.as_str(), secrets)?;
     let image = is_image_name(&shown);
     let text = match format {
         LinkFormat::Url => parsed.as_str().to_owned(),
@@ -259,6 +269,60 @@ mod tests {
     }
 
     #[test]
+    fn ampersands_and_pipes_of_a_destination_are_neutralised() {
+        let md = link(
+            LinkFormat::Markdown,
+            "https://z.example.org/a|b?x=1&amp;y=2&z=3",
+            "a.png",
+        );
+        assert_eq!(
+            md,
+            "![a.png](https://z.example.org/a%7Cb?x=1\\&amp;y=2\\&z=3)"
+        );
+    }
+
+    /// A secret that holds characters Markdown and HTML escape: the name or the address that carry
+    /// it are refused whatever the format, because the check is made before the escaping (I1).
+    #[test]
+    fn a_secret_with_markdown_punctuation_is_refused_in_the_name_and_the_url() {
+        for secret in [
+            ["sk_", "live_", "Zq7kLm9Xt2"].concat(),
+            ["sk*", "live*", "Zq7kLm9Xt2"].concat(),
+            ["sk#", "live!", "Zq7kLm9Xt2"].concat(),
+            ["sk|", "live&", "Zq7kLm9Xt2~"].concat(),
+            ["(sk", "[live]", "Zq7kLm9)"].concat(),
+        ] {
+            let secrets = SecretSet::from_values(&[secret.as_str()]);
+            let plain = CheckedOutput::check("https://z.example.org/a", &secrets).unwrap();
+            for format in [LinkFormat::Url, LinkFormat::Markdown, LinkFormat::Html] {
+                for name in [format!("{secret}.png"), format!("a{secret}b.txt")] {
+                    assert_eq!(
+                        format_link(format, &plain, &name, &secrets).unwrap_err(),
+                        LinkError::SecretInOutput,
+                        "{secret:?} in the name, as {format:?}"
+                    );
+                }
+            }
+            // In the address: a secret that the URL parser keeps as it is.
+            let raw = format!("https://z.example.org/a?k={secret}");
+            if let Ok(url) = CheckedOutput::check(raw.clone(), &SecretSet::new()) {
+                for format in [LinkFormat::Url, LinkFormat::Markdown, LinkFormat::Html] {
+                    assert!(
+                        format_link(format, &url, "a.png", &secrets).is_err(),
+                        "{raw:?} as {format:?}"
+                    );
+                }
+            }
+        }
+        // A name cut at 255 characters: the secret that straddles the cut is refused as well.
+        let secret = ["cut-", "Zq7kLm9Xt2vRw"].concat();
+        let secrets = SecretSet::from_values(&[secret.as_str()]);
+        let url = CheckedOutput::check("https://z.example.org/a", &secrets).unwrap();
+        let name = format!("{}{secret}.png", "n".repeat(MAX_NAME_LEN - 6));
+        assert!(format_link(LinkFormat::Markdown, &url, &name, &secrets).is_err());
+    }
+
+    #[test]
     fn urls_that_are_not_plain_http_are_refused() {
         let secrets = SecretSet::new();
         let long = format!("https://z.example.org/{}", "a".repeat(MAX_URL_LEN));
@@ -327,8 +391,12 @@ mod tests {
 
     fn assert_markdown_safe(out: &str, name: &str) {
         let (label, dest) = split_markdown(out);
+        // `\&` is the one escape of a destination; every `&` of it must carry one.
+        let bare = dest.replace("\\&", "");
         assert!(
-            !dest.contains([' ', '(', ')', '<', '>', '[', ']', '\\', '"', '\'', '`']),
+            !bare.contains([
+                ' ', '(', ')', '<', '>', '[', ']', '\\', '"', '\'', '`', '|', '&'
+            ]),
             "{out:?}"
         );
         assert!(!dest.chars().any(char::is_control), "{out:?}");

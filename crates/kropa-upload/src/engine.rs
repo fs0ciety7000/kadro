@@ -26,7 +26,7 @@ use crate::destination::{
 };
 use crate::error::{Retry, UploadError};
 use crate::http::{HttpClient, network_error};
-use crate::masked::{CheckedOutput, MaskedText, SecretSet, register_secret};
+use crate::masked::{CheckedOutput, MASK, MaskedText, SecretSet, register_secret};
 use crate::origin::{canonical_origin, origin_of};
 use crate::secret::{Placement, SHORT_SECRET_LEN, SecretSource, SecretValue};
 use crate::sensitive::is_sensitive_name;
@@ -616,7 +616,7 @@ impl<'a> Uploader<'a> {
                 2,
                 &format!(
                     "response headers: {}",
-                    redact_header_map(response.headers())
+                    redact_header_map(response.headers(), &url)
                 ),
             );
             if status.is_redirection()
@@ -858,18 +858,30 @@ impl Env for ResponseEnv<'_> {
     }
 }
 
-/// Characters that make a URL taken from a response unusable: controls, bidirectional overrides
-/// and zero-width characters (`docs/security/secrets.md` section 4.4).
+/// Characters that make a text taken from a response unusable: controls (ESC, BEL, C1...),
+/// bidirectional marks and overrides, zero-width characters, line and paragraph separators and the
+/// soft hyphen (`docs/security/secrets.md` section 4.4).
 pub(crate) fn is_hostile_char(c: char) -> bool {
     c.is_control()
-        || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}')
+        || matches!(
+            c,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{2028}'..='\u{202E}'
+                | '\u{2060}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{FEFF}'
+        )
 }
 
 fn validate_extracted_url(text: &str) -> Result<Url, UploadError> {
     let invalid =
         || UploadError::failed("url_invalid", "the URL read from the answer is not usable");
     let text = text.trim();
-    if text.chars().any(is_hostile_char) {
+    // The length is checked here, not only when a link is made: an address that no link can carry
+    // is refused at once, with the same code and the same message ("the file may be uploaded").
+    if text.len() > crate::links::MAX_URL_LEN || text.chars().any(is_hostile_char) {
         return Err(invalid());
     }
     let url = Url::parse(text).map_err(|_| invalid())?;
@@ -877,6 +889,7 @@ fn validate_extracted_url(text: &str) -> Result<Url, UploadError> {
         || url.host_str().is_none_or(str::is_empty)
         || !url.username().is_empty()
         || url.password().is_some()
+        || url.as_str().len() > crate::links::MAX_URL_LEN
     {
         return Err(invalid());
     }
@@ -897,17 +910,19 @@ fn check_output(raw: &str, url: &Url, known: &SecretSet) -> Result<CheckedOutput
     CheckedOutput::check(url.as_str(), known).map_err(refused)
 }
 
-fn kept_headers(headers: &HeaderMap, known: &SecretSet) -> Vec<HeaderLine> {
+fn kept_headers(headers: &HeaderMap, base: &Url, known: &SecretSet) -> Vec<HeaderLine> {
     let mut lines = Vec::new();
     for name in ["content-type", "content-length", "retry-after", "location"] {
         let Some(value) = headers.get(name).and_then(|v| v.to_str().ok()) else {
             continue;
         };
         let value = if name == "location" {
-            // Without query or fragment: they may carry a token.
-            value.split(['?', '#']).next().unwrap_or_default()
+            // As in the journal: resolved against the request, without user info or fragment,
+            // with the value of a sensitive parameter and any token-like segment hidden.
+            base.join(value)
+                .map_or_else(|_| MASK.to_owned(), |next| redact_url(&next))
         } else {
-            value
+            value.to_owned()
         };
         lines.push(HeaderLine {
             name: name.to_owned(),
@@ -915,6 +930,32 @@ fn kept_headers(headers: &HeaderMap, known: &SecretSet) -> Vec<HeaderLine> {
         });
     }
     lines
+}
+
+/// The answer with its body and its header values masked as a whole: the response templates of an
+/// error (`{regex:}`, `{json:}`, `{header:}`) read this copy, so that no part of a secret can be
+/// cut out of the text before the detector has seen it (m2 of 1.7, N1). The flag says whether the body
+/// held a secret.
+fn masked_answer(answer: &Answer, known: &SecretSet) -> (Answer, bool) {
+    let mask = |bytes: &[u8]| MaskedText::from_response(bytes, known, usize::MAX);
+    let mut headers = HeaderMap::new();
+    for (name, value) in &answer.headers {
+        let text = mask(value.as_bytes());
+        if let Ok(value) = HeaderValue::from_str(text.as_str()) {
+            headers.append(name.clone(), value);
+        }
+    }
+    // Only the body counts for the warning `secret_echoed`, as before.
+    let body = mask(&answer.body);
+    (
+        Answer {
+            status: answer.status,
+            headers,
+            body: body.as_str().as_bytes().to_vec(),
+            url: answer.url.clone(),
+        },
+        body.was_masked(),
+    )
 }
 
 fn retry_of(status: u16) -> Retry {
@@ -940,8 +981,15 @@ fn interpret(
         json: OnceCell::new(),
     };
     if !compiled.response.success_status.contains(&answer.status) {
-        // The `error` template when it gives something, else the start of the body. Either way the
-        // secret is masked on the whole text before it is cut.
+        // The `error` template when it gives something, else the start of the body. The template
+        // reads the answer already masked, and the result is masked again before it is cut.
+        let (masked, found) = masked_answer(answer, known);
+        let env = ResponseEnv {
+            answer: &masked,
+            input,
+            vars,
+            json: OnceCell::new(),
+        };
         let from_template = compiled
             .response
             .error
@@ -955,7 +1003,8 @@ fn interpret(
                 source.as_bytes(),
                 known,
                 crate::engine::MESSAGE_LIMIT,
-            ),
+            )
+            .or_masked(found),
             retry: retry_of(answer.status),
         });
     }
@@ -995,6 +1044,6 @@ fn interpret(
         thumbnail_url,
         deletion_url,
         warnings,
-        headers: kept_headers(&answer.headers, known),
+        headers: kept_headers(&answer.headers, &answer.url, known),
     })
 }
