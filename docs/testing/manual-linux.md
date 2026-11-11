@@ -82,6 +82,36 @@ Version de Plasma et de `xdg-desktop-portal-kde` à noter.
 - [ ] Sans portail du tout (`xdg-desktop-portal` arrêté) : code 10, `portal_unavailable`, le message cite l'installation
   de `xdg-desktop-portal` et du module du bureau.
 
+## Presse-papiers (lot 1.10)
+
+La CI (`crates/kropa-cli/tests/clipboard_wayland.rs`) lance `sway --headless` (wlroots, `zwlr_data_control_v1`) et
+`weston --backend=headless` (aucun protocole data-control, donc comme GNOME pour le presse-papiers), fait copier par le
+vrai binaire `kropa` et relit avec `wl-paste`. Elle ne prouve rien pour Mutter, KWin ni `ext-data-control-v1`. À la
+main, sur un vrai bureau, avec un serveur de test ou `kropa upload FICHIER --to PROFIL --copy markdown` :
+
+- [ ] `kropa doctor` : ligne « Wayland data-control » = oui (KDE, wlroots) ou introuvable (GNOME). Noter le bureau.
+- [ ] **KDE Plasma (Wayland)** : `kropa upload … --copy url` : code 0, `Link copied (url)`, `clipboard.status` =
+  `copied` en `--json`. Coller dans un éditeur de texte **après** le retour de la commande : l'URL apparaît. Vérifier
+  `ps -ef | grep __clipboard-serve` : un processus, qui disparaît dès qu'on copie autre chose. Plasma 6.x : noter si
+  Klipper garde une entrée d'historique (attendu : oui).
+- [ ] KDE : `kropa capture screen --copy image` : coller dans GIMP ou un client de messagerie : l'image est celle du
+  fichier. Essayer aussi `--copy markdown` / `html` avec `--upload` et coller dans un champ de texte riche et dans un
+  éditeur (le texte brut du lien, pas du HTML rendu).
+- [ ] **GNOME (Wayland)** : même commande avec `--copy url` : **code 0**, URL brute seule sur stdout,
+  `Link not copied: This Wayland session does not allow clipboard access without focus (GNOME does not). The link is
+  printed above.` sur stderr, `clipboard.status` = `unavailable`, `reason` = `no_data_control`, aucun processus
+  `__clipboard-serve`. Coller : l'ancien contenu est intact. Même chose en français (`--lang fr`).
+- [ ] GNOME : `--copy image` après `capture screen` : `Image not copied: …`, code 0, fichier enregistré.
+- [ ] **wlroots réel (Sway, Hyprland)** : comme KDE ; avec un gestionnaire d'historique (`cliphist`, `clipman`) noter s'il
+  voit l'entrée. Sway ≥ 1.11 / wlroots ≥ 0.19 annonce `ext-data-control-v1` : noter lequel est utilisé (indifférent
+  pour l'utilisateur).
+- [ ] Un shell qui capture la sortie ne reste pas bloqué : `url=$(kropa upload … --copy url); echo "$url"` rend la main
+  tout de suite, alors que le fils sert encore.
+- [ ] Session X11 seule (`DISPLAY` sans `WAYLAND_DISPLAY`) : `clipboard.status` = `unavailable`,
+  `reason` = `x11_not_supported`, code 0 (limite connue du lot 1.10).
+- [ ] Sans session graphique (ssh nu) : `unavailable` / `no_graphical_session`, code 0.
+- [ ] Fermer la session (ou tuer le compositeur) : le processus `__clipboard-serve` disparaît seul.
+
 ## Résultat
 
 | Bureau | Version | Date | Testeur | Écarts avec le comportement attendu |
@@ -89,6 +119,8 @@ Version de Plasma et de `xdg-desktop-portal-kde` à noter.
 | GNOME | | | | |
 | KDE Plasma | | | | |
 | wlroots | | | | |
+
+Presse-papiers : noter aussi, par bureau, `copied` / `unavailable` / `failed` obtenu et le protocole utilisé.
 
 Reporter dans `docs/platform-linux.md` § 8 les questions 1 (cibles), 2, 3 et 5 dès qu'elles ont une réponse, et dans
 `docs/plan.md` la question 2 de « Risques » (portail appelé depuis une CLI sans App ID).

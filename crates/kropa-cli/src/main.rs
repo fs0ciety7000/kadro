@@ -35,6 +35,13 @@ fn main() -> ExitCode {
     if args.len() == 2 && args[1] == kropa_store::BROKER_ARGUMENT {
         return kropa_store::run_broker();
     }
+    // Linux: `kropa __clipboard-serve` is the process that keeps a Wayland selection alive after the
+    // command that asked for the copy has exited (`kropa_capture::clipboard`). It is not a command
+    // either: it reads one request on stdin, answers one line, and does not run on a terminal.
+    #[cfg(target_os = "linux")]
+    if args.len() == 2 && args[1] == kropa_capture::clipboard::CLIPBOARD_SERVE_ARGUMENT {
+        return kropa_capture::clipboard::run_helper();
+    }
     // Only the standard locale variables are ever looked up (see `kropa_i18n::ENV_VARS`).
     let lookup = |name: &str| std::env::var(name).ok();
     kropa_cli::run(&args, &lookup).into()

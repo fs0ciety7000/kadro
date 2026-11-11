@@ -26,7 +26,7 @@ Détails
   Identifiant d'application : io.github.fs0ciety7000.Kropa
   Fichier .desktop de l'identifiant installé (scripts/dev-install.sh) : non
   Wayland layer-shell : pas encore vérifié
-  Wayland data-control (presse-papiers) : pas encore vérifié
+  Wayland data-control (presse-papiers) : introuvable
 
 Chemins
   Fichier de configuration : /nonexistent-kropa-home/.config/kropa/config.toml
@@ -39,5 +39,4 @@ Magasin de secrets
 
 Pas encore disponible
   Socket et version de kropa-app : lot 2.1
-  Presse-papiers : lot 1.10
   Écrans et leurs noms : lot 2.5

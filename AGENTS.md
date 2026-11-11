@@ -30,7 +30,7 @@ build:   cargo build --workspace --locked
 │   ├── kropa-core           # config, chemins, modèles de nom, erreurs
 │   ├── kropa-doc            # document d'annotation, format .kropa
 │   ├── kropa-render         # rendu (tiny-skia, cosmic-text)
-│   ├── kropa-capture        # backends de capture Linux et macOS
+│   ├── kropa-capture        # backends de capture et de presse-papiers Linux et macOS
 │   ├── kropa-upload         # destinations, client HTTP unique, S3, SFTP
 │   ├── kropa-store          # SQLite (historique, file), secrets
 │   ├── kropa-keychain       # Keychain macOS (un élément), courtier `kropa __store-broker`, protocole (lot 1.8m)

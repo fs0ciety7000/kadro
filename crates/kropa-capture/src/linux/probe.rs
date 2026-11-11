@@ -209,7 +209,10 @@ pub(crate) async fn diagnose(connection: Option<&Connection>) -> Diagnosis {
     facts.push(Fact::new("desktop_file", FactValue::Bool(installed)));
     // Needs a Wayland connection to read the compositor's globals: not written yet.
     facts.push(Fact::new("layer_shell", FactValue::NotProbed));
-    facts.push(Fact::new("data_control", FactValue::NotProbed));
+    facts.push(Fact::new(
+        "data_control",
+        crate::clipboard::probe_data_control(),
+    ));
     Diagnosis {
         platform: "linux",
         backend: "portal-screenshot",

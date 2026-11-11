@@ -26,7 +26,7 @@ Details
   Application ID: io.github.fs0ciety7000.Kropa
   Desktop file of the application ID installed (scripts/dev-install.sh): no
   Wayland layer-shell: not checked yet
-  Wayland data-control (clipboard): not checked yet
+  Wayland data-control (clipboard): not found
 
 Paths
   Configuration file: /nonexistent-kropa-home/.config/kropa/config.toml
@@ -39,5 +39,4 @@ Secret store
 
 Not available yet
   kropa-app socket and version: lot 2.1
-  Clipboard: lot 1.10
   Screens and their names: lot 2.5

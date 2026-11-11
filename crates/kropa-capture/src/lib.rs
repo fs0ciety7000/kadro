@@ -9,6 +9,9 @@
 //! toolkit; the async runtime needed by D-Bus stays inside the Linux backend, and the Objective-C
 //! calls (the only `unsafe` code of this crate) inside the macOS one.
 //!
+//! The [`clipboard`] module is the other half: [`Clipboard`] with the same rule (a status that is the
+//! real effect, never a simulated success).
+//!
 //! The backend is chosen from what the system offers (portals present, interface versions), never
 //! from the name of the desktop: `XDG_CURRENT_DESKTOP` is only reported for information.
 //!
@@ -17,6 +20,7 @@
 //! so that it is tested on every platform.
 
 pub mod apple;
+pub mod clipboard;
 mod diagnosis;
 mod error;
 mod png;
@@ -27,6 +31,10 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+pub use clipboard::{
+    ALL_CLIPBOARD_REASONS, Clipboard, ClipboardOutcome, ClipboardReason, FakeClipboard, FakeCopy,
+    TextKind, UnavailableClipboard, default_clipboard,
+};
 pub use diagnosis::{
     ALL_FACT_KEYS, ALL_FALLBACKS, ALL_FEATURES, ALL_REASONS, Capabilities, Capability, Diagnosis,
     Fact, FactValue, Status,

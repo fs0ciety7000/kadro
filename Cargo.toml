@@ -50,6 +50,7 @@ trycmd = "1.2.1"
 unic-langid = "0.9.6"
 url = "2.5.8"
 wiremock = "0.6.5"
+wl-clipboard-rs = "0.9.5"
 zbus = { version = "6.2.1", default-features = false }
 zeroize = "1.9.1"
 kropa-core = { path = "crates/kropa-core", version = "0.0.1" }

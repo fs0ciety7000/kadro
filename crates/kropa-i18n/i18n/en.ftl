@@ -295,7 +295,6 @@ doctor-secrets-orphans = Profiles in the store that no destination declares (lef
 doctor-secrets-orphans-unknown = Leftovers not checked: the destinations file cannot be read.
 doctor-section-pending = Not available yet
 doctor-pending-app = kropa-app socket and version: lot 2.1
-doctor-pending-clipboard = Clipboard: lot 1.10
 doctor-pending-outputs = Screens and their names: lot 2.5
 
 ## Upload and destinations (lot 1.7)
@@ -348,7 +347,35 @@ warn-uploaded-link-withheld = The file may have been uploaded, but its link is w
 warn-thumbnail-url-invalid = The thumbnail URL in the answer cannot be used and was left out.
 warn-deletion-url-invalid = The deletion URL in the answer cannot be used and was left out.
 warn-metadata-not-stripped = Metadata is not removed from the uploaded file yet (lot 4.8).
-warn-clipboard-unavailable = Link not copied: the clipboard is not available yet (lot 1.10). The link is printed above.
+warn-clipboard-unavailable = { $what ->
+    [image] Image not copied: { $reason } The image file is saved, see above.
+   *[link] Link not copied: { $reason } The link is printed above.
+  }
+warn-clipboard-failed = { $what ->
+    [image] Image not copied: { $reason } Technical detail (not translated): { $detail }
+   *[link] Link not copied: { $reason } Technical detail (not translated): { $detail }
+  }
+warn-clipboard-failed-bare = { $what ->
+    [image] Image not copied: { $reason }
+   *[link] Link not copied: { $reason }
+  }
+note-clipboard-copied = { $what ->
+    [image] Image copied
+   *[link] Link copied ({ $format })
+  }
+clipboard-reason-no-data-control = This Wayland session does not allow clipboard access without focus (GNOME does not).
+clipboard-reason-no-graphical-session = There is no graphical session to copy to.
+clipboard-reason-x11-not-supported = The X11 clipboard is not supported yet; Wayland sessions with data-control are.
+clipboard-reason-macos-not-implemented = The macOS pasteboard is not wired yet (lot 1.10).
+clipboard-reason-unsupported-platform = There is no clipboard support on this system.
+clipboard-reason-connection-failed = The Wayland compositor could not be reached.
+clipboard-reason-no-seat = The compositor has no seat to copy to.
+clipboard-reason-compositor-error = The compositor refused the copy.
+clipboard-reason-helper-spawn-failed = The process that serves the clipboard could not be started.
+clipboard-reason-helper-failed = The process that serves the clipboard failed.
+clipboard-reason-timeout = The compositor did not answer in time.
+clipboard-reason-selection-mismatch = The compositor did not keep the copied content.
+clipboard-reason-too-large = The content is too large for the clipboard.
 
 note-uploaded = Uploaded to { $profile }
 note-link = Link ({ $format }): { $text }

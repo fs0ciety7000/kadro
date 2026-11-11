@@ -303,14 +303,34 @@ nom de l'option est cité, ou « argument en trop » pour une valeur positionnel
 |---|---|---|---|
 | macOS (`NSPasteboard`) | copiée | copié | `copied` |
 | KDE, wlroots (data-control) | copiée | copié ; le contenu est servi par `kropa-app`, ou par un processus fils détaché tant que le démon n'existe pas (lot 1) | `copied`, ou `failed` si le compositeur refuse |
-| X11 | copiée | copié (même service que ci-dessus) | `copied` |
+| X11 seul | lot 1 : non copiée (`x11_not_supported`) ; sélection X11 prévue plus tard | lot 1 : non copié | `unavailable` |
 | GNOME Wayland (Mutter, sans data-control) | lot 1 : non copiée ; lot 2 : copiée pendant que l'overlay a le focus (`area`) | lot 1 à 3 : non copié ; lot 4 : notification « Lien prêt, Copier » | `unavailable`, puis `pending` ; jamais `copied` avant la copie réelle |
 
-Règles : le statut reflète l'effet réel, vérifié quand l'API le permet. Sur GNOME, stderr dit
-`Link not copied: GNOME does not allow clipboard access without focus. The link is printed above.` et le lien reste
+Règles : le statut reflète l'effet réel, vérifié quand l'API le permet. Sous Wayland (lot 1.10), le processus fils qui
+sert la sélection la **relit** par une seconde connexion avant de répondre : `copied` veut dire que le compositeur
+tient exactement le contenu copié ; une sélection reprise avant la relecture, un compositeur qui ne répond pas dans
+5 s, un fils mort donnent `failed`. La détection se fait par capacité (le compositeur annonce-t-il
+`ext-data-control-v1` ou `zwlr_data_control_v1` ?), jamais par le nom du bureau ; un compositeur sans ce protocole
+(GNOME) donne `unavailable` / `no_data_control`. Sur GNOME, stderr dit
+`Link not copied: This Wayland session does not allow clipboard access without focus (GNOME does not). The link is printed above.`
+(la mention de GNOME est un texte d'aide, pas une détection) et le lien reste
 sur stdout. Que la copie ait été demandée par la config ou explicitement par `--copy`, le code reste **0** avec cet
-avertissement sur stderr et `clipboard.status` dans le JSON (décision de l'utilisateur du 11/11/2026). Un clic ultérieur sur « Copier » ne change pas
+avertissement sur stderr et `clipboard.status` dans le JSON (décision de l'utilisateur du 11/11/2026). Une copie qui échoue (`failed`) suit la même règle :
+avertissement `clipboard_failed` (avec le détail technique, non traduit, sur stderr seulement), code 0. Un clic ultérieur
+sur « Copier » ne change pas
 le code déjà rendu.
+
+`clipboard.reason` (liste ouverte) : `unavailable` : `no_data_control`, `no_graphical_session`, `x11_not_supported`,
+`macos_not_implemented` (jusqu'au branchement de `NSPasteboard`), `unsupported_platform` ; `failed` :
+`connection_failed`, `no_seat`, `compositor_error`, `helper_spawn_failed`, `helper_failed`, `timeout`,
+`selection_mismatch`, `too_large` ; `skipped` : `nothing_to_copy` (un format de lien sans envoi). `--copy image`
+copie le PNG de la capture, avec ou sans `--upload` et même si l'envoi échoue. `--copy url|markdown|html` copie le
+texte (en texte brut) : le lien formaté va au presse-papiers, l'URL brute reste sur stdout.
+
+Le fils qui sert la sélection est `kropa __clipboard-serve` (argument caché, comme `__store-broker`) : requête sur
+stdin, une ligne de réponse sur stdout, `/dev/null` en stderr, répertoire courant `/`, groupe de processus propre,
+environnement réduit à `WAYLAND_DISPLAY` et `XDG_RUNTIME_DIR`. Il s'arrête quand un autre client prend la sélection
+ou que le compositeur disparaît. Il n'existe plus dès que `kropa-app` (lot 2) possède la sélection.
 
 ## 6. Arbitrages (validés le 11/11/2026)
 

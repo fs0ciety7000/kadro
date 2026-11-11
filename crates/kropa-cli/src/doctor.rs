@@ -22,9 +22,8 @@ use crate::output::Session;
 pub const SCHEMA: &str = "kropa.doctor/1";
 
 /// What `doctor` cannot report yet, the lot that adds it, and its Fluent message.
-const PENDING: [(&str, &str, &str); 3] = [
+const PENDING: [(&str, &str, &str); 2] = [
     ("kropa_app", "2.1", "doctor-pending-app"),
-    ("clipboard", "1.10", "doctor-pending-clipboard"),
     ("outputs", "2.5", "doctor-pending-outputs"),
 ];
 

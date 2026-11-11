@@ -273,8 +273,9 @@ complets (ScreenShot2, layer-shell, evdev). AppImage en dernier recours, avec mo
   code 5 (`image_format_unsupported`) avant toute capture.
 - **Détection** : par capacités (bus de session, version de chaque interface de portail, cibles de la version 3,
   présence de KWin sur le bus, fichier `.desktop`). `XDG_CURRENT_DESKTOP` est affiché, jamais utilisé pour choisir.
-  `layer-shell` et `data-control` ne sont pas encore sondés (`not_probed` dans `kropa doctor --json`) : il faut une
-  connexion Wayland (lots 1.10 et 2.5).
+  `layer-shell` n'est pas encore sondé (`not_probed` dans `kropa doctor --json`) : il faut une connexion Wayland
+  (lot 2.5). `data-control` l'est depuis le lot 1.10 (`present` / `absent` / texte d'erreur ; seuls les types MIME
+  offerts sont lus, jamais le contenu).
 
 ## Sources
 

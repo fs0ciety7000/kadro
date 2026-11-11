@@ -5,10 +5,11 @@
 //! The file is read, sent by the engine of `kropa-upload` and reported in the JSON schema
 //! `kropa.upload/1` (and the `upload`, `link`, `clipboard` and `warnings` members of
 //! `kropa.capture/1`). Every text that comes from the server goes out through `CheckedOutput` or
-//! `MaskedText`. The clipboard is lot 1.10: `clipboard.status` says so instead of pretending.
+//! `MaskedText`. The clipboard step is `crate::clipboard`: `clipboard.status` is what the system did.
 
 use std::path::{Path, PathBuf};
 
+use kropa_capture::Clipboard;
 use kropa_core::{Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
 use kropa_upload::UploadError;
@@ -21,6 +22,7 @@ use kropa_upload::profiles::{find, load_destinations};
 use serde_json::{Value, json};
 
 use crate::args::{CopyTarget, LinkCopy, UploadArgs};
+use crate::clipboard::{self, Content};
 use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
@@ -37,6 +39,8 @@ pub enum CopyChoice {
     Markdown,
     /// An HTML snippet.
     Html,
+    /// The captured image itself (`capture` only).
+    Image,
     /// Nothing.
     None,
 }
@@ -49,6 +53,7 @@ impl CopyChoice {
             Self::Url => "url",
             Self::Markdown => "markdown",
             Self::Html => "html",
+            Self::Image => "image",
             Self::None => "none",
         }
     }
@@ -58,7 +63,7 @@ impl CopyChoice {
             Self::Url => Some(LinkFormat::Url),
             Self::Markdown => Some(LinkFormat::Markdown),
             Self::Html => Some(LinkFormat::Html),
-            Self::None => None,
+            Self::Image | Self::None => None,
         }
     }
 }
@@ -75,14 +80,15 @@ impl From<LinkCopy> for CopyChoice {
 }
 
 impl CopyChoice {
-    /// `--copy image` is the clipboard of lot 1.10 and never gets here; it counts as nothing.
+    /// The choice of `capture --copy`.
     #[must_use]
     pub fn from_target(copy: CopyTarget) -> Self {
         match copy {
             CopyTarget::Url => Self::Url,
             CopyTarget::Markdown => Self::Markdown,
             CopyTarget::Html => Self::Html,
-            CopyTarget::Image | CopyTarget::None => Self::None,
+            CopyTarget::Image => Self::Image,
+            CopyTarget::None => Self::None,
         }
     }
 }
@@ -250,10 +256,13 @@ fn warning(code: &str, loc: &Localizer, detail: &str) -> Value {
 }
 
 /// Builds the report of a delivery and writes its messages on stderr. `copy` is what `--copy` asked
-/// for (`None`: not given).
+/// for (`None`: not given); `image` is the PNG of the capture, which `--copy image` puts in the
+/// clipboard whether or not the upload worked.
 pub fn report(
     delivery: &Delivery,
     copy: Option<CopyChoice>,
+    image: Option<&[u8]>,
+    clipboard: &dyn Clipboard,
     loc: &Localizer,
     session: &mut Session<'_, '_>,
 ) -> Report {
@@ -297,22 +306,17 @@ pub fn report(
         }
         warnings.push(warning("metadata_not_stripped", loc, ""));
     }
-    let wants_copy = outcome.is_some() && requested != CopyChoice::None;
-    if wants_copy {
-        warnings.push(warning("clipboard_unavailable", loc, ""));
-    }
-    let clipboard = json!({
-        "requested": requested.as_str(),
-        "explicit": copy.is_some(),
-        "status": if wants_copy { "unavailable" } else { "skipped" },
-        "reason": if wants_copy {
-            Some("clipboard_not_delivered")
-        } else if requested != CopyChoice::None {
-            Some("nothing_to_copy")
-        } else {
-            None
+    let content = match requested {
+        CopyChoice::None => Content::Nothing,
+        CopyChoice::Image => image.map_or(Content::Missing, Content::Image),
+        _ => match (outcome, &link) {
+            (Some(_), Some(text)) => Content::Link(text.as_str()),
+            _ => Content::Missing,
         },
-    });
+    };
+    let step = clipboard::run(clipboard, loc, requested, copy.is_some(), content);
+    warnings.extend(step.warning);
+    let clipboard = step.json;
     for w in &warnings {
         if let Some(message) = w["message"].as_str() {
             session.note(message);
@@ -320,7 +324,9 @@ pub fn report(
     }
     let (upload, link_json) = if let (Some(outcome), Some(text)) = (outcome, &link) {
         session.note(&loc.message_args("note-uploaded", &[("profile", &delivery.profile)]));
-        if matches!(requested, CopyChoice::Markdown | CopyChoice::Html) {
+        if let Some(note) = &step.note {
+            session.note(note);
+        } else if matches!(requested, CopyChoice::Markdown | CopyChoice::Html) {
             session.note(&loc.message_args(
                 "note-link",
                 &[("format", requested.as_str()), ("text", text.as_str())],
@@ -336,6 +342,10 @@ pub fn report(
             json!({ "format": requested.format().unwrap_or(LinkFormat::Url).as_str(), "text": text.as_str() }),
         )
     } else {
+        // Only `--copy image` can have copied something when the upload failed.
+        if let Some(note) = &step.note {
+            session.note(note);
+        }
         (
             json!({
                 "status": "failed", "destination": delivery.profile, "job_id": null,
@@ -387,7 +397,7 @@ pub fn run(
         session.verbose,
     );
     let copy = args.copy.map(CopyChoice::from);
-    let report = report(&delivery, copy, loc, session);
+    let report = report(&delivery, copy, None, ctx.clipboard, loc, session);
     let file = file_member(&args.file);
     if let Some(error) = report.error {
         // The file was not changed. When the answer held the secret, stdout gets the local path.

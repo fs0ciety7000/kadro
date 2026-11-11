@@ -10,6 +10,7 @@
 
 pub mod args;
 pub mod capture;
+pub mod clipboard;
 pub mod command;
 pub mod dest;
 pub mod doctor;
@@ -29,7 +30,7 @@ use std::time::Duration;
 
 use clap::error::ErrorKind;
 use clap::{ColorChoice, FromArgMatches, ValueEnum};
-use kropa_capture::CaptureBackend;
+use kropa_capture::{CaptureBackend, Clipboard};
 use kropa_core::{Clock, Config, ExitCode, SystemClock};
 use kropa_i18n::{I18nError, Lang, Localizer};
 use kropa_upload::secret::SecretStore;
@@ -154,6 +155,8 @@ pub struct Services<'a> {
     pub input: &'a dyn SecretInput,
     /// Answers a yes/no question put to the user on a terminal.
     pub confirm: &'a dyn Fn(&str) -> bool,
+    /// Where `--copy` puts its content: the clipboard of the session, a double in tests.
+    pub clipboard: &'a dyn Clipboard,
 }
 
 /// Asks on the terminal: the prompt on stderr, the answer on stdin (`y`, `yes`, `o`, `oui`).
@@ -185,10 +188,12 @@ pub fn run_with_backend(
 ) -> ExitCode {
     // Opens nothing: the store connects when a command needs it.
     let store = kropa_store::open_system_store(std::sync::Arc::new(SystemClock));
+    let clipboard = kropa_capture::default_clipboard();
     let services = Services {
         secrets: store.as_ref(),
         input: &SystemInput,
         confirm: &ask_on_terminal,
+        clipboard: clipboard.as_ref(),
     };
     run_with_services(args, lookup, io, clock, host, backend, sleep, &services)
 }
@@ -244,6 +249,7 @@ fn run_inner(
         clock,
         host,
         backend,
+        clipboard: services.clipboard,
         sleep,
         secrets: services.secrets,
         input: services.input,
@@ -430,6 +436,9 @@ mod tests {
                 secrets: &spy,
                 input: &SystemInput,
                 confirm: &|_| false,
+                clipboard: &kropa_capture::UnavailableClipboard::new(
+                    kropa_capture::ClipboardReason::NoGraphicalSession,
+                ),
             };
             let _ = run_with_services(
                 &args(&list),

@@ -295,7 +295,6 @@ doctor-secrets-orphans = Profils du magasin qu'aucune destination ne déclare (r
 doctor-secrets-orphans-unknown = Restes non vérifiés : le fichier des destinations est illisible.
 doctor-section-pending = Pas encore disponible
 doctor-pending-app = Socket et version de kropa-app : lot 2.1
-doctor-pending-clipboard = Presse-papiers : lot 1.10
 doctor-pending-outputs = Écrans et leurs noms : lot 2.5
 
 ## Envoi et destinations (lot 1.7)
@@ -348,7 +347,35 @@ warn-uploaded-link-withheld = Le fichier a peut-être été envoyé, mais son li
 warn-thumbnail-url-invalid = L'URL de miniature de la réponse est inutilisable et a été écartée.
 warn-deletion-url-invalid = L'URL de suppression de la réponse est inutilisable et a été écartée.
 warn-metadata-not-stripped = Les métadonnées ne sont pas encore retirées du fichier envoyé (lot 4.8).
-warn-clipboard-unavailable = Lien non copié : le presse-papiers n'est pas encore disponible (lot 1.10). Le lien est affiché ci-dessus.
+warn-clipboard-unavailable = { $what ->
+    [image] Image non copiée : { $reason } Le fichier de l'image est enregistré, voir ci-dessus.
+   *[link] Lien non copié : { $reason } Le lien est affiché ci-dessus.
+  }
+warn-clipboard-failed = { $what ->
+    [image] Image non copiée : { $reason } Détail technique (non traduit) : { $detail }
+   *[link] Lien non copié : { $reason } Détail technique (non traduit) : { $detail }
+  }
+warn-clipboard-failed-bare = { $what ->
+    [image] Image non copiée : { $reason }
+   *[link] Lien non copié : { $reason }
+  }
+note-clipboard-copied = { $what ->
+    [image] Image copiée
+   *[link] Lien copié ({ $format })
+  }
+clipboard-reason-no-data-control = Cette session Wayland n'autorise pas l'accès au presse-papiers sans focus (GNOME ne le permet pas).
+clipboard-reason-no-graphical-session = Il n'y a pas de session graphique où copier.
+clipboard-reason-x11-not-supported = Le presse-papiers X11 n'est pas encore pris en charge ; les sessions Wayland avec data-control le sont.
+clipboard-reason-macos-not-implemented = Le presse-papiers macOS n'est pas encore branché (lot 1.10).
+clipboard-reason-unsupported-platform = Ce système n'a pas de presse-papiers pris en charge.
+clipboard-reason-connection-failed = Le compositeur Wayland est injoignable.
+clipboard-reason-no-seat = Le compositeur n'a pas de siège où copier.
+clipboard-reason-compositor-error = Le compositeur a refusé la copie.
+clipboard-reason-helper-spawn-failed = Le processus qui sert le presse-papiers n'a pas pu démarrer.
+clipboard-reason-helper-failed = Le processus qui sert le presse-papiers a échoué.
+clipboard-reason-timeout = Le compositeur n'a pas répondu à temps.
+clipboard-reason-selection-mismatch = Le compositeur n'a pas gardé le contenu copié.
+clipboard-reason-too-large = Le contenu est trop volumineux pour le presse-papiers.
 
 note-uploaded = Envoyé vers { $profile }
 note-link = Lien ({ $format }) : { $text }

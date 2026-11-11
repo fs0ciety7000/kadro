@@ -17,7 +17,8 @@ use std::sync::Arc;
 
 use kropa_capture::{
     BackendId, Capabilities, Capability, CaptureBackend, CaptureError, CaptureRequest,
-    CapturedImage, Diagnosis, ImageFormat, Status,
+    CapturedImage, ClipboardOutcome, ClipboardReason, Diagnosis, FakeClipboard, FakeCopy,
+    ImageFormat, Status, TextKind,
 };
 use kropa_cli::secret_input::{InputError, InputFrom, SecretInput};
 use kropa_cli::{Io, Services, run_with_services};
@@ -36,6 +37,8 @@ struct Out {
     code: u8,
     out: String,
     err: String,
+    /// What the clipboard double was asked to copy.
+    copies: Vec<FakeCopy>,
 }
 
 /// These tests give no secret by hand: asking for one is a bug.
@@ -95,6 +98,20 @@ async fn cli(
     answer: bool,
     with_backend: bool,
 ) -> Out {
+    // No graphical session: what a copy gives on a machine without a clipboard to copy to.
+    let clipboard = ClipboardOutcome::unavailable(ClipboardReason::NoGraphicalSession);
+    cli_with_clipboard(args, secrets, tty, answer, with_backend, clipboard).await
+}
+
+/// Like [`cli`], with a clipboard double that answers `clipboard` to every copy.
+async fn cli_with_clipboard(
+    args: &[&str],
+    secrets: Arc<dyn SecretStore>,
+    tty: bool,
+    answer: bool,
+    with_backend: bool,
+    clipboard: ClipboardOutcome,
+) -> Out {
     let args: Vec<OsString> = std::iter::once("kropa")
         .chain(args.iter().copied())
         .map(OsString::from)
@@ -108,13 +125,15 @@ async fn cli(
                 err: &mut err,
                 stdin_is_tty: tty,
             };
+            let clipboard = FakeClipboard::answering(clipboard);
             let services = Services {
                 secrets: secrets.as_ref(),
                 input: &NoInput,
                 confirm: &move |_| answer,
+                clipboard: &clipboard,
             };
             let backend = Fake;
-            run_with_services(
+            let code = run_with_services(
                 &args,
                 &|_| None,
                 &mut io,
@@ -123,12 +142,15 @@ async fn cli(
                 with_backend.then_some(&backend as &dyn CaptureBackend),
                 &|_| {},
                 &services,
-            )
+            );
+            (code, clipboard.copies())
         };
+        let (code, copies) = code;
         Out {
             code: code.code(),
             out: String::from_utf8(out).unwrap(),
             err: String::from_utf8(err).unwrap(),
+            copies,
         }
     })
     .await
@@ -224,8 +246,9 @@ async fn upload_prints_the_url_and_the_json_document() {
         v["link"]["text"],
         "![shot.png](https://files.example.org/a/shot.png)"
     );
-    // The clipboard is lot 1.10: the status says so.
+    // No clipboard in this session: the status says so, and the reason.
     assert_eq!(v["clipboard"]["status"], "unavailable");
+    assert_eq!(v["clipboard"]["reason"], "no_graphical_session");
     assert_eq!(v["clipboard"]["explicit"], true);
     let codes: Vec<&str> = v["warnings"]
         .as_array()
@@ -238,6 +261,277 @@ async fn upload_prints_the_url_and_the_json_document() {
         "{codes:?}"
     );
     assert!(v["error"].is_null());
+}
+
+/// A server that accepts any upload and answers with the URL of the file.
+async fn accepting_server() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/up"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"url": "https://files.example.org/a/shot.png"})),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_copied_link_is_reported_copied_and_stdout_keeps_the_raw_url() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let (file, c) = (shot(dir.path()), cfg(dir.path()));
+
+    let r = cli_with_clipboard(
+        &[
+            "--lang", "en", "--config", &c, "upload", &file, "--copy", "markdown",
+        ],
+        none(),
+        false,
+        false,
+        false,
+        ClipboardOutcome::Copied,
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    // stdout: the raw URL; the clipboard: the Markdown link.
+    assert_eq!(r.out, "https://files.example.org/a/shot.png\n");
+    assert_eq!(
+        r.copies,
+        [FakeCopy::Text(
+            "![shot.png](https://files.example.org/a/shot.png)".to_owned(),
+            TextKind::Plain
+        )]
+    );
+    assert!(r.err.contains("Link copied (markdown)"), "{}", r.err);
+    assert!(!r.err.contains("not copied"), "{}", r.err);
+
+    let r = cli_with_clipboard(
+        &["--json", "--config", &c, "upload", &file, "--copy", "url"],
+        none(),
+        false,
+        false,
+        false,
+        ClipboardOutcome::Copied,
+    )
+    .await;
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["clipboard"]["status"], "copied");
+    assert_eq!(v["clipboard"]["requested"], "url");
+    assert_eq!(v["clipboard"]["reason"], serde_json::Value::Null);
+    let codes = v["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["code"].as_str().unwrap());
+    assert!(!codes.into_iter().any(|c| c.starts_with("clipboard")));
+    assert_eq!(
+        r.copies,
+        [FakeCopy::Text(
+            "https://files.example.org/a/shot.png".to_owned(),
+            TextKind::Plain
+        )]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gnome_without_data_control_warns_and_exits_zero_even_when_copy_is_explicit() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let (file, c) = (shot(dir.path()), cfg(dir.path()));
+    let gnome = ClipboardOutcome::unavailable(ClipboardReason::NoDataControl);
+
+    let r = cli_with_clipboard(
+        &[
+            "--lang", "en", "--config", &c, "upload", &file, "--copy", "url",
+        ],
+        none(),
+        false,
+        false,
+        false,
+        gnome.clone(),
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.out, "https://files.example.org/a/shot.png\n");
+    assert!(
+        r.err.contains(
+            "Link not copied: This Wayland session does not allow clipboard access without focus \
+             (GNOME does not). The link is printed above."
+        ),
+        "{}",
+        r.err
+    );
+
+    let r = cli_with_clipboard(
+        &[
+            "--lang", "fr", "--config", &c, "upload", &file, "--copy", "url",
+        ],
+        none(),
+        false,
+        false,
+        false,
+        gnome.clone(),
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(
+        r.err.contains("Lien non copié : Cette session Wayland"),
+        "{}",
+        r.err
+    );
+
+    let r = cli_with_clipboard(
+        &["--json", "--config", &c, "upload", &file, "--copy", "url"],
+        none(),
+        false,
+        false,
+        false,
+        gnome,
+    )
+    .await;
+    assert_eq!(r.code, 0);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["status"], "ok");
+    assert_eq!(v["exit_code"], 0);
+    assert_eq!(v["clipboard"]["status"], "unavailable");
+    assert_eq!(v["clipboard"]["reason"], "no_data_control");
+    assert_eq!(v["clipboard"]["explicit"], true);
+    let codes: Vec<&str> = v["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"clipboard_unavailable"), "{codes:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_copy_is_a_warning_with_its_detail_and_exit_zero() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let (file, c) = (shot(dir.path()), cfg(dir.path()));
+    let r = cli_with_clipboard(
+        &[
+            "--lang", "en", "--config", &c, "upload", &file, "--copy", "html",
+        ],
+        none(),
+        false,
+        false,
+        false,
+        ClipboardOutcome::failed(ClipboardReason::CompositorError, "protocol error 7"),
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.out, "https://files.example.org/a/shot.png\n");
+    assert!(
+        r.err
+            .contains("Link not copied: The compositor refused the copy."),
+        "{}",
+        r.err
+    );
+    assert!(r.err.contains("protocol error 7"), "{}", r.err);
+    // The link is still shown, since the clipboard has not got it.
+    assert!(r.err.contains("Link (html):"), "{}", r.err);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn no_copy_asked_means_no_clipboard_access() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let (file, c) = (shot(dir.path()), cfg(dir.path()));
+    for extra in [&[][..], &["--copy", "none"]] {
+        let mut args = vec!["--json", "--config", &c, "upload", &file];
+        args.extend_from_slice(extra);
+        let r =
+            cli_with_clipboard(&args, none(), false, false, false, ClipboardOutcome::Copied).await;
+        assert_eq!(r.code, 0);
+        let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+        assert_eq!(v["clipboard"]["status"], "skipped");
+        assert_eq!(r.copies, Vec::<FakeCopy>::new());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn capture_with_upload_and_copy_image_copies_the_picture_not_the_link() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let c = cfg(dir.path());
+    let out = dir.path().join("shots");
+    std::fs::create_dir(&out).unwrap();
+    let r = cli_with_clipboard(
+        &[
+            "--json",
+            "--config",
+            &c,
+            "capture",
+            "screen",
+            "--output",
+            &out.display().to_string(),
+            "--upload",
+            "--copy",
+            "image",
+        ],
+        none(),
+        false,
+        false,
+        true,
+        ClipboardOutcome::Copied,
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(
+        r.copies,
+        [FakeCopy::Image(b"\x89PNG fake screenshot".to_vec())]
+    );
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["upload"]["status"], "done");
+    assert_eq!(v["clipboard"]["requested"], "image");
+    assert_eq!(v["clipboard"]["status"], "copied");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn capture_with_upload_and_a_link_format_copies_the_link() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let c = cfg(dir.path());
+    let out = dir.path().join("shots");
+    std::fs::create_dir(&out).unwrap();
+    let r = cli_with_clipboard(
+        &[
+            "--config",
+            &c,
+            "capture",
+            "screen",
+            "--output",
+            &out.display().to_string(),
+            "--upload",
+            "--copy",
+            "url",
+        ],
+        none(),
+        false,
+        false,
+        true,
+        ClipboardOutcome::Copied,
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.out, "https://files.example.org/a/shot.png\n");
+    assert_eq!(
+        r.copies,
+        [FakeCopy::Text(
+            "https://files.example.org/a/shot.png".to_owned(),
+            TextKind::Plain
+        )]
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

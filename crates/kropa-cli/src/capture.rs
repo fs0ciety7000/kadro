@@ -20,7 +20,8 @@ use kropa_core::{APP_ID, Config, ExitCode};
 use kropa_i18n::Localizer;
 use serde_json::{Value, json};
 
-use crate::args::{CaptureOpts, CopyTarget};
+use crate::args::CaptureOpts;
+use crate::clipboard::{self, Content};
 use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::{Session, error_document};
@@ -158,16 +159,6 @@ fn note_id(note: &str) -> String {
     format!("note-{}", note.replace('_', "-"))
 }
 
-fn copy_name(copy: CopyTarget) -> &'static str {
-    match copy {
-        CopyTarget::Url => "url",
-        CopyTarget::Markdown => "markdown",
-        CopyTarget::Html => "html",
-        CopyTarget::Image => "image",
-        CopyTarget::None => "none",
-    }
-}
-
 fn format_name(format: ImageFormat) -> &'static str {
     match format {
         ImageFormat::Png => "png",
@@ -183,6 +174,7 @@ fn document(
     size: u64,
     captured_at: &str,
     report: Option<&Report>,
+    step: Option<&clipboard::Step>,
 ) -> Value {
     let send = &job.opts.send;
     let upload = if let Some(r) = report {
@@ -195,21 +187,16 @@ fn document(
             "url": null, "thumbnail_url": null, "deletion_url": null,
         })
     };
-    // `--copy image` never gets here (lot 1.10); a link format has no link to copy without an upload.
-    let (requested, explicit, reason) = match send.copy {
-        Some(copy) => (
-            copy_name(copy),
-            true,
-            (copy != CopyTarget::None).then_some("nothing_to_copy"),
+    // The clipboard member comes from the upload report, or from the step of a capture without upload.
+    let (clipboard, link, warnings) = match (report, step) {
+        (Some(r), _) => (r.clipboard.clone(), r.link.clone(), r.warnings.clone()),
+        (None, Some(s)) => (
+            s.json.clone(),
+            Value::Null,
+            s.warning.iter().cloned().collect(),
         ),
-        None => ("none", false, None),
-    };
-    let (clipboard, link, warnings) = match report {
-        Some(r) => (r.clipboard.clone(), r.link.clone(), r.warnings.clone()),
-        None => (
-            json!({
-                "requested": requested, "explicit": explicit, "status": "skipped", "reason": reason,
-            }),
+        (None, None) => (
+            json!({ "requested": "none", "explicit": false, "status": "skipped", "reason": null }),
             Value::Null,
             Vec::new(),
         ),
@@ -242,6 +229,57 @@ fn document(
         "warnings": warnings,
         "error": error,
     })
+}
+
+/// The steps after the file is saved: the upload, if asked for, and the clipboard. Neither removes
+/// the file. The upload report carries its own clipboard member; a capture without upload gets a
+/// [`clipboard::Step`] instead.
+fn send_and_copy(
+    job: &Job<'_>,
+    config: &Config,
+    config_dir: &Path,
+    path: &Path,
+    image: &CapturedImage,
+    ctx: &Context<'_>,
+    session: &mut Session<'_, '_>,
+) -> (Option<Report>, Option<clipboard::Step>) {
+    let loc = ctx.loc;
+    let opts = job.opts;
+    let copy = opts.send.copy.map(CopyChoice::from_target);
+    // Only a PNG goes to the clipboard as an image; the backends deliver nothing else today.
+    let png = (image.format == ImageFormat::Png).then_some(image.data.as_slice());
+    let report = opts.send.upload.as_ref().map(|choice| {
+        let profile = choice
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .or_else(|| config.default_destination.clone())
+            .unwrap_or_default();
+        let delivery =
+            upload::deliver(ctx, config_dir, &profile, path, &opts.vars, session.verbose);
+        upload::report(&delivery, copy, png, ctx.clipboard, loc, session)
+    });
+    // Without an upload the clipboard step is ours: a link format has no link to copy, the image can
+    // be copied.
+    let step = if report.is_some() {
+        None
+    } else {
+        let requested = copy.unwrap_or(CopyChoice::None);
+        let content = match requested {
+            CopyChoice::None => Content::Nothing,
+            CopyChoice::Image => png.map_or(Content::Missing, Content::Image),
+            _ => Content::Missing,
+        };
+        let step = clipboard::run(ctx.clipboard, loc, requested, copy.is_some(), content);
+        for line in step.warning.iter().filter_map(|w| w["message"].as_str()) {
+            session.note(line);
+        }
+        if let Some(note) = &step.note {
+            session.note(note);
+        }
+        Some(step)
+    };
+    (report, step)
 }
 
 /// Runs the capture and reports on `session`.
@@ -324,32 +362,22 @@ pub fn run(
             ("height", &image.height.to_string()),
         ],
     ));
-    // The file is saved; the upload, if asked for, comes after and never removes it.
-    let report = opts.send.upload.as_ref().map(|choice| {
-        let profile = choice
-            .as_deref()
-            .filter(|p| !p.is_empty())
-            .map(str::to_owned)
-            .or_else(|| config.default_destination.clone())
-            .unwrap_or_default();
-        let delivery = upload::deliver(
-            ctx,
-            config_dir,
-            &profile,
-            &path,
-            &opts.vars,
-            session.verbose,
-        );
-        let copy = opts.send.copy.map(CopyChoice::from_target);
-        upload::report(&delivery, copy, loc, session)
-    });
+    let (report, step) = send_and_copy(job, config, config_dir, &path, &image, ctx, session);
     if let Some(error) = report.as_ref().and_then(|r| r.error.as_ref()) {
         session.error_message(error);
     }
     if session.json {
         let at = captured_at.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string();
         let size = image.data.len() as u64;
-        session.document(&document(job, &image, &path, size, &at, report.as_ref()));
+        session.document(&document(
+            job,
+            &image,
+            &path,
+            size,
+            &at,
+            report.as_ref(),
+            step.as_ref(),
+        ));
     } else if let Some(url) = report.as_ref().and_then(|r| r.url.as_ref()) {
         session.result_checked(url);
     } else {
@@ -371,6 +399,7 @@ mod tests {
         CaptureError, CaptureMode, CaptureRequest, CapturedImage, Denial, Diagnosis, Failure,
         ImageFormat, Status, Unsupported,
     };
+    use kropa_capture::{ClipboardOutcome, ClipboardReason, FakeClipboard, FakeCopy};
     use kropa_core::{Config, ExitCode, FixedClock};
     use kropa_i18n::{Lang, Localizer};
 
@@ -483,6 +512,24 @@ mod tests {
     }
 
     fn go(backend: &Fake, mode: CaptureMode, target: &Target, extra: &[&str], json: bool) -> Out {
+        go_with(
+            backend,
+            &FakeClipboard::working(),
+            mode,
+            target,
+            extra,
+            json,
+        )
+    }
+
+    fn go_with(
+        backend: &Fake,
+        clipboard: &FakeClipboard,
+        mode: CaptureMode,
+        target: &Target,
+        extra: &[&str],
+        json: bool,
+    ) -> Out {
         let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
         let slept = RefCell::new(Vec::new());
         let loc = Localizer::new(Lang::En).unwrap();
@@ -500,6 +547,7 @@ mod tests {
                 clock: &clock,
                 host: Some("laptop".into()),
                 backend: Some(backend),
+                clipboard,
                 sleep: &sleep,
                 secrets: &kropa_upload::secret::UnavailableSecretSource,
                 input: &crate::secret_input::SystemInput,
@@ -800,5 +848,87 @@ mod tests {
                 assert_ne!(loc.message_args(&id, &args), id, "{lang:?}: {id}");
             }
         }
+    }
+    fn copy_image_on(clipboard: &FakeClipboard, json: bool, extra: &[&str]) -> (Out, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let target = file_target(dir.path(), "shot.png");
+        let path = dir.path().join("shot.png").display().to_string();
+        let out = go_with(
+            &Fake::ok(4, 3),
+            clipboard,
+            CaptureMode::Screen,
+            &target,
+            extra,
+            json,
+        );
+        (out, path)
+    }
+
+    #[test]
+    fn copy_image_puts_the_captured_png_in_the_clipboard() {
+        let clipboard = FakeClipboard::working();
+        let (out, path) = copy_image_on(&clipboard, true, &["--copy", "image"]);
+        assert_eq!(out.result.unwrap(), ExitCode::Ok);
+        assert_eq!(clipboard.copies(), [FakeCopy::Image(b"png bytes".to_vec())]);
+        let v: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(v["clipboard"]["requested"], "image");
+        assert_eq!(v["clipboard"]["explicit"], true);
+        assert_eq!(v["clipboard"]["status"], "copied");
+        assert_eq!(v["clipboard"]["reason"], serde_json::Value::Null);
+        assert_eq!(v["warnings"].as_array().unwrap().len(), 0);
+        assert_eq!(v["file"]["path"], path);
+        assert!(out.stderr.contains("Image copied"), "{}", out.stderr);
+    }
+
+    #[test]
+    fn copy_image_without_a_clipboard_warns_and_still_succeeds() {
+        let clipboard = FakeClipboard::answering(ClipboardOutcome::unavailable(
+            ClipboardReason::NoDataControl,
+        ));
+        let (out, path) = copy_image_on(&clipboard, false, &["--copy", "image"]);
+        // Exit code 0 and the file path on stdout, whatever the clipboard said (`docs/cli.md` 5).
+        assert_eq!(out.result.unwrap(), ExitCode::Ok);
+        assert_eq!(out.stdout, format!("{path}\n"));
+        assert!(out.stderr.contains("Image not copied:"), "{}", out.stderr);
+        assert!(out.stderr.contains("without focus"), "{}", out.stderr);
+        assert!(!out.stderr.contains("Image copied"), "{}", out.stderr);
+    }
+
+    #[test]
+    fn a_failed_copy_is_reported_as_failed_with_exit_code_zero() {
+        let clipboard = FakeClipboard::answering(ClipboardOutcome::failed(
+            ClipboardReason::Timeout,
+            "no answer",
+        ));
+        let (out, _) = copy_image_on(&clipboard, true, &["--copy", "image"]);
+        assert_eq!(out.result.unwrap(), ExitCode::Ok);
+        let v: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(v["status"], "ok");
+        assert_eq!(v["exit_code"], 0);
+        assert_eq!(v["clipboard"]["status"], "failed");
+        assert_eq!(v["clipboard"]["reason"], "timeout");
+        assert_eq!(v["warnings"][0]["code"], "clipboard_failed");
+    }
+
+    #[test]
+    fn without_copy_the_clipboard_is_left_alone() {
+        let clipboard = FakeClipboard::working();
+        for extra in [&[][..], &["--copy", "none"], &["--copy", "markdown"]] {
+            let (out, _) = copy_image_on(&clipboard, true, extra);
+            assert_eq!(out.result.unwrap(), ExitCode::Ok);
+            let v: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+            assert_eq!(v["clipboard"]["status"], "skipped", "{extra:?}");
+        }
+        assert_eq!(clipboard.copies(), Vec::<FakeCopy>::new());
+    }
+
+    #[test]
+    fn a_link_format_without_an_upload_has_nothing_to_copy() {
+        let clipboard = FakeClipboard::working();
+        let (out, _) = copy_image_on(&clipboard, true, &["--copy", "url"]);
+        let v: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(v["clipboard"]["status"], "skipped");
+        assert_eq!(v["clipboard"]["reason"], "nothing_to_copy");
+        assert_eq!(v["clipboard"]["explicit"], true);
     }
 }

@@ -11,15 +11,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use kropa_capture::{CaptureBackend, CaptureMode};
+use kropa_capture::{CaptureBackend, CaptureMode, Clipboard};
 use kropa_core::{CONFIG_FILE, Clock, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
 use kropa_upload::secret::SecretStore;
 use serde_json::json;
 
 use crate::args::{
-    CaptureCommand, Cli, Command, CopyTarget, DestCommand, HistoryCommand, QueueCommand,
-    SecretsCommand,
+    CaptureCommand, Cli, Command, DestCommand, HistoryCommand, QueueCommand, SecretsCommand,
 };
 use crate::capture::{self, Job};
 use crate::dest;
@@ -64,6 +63,8 @@ pub struct Context<'a> {
     pub host: Option<String>,
     /// How this system takes screenshots; `None` on a platform without one.
     pub backend: Option<&'a dyn CaptureBackend>,
+    /// Where the clipboard is: the system one, a double in tests.
+    pub clipboard: &'a dyn Clipboard,
     /// Waits for `--delay`; replaced by a recorder in tests.
     pub sleep: &'a dyn Fn(Duration),
     /// Where secrets are read and written.
@@ -157,9 +158,6 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
             let mut lots: Vec<&'static str> = base.into_iter().collect();
             if opts.edit {
                 lots.push("3.7");
-            }
-            if opts.send.copy == Some(CopyTarget::Image) {
-                lots.push("1.10");
             }
             lots
         }

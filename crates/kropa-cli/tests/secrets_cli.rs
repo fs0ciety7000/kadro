@@ -17,6 +17,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::sync::Mutex;
 
+use kropa_capture::{ClipboardReason, UnavailableClipboard};
 use kropa_cli::secret_input::{InputError, InputFrom, SecretInput};
 use kropa_cli::{Io, Services, run_with_services};
 use kropa_core::FixedClock;
@@ -101,6 +102,7 @@ fn run(
             secrets: store,
             input,
             confirm: &move |_| answer,
+            clipboard: &UnavailableClipboard::new(ClipboardReason::NoGraphicalSession),
         };
         run_with_services(
             &args,

@@ -14,6 +14,9 @@ thiserror.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd.workspace = true
+# Wayland clipboard through ext-data-control / wlr-data-control (pure Rust, no libwayland): the
+# selection is served by a detached child process (`clipboard/wayland.rs`).
+wl-clipboard-rs.workspace = true
 
 # ScreenCaptureKit through the generated Objective-C bindings (no Swift bridge). Only the features
 # the macOS backend uses are enabled; every `unsafe` call lives in `src/macos/`.
