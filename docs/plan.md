@@ -96,6 +96,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 ## Lot 2 — v0.2 Sélection, profils, S3, coffre
 Dépend de : 1 et D2.
 - [ ] 2.1 (2.1a fait : `kropa-ipc`, client, activation D-Bus, `fdguard` ; restent 2.1b serveur `kropa-gtk`, 2.1c `kropa-app`) IPC socket JSON-RPC (`hello` versionné, 0600) ; la CLI lance `kropa-app` à la demande. Agent : `backend-dev`.
+- [ ] 2.1d Suites de la revue sécurité 2.1a (`docs/reviews/2026-11-12-security-2.1a.md`) : test réel entre deux UID (I1), cas « faux serveur du même UID » écrit au § 7 de `secrets.md` (I2), `fdguard` déplacé dans `kropa-ipc` pour `kropa-gtk` (m4), mineurs m1-m13. Agent : `backend-dev`.
 - [x] 2.2 Modèle de sélection commun (souris, flèches, Maj+flèches, `R` dernière zone, Échap, délai) et loupe. Agent : `backend-dev`. Fin : tests sans écran.
 - [ ] 2.3 Overlay GTK (image figée par écran, layer-shell KDE/wlroots, plein écran GNOME, échelles mixtes, copie d'image sous focus). Agent : `linux-desktop-dev`. Fin : check-list GNOME et KDE à 100 % et 200 %.
 - [ ] 2.4 Overlay AppKit (sans bord, au-dessus, un par écran, Retina, exclus de la capture). Agent : `macos-desktop-dev`.
@@ -128,7 +129,7 @@ Dépend de : 3.
 - [ ] 4.4 Notifications avec actions ; « Lien prêt, Copier » sur GNOME. Agents : plateformes. Fin : jamais de faux « copié ».
 - [ ] 4.5 File SQLite (états, reprise au redémarrage, backoff, sans sonde réseau), `kropa queue …`. Agent : `backend-dev`.
 - [ ] 4.6 Historique minimal `kropa history list [--search] --json`. Agent : `backend-dev`.
-- [ ] 4.7 Session du coffre dans le résident (15 min, verrouillage avec l'écran). Agents : `backend-dev`, plateformes. Fin : `security-reviewer` sans bloquant.
+- [ ] 4.7 Session du coffre dans le résident (15 min, verrouillage avec l'écran). Agents : `backend-dev`, plateformes. Fin : `security-reviewer` sans bloquant. Avant toute méthode `secrets.*` sur l'IPC : vérifier que le PID du pair du socket est le propriétaire du nom D-Bus (revue 2.1a, I2).
 - [ ] 4.8 Retrait des métadonnées sur la copie envoyée. Agent : `backend-dev`. Fin : fixtures EXIF GPS vérifiées.
 - [ ] 4.9 SFTP (russh, `known_hosts` strict). Agent : `backend-dev`. Fin : tests OpenSSH ; `security-reviewer` sans bloquant.
 - [ ] 4.10 Réglages graphiques simples. Agents : plateformes.
