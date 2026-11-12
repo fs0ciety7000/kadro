@@ -96,7 +96,56 @@ fn unsafe_dir(dir: &Path, why: &str) -> IpcError {
     }
 }
 
-/// Checks, with `lstat`, that `dir` is a real directory (not a link) owned by `uid` with mode `0700`.
+/// Checks that the parent of `dir` (`$XDG_RUNTIME_DIR`, `~/Library/Caches`) belongs to `uid` or to
+/// root and cannot be written by the group or by others. With `XDG_RUNTIME_DIR=/tmp` anyone could
+/// replace `/tmp/kropa` between two commands (review 2.1a m6). The parent may be reached through a
+/// link (`/var/run`, `/tmp` on macOS): what counts is the directory itself.
+///
+/// # Errors
+/// `no_runtime_dir` when the parent is missing, `unsafe_runtime_dir` for any other difference.
+pub fn verify_parent(dir: &Path, uid: u32) -> Result<(), IpcError> {
+    let Some(parent) = dir.parent() else {
+        return Err(unsafe_dir(dir, "it has no parent directory"));
+    };
+    let meta = match std::fs::metadata(parent) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Err(IpcError::NoRuntimeDir(format!(
+                "the parent of {} does not exist",
+                dir.display()
+            )));
+        }
+        Err(e) => {
+            return Err(unsafe_dir(
+                dir,
+                &format!("cannot inspect its parent {}: {e}", parent.display()),
+            ));
+        }
+    };
+    if !meta.is_dir() {
+        return Err(unsafe_dir(dir, "its parent is not a directory"));
+    }
+    if meta.uid() != uid && meta.uid() != 0 {
+        return Err(unsafe_dir(
+            dir,
+            &format!("its parent {} belongs to another user", parent.display()),
+        ));
+    }
+    if meta.mode() & 0o022 != 0 {
+        return Err(unsafe_dir(
+            dir,
+            &format!(
+                "its parent {} can be written by the group or by others (mode {:04o})",
+                parent.display(),
+                meta.mode() & 0o7777
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Checks, with `lstat`, that `dir` is a real directory (not a link) owned by `uid` with mode `0700`,
+/// inside a parent that is not open to others ([`verify_parent`]).
 ///
 /// # Errors
 /// `unsafe_runtime_dir` for any difference, and for a directory that cannot be inspected (a missing
@@ -119,7 +168,7 @@ pub fn verify_dir(dir: &Path, uid: u32) -> Result<(), IpcError> {
             &format!("its mode is {:04o}, not 0700", meta.mode() & 0o7777),
         ));
     }
-    Ok(())
+    verify_parent(dir, uid)
 }
 
 /// Whether `dir` exists as anything at all (a dangling link counts).
@@ -131,8 +180,11 @@ pub fn dir_exists(dir: &Path) -> bool {
 /// Creates `dir` with mode `0700` when it is missing (its parent must exist), then verifies it.
 ///
 /// # Errors
-/// `no_runtime_dir` when the parent is missing, `unsafe_runtime_dir` when the result is not safe.
+/// `no_runtime_dir` when the parent is missing, `unsafe_runtime_dir` when the parent or the result is
+/// not safe.
 pub fn ensure_dir(dir: &Path, uid: u32) -> Result<(), IpcError> {
+    // Before anything is created in it.
+    verify_parent(dir, uid)?;
     match DirBuilder::new().mode(0o700).create(dir) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
@@ -223,6 +275,54 @@ mod tests {
         // The uid is injected: this directory is ours, so it is "another user's" for uid + 1.
         let e = verify_dir(&dir, current_uid() + 1).unwrap_err();
         assert_eq!(reason(&e), "unsafe_runtime_dir");
+    }
+
+    #[test]
+    fn a_parent_open_to_others_is_refused_and_nothing_is_created_in_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let parent = tmp.path().join("run");
+        std::fs::create_dir(&parent).unwrap();
+        let dir = parent.join("kropa");
+        for mode in [0o777, 0o770, 0o707, 0o1777] {
+            std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(mode)).unwrap();
+            let e = ensure_dir(&dir, current_uid()).unwrap_err();
+            assert_eq!(reason(&e), "unsafe_runtime_dir", "mode {mode:o}");
+            assert!(!dir.exists(), "mode {mode:o}: created in an open parent");
+        }
+        // 0755 and 0711 are fine: nobody else can add or replace a name.
+        for mode in [0o755, 0o711, 0o700] {
+            std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(mode)).unwrap();
+            ensure_dir(&dir, current_uid()).unwrap();
+            verify_dir(&dir, current_uid()).unwrap();
+        }
+        // The client side refuses an existing directory in an open parent too.
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let e = verify_dir(&dir, current_uid()).unwrap_err();
+        assert_eq!(reason(&e), "unsafe_runtime_dir");
+    }
+
+    #[test]
+    fn xdg_runtime_dir_set_to_tmp_is_refused() {
+        // `/tmp` is world-writable (sticky) on Linux and macOS.
+        let e = verify_parent(Path::new("/tmp/kropa"), current_uid()).unwrap_err();
+        assert_eq!(reason(&e), "unsafe_runtime_dir");
+    }
+
+    #[test]
+    fn a_parent_of_another_user_is_refused_unless_it_is_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("kropa");
+        // The parent is ours: accepted as ours, and refused when the expected user is someone else
+        // (unless the parent is root's, which is always accepted).
+        verify_parent(&dir, current_uid()).unwrap();
+        if current_uid() == 0 {
+            verify_parent(&dir, 12345).unwrap();
+        } else {
+            assert_eq!(
+                reason(&verify_parent(&dir, current_uid() + 1).unwrap_err()),
+                "unsafe_runtime_dir"
+            );
+        }
     }
 
     #[test]
