@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use kropa_core::{Config, ExitCode, set_default_destination};
 use kropa_i18n::Localizer;
 use kropa_upload::UploadError;
+use kropa_upload::literals::presumed_values;
 use kropa_upload::destination::{Destination, DestinationFile, DestinationType, MediaKind};
 use kropa_upload::import::{ImportFormat, MAX_IMPORT_SIZE, import};
 use kropa_upload::profiles::{
@@ -28,7 +29,6 @@ use crate::args::{DestAddArgs, DestKind};
 use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
-use crate::secret_args::{is_sensitive_key, looks_like_credential_value, only_secret_references};
 use crate::secrets::{fresh_authorization, read_value};
 use crate::upload::{cli_error, cli_error_write, load_one};
 
@@ -318,9 +318,166 @@ fn places_text(places: &[Placement], loc: &Localizer) -> String {
     }
 }
 
-/// Writes the change, and lets the secrets of the profile follow it when the address or a place
-/// changed: that is shown and asked on a terminal, never given by `--yes`. A declined question
-/// changes nothing. Returns what happened to each declared secret.
+/// What the store allows an entry, and what a change of the profile would add to it or take out.
+/// Everything is computed from the store (`inspect`), never from the file: the file is not trusted
+/// (`docs/security/secrets.md` section 4.3), it may have been changed by someone else.
+struct Plan {
+    name: String,
+    store_origins: Vec<String>,
+    store_places: Vec<Placement>,
+    add_origin: Option<String>,
+    add_places: Vec<Placement>,
+    drop_origins: Vec<String>,
+    drop_places: Vec<Placement>,
+}
+
+impl Plan {
+    fn adds(&self) -> bool {
+        self.add_origin.is_some() || !self.add_places.is_empty()
+    }
+
+    fn drops(&self) -> bool {
+        !self.drop_origins.is_empty() || !self.drop_places.is_empty()
+    }
+}
+
+fn origins_text(origins: &[String], loc: &Localizer) -> String {
+    if origins.is_empty() {
+        loc.message("out-secrets-none")
+    } else {
+        origins.join(", ")
+    }
+}
+
+/// One plan per declared secret that has an entry in the store. The set to add is the origin and the
+/// places of the profile after the change, minus what the entry allows already. The set to take out
+/// (offered in the same question) is what the entry allows and the profile no longer uses, and only
+/// where the request moved the address or the place.
+fn plan_secrets(
+    ctx: &Context<'_>,
+    id: &str,
+    after: &Reach,
+    moved_origin: bool,
+    moved_places: &[&(String, Vec<Placement>)],
+) -> Result<Vec<Plan>, CliError> {
+    let mut plans = Vec::new();
+    for (name, places) in &after.places {
+        let Some(info) = ctx
+            .secrets
+            .inspect(id, name)
+            .map_err(|e| store_error(e, ctx.loc))?
+        else {
+            continue;
+        };
+        let add_origin = after
+            .origin
+            .as_ref()
+            .filter(|o| !info.origins.contains(o))
+            .cloned();
+        let add_places: Vec<Placement> = places
+            .iter()
+            .filter(|p| !info.placements.contains(p))
+            .cloned()
+            .collect();
+        let drop_origins = match &after.origin {
+            Some(origin) if moved_origin => info
+                .origins
+                .iter()
+                .filter(|o| *o != origin)
+                .cloned()
+                .collect(),
+            _ => Vec::new(),
+        };
+        let drop_places = if !places.is_empty() && moved_places.iter().any(|(n, _)| n == name) {
+            info.placements
+                .iter()
+                .filter(|p| !places.contains(p))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        plans.push(Plan {
+            name: name.clone(),
+            store_origins: info.origins,
+            store_places: info.placements,
+            add_origin,
+            add_places,
+            drop_origins,
+            drop_places,
+        });
+    }
+    Ok(plans)
+}
+
+/// Shows, as warnings that `--quiet` does not hide, exactly what the answer would change.
+fn show_plans(plans: &[Plan], loc: &Localizer, session: &mut Session<'_, '_>) {
+    for plan in plans {
+        if let Some(origin) = &plan.add_origin {
+            session.warn(&loc.message_args(
+                "out-edit-origin-add",
+                &[
+                    ("name", &plan.name),
+                    ("old", &origins_text(&plan.store_origins, loc)),
+                    ("new", origin),
+                ],
+            ));
+        }
+        if !plan.add_places.is_empty() {
+            session.warn(&loc.message_args(
+                "out-edit-placement-add",
+                &[
+                    ("name", &plan.name),
+                    ("old", &places_text(&plan.store_places, loc)),
+                    ("new", &places_text(&plan.add_places, loc)),
+                ],
+            ));
+            if plan
+                .add_places
+                .iter()
+                .any(|p| matches!(p, Placement::Query(_)))
+            {
+                session.warn(&loc.message("out-secrets-query-warning"));
+            }
+        }
+        if plan.drops() {
+            let gone: Vec<String> = plan
+                .drop_origins
+                .iter()
+                .cloned()
+                .chain(plan.drop_places.iter().map(ToString::to_string))
+                .collect();
+            session.warn(&loc.message_args(
+                "out-edit-withdraw",
+                &[("name", &plan.name), ("gone", &gone.join(", "))],
+            ));
+        }
+    }
+}
+
+/// Adds what the plan says to the entry, then takes out what it says.
+fn apply_plan(ctx: &Context<'_>, id: &str, plan: &Plan) -> Result<(), SecretError> {
+    if let Some(origin) = &plan.add_origin {
+        ctx.secrets
+            .authorize(id, &plan.name, Some(origin), None)?;
+    }
+    for place in &plan.add_places {
+        ctx.secrets
+            .authorize(id, &plan.name, None, Some(place.clone()))?;
+    }
+    if plan.drops() {
+        ctx.secrets
+            .revoke(id, &plan.name, &plan.drop_origins, &plan.drop_places)?;
+    }
+    Ok(())
+}
+
+/// Writes the change. When the request moved the address or a place, the secrets of the profile may
+/// follow: what is added is the profile after the change minus what the store allows already, shown
+/// in full and asked on a terminal, never given by `--yes`; the old addresses and places the profile
+/// no longer uses are offered for withdrawal in the same question. A declined question changes
+/// nothing. When the file differs from the store without the request touching an address or a place,
+/// nothing is allowed and the user is told so. Returns what happened to each declared secret.
 fn apply_change(
     old: &Destination,
     new: &Destination,
@@ -343,7 +500,25 @@ fn apply_change(
                 .is_none_or(|(_, old_places)| !same_places(old_places, places))
         })
         .collect();
-    let follows = !old.secrets.is_empty() && (moved_origin || !moved_places.is_empty());
+    let touches = moved_origin || !moved_places.is_empty();
+    let mut plans = plan_secrets(ctx, id, &after, moved_origin, &moved_places)?;
+    if !touches {
+        // The request leaves the address and the places alone: whatever the store lacks is a
+        // difference between the file and the store, not something this command may allow.
+        let differs: Vec<&str> = plans
+            .iter()
+            .filter(|p| p.adds())
+            .map(|p| p.name.as_str())
+            .collect();
+        if !differs.is_empty() {
+            session.warn(&loc.message_args(
+                "note-dest-edit-store-differs",
+                &[("id", id), ("names", &differs.join(", "))],
+            ));
+        }
+        plans.clear();
+    }
+    let follows = plans.iter().any(|p| p.adds() || p.drops());
     if follows {
         if !session.interactive {
             return Err(CliError::new(
@@ -354,34 +529,7 @@ fn apply_change(
             )
             .at_step("dest"));
         }
-        if moved_origin {
-            session.note(&loc.message_args(
-                "out-edit-origin-change",
-                &[
-                    ("old", &before.origin.clone().unwrap_or_default()),
-                    ("new", &after.origin.clone().unwrap_or_default()),
-                ],
-            ));
-        }
-        for (name, places) in &moved_places {
-            let old_places = before
-                .places
-                .iter()
-                .find(|(n, _)| n == name)
-                .map(|(_, p)| p.clone())
-                .unwrap_or_default();
-            session.note(&loc.message_args(
-                "out-edit-placement-change",
-                &[
-                    ("name", name),
-                    ("old", &places_text(&old_places, loc)),
-                    ("new", &places_text(places, loc)),
-                ],
-            ));
-            if places.iter().any(|p| matches!(p, Placement::Query(_))) {
-                session.note(&loc.message("out-secrets-query-warning"));
-            }
-        }
+        show_plans(&plans, loc, session);
         if !(ctx.confirm)(&loc.message_args("prompt-dest-edit", &[("id", id)])) {
             return Err(cancelled(loc));
         }
@@ -389,12 +537,13 @@ fn apply_change(
     write().map_err(|e| dest_write_error(&e, loc))?;
     let mut secrets: Vec<(String, &'static str)> = Vec::new();
     let mut failures: Vec<(String, UploadError)> = Vec::new();
-    for (name, places) in &after.places {
+    for (name, _) in &after.places {
         let mut action = "unchanged";
-        if follows {
-            match follow(ctx, id, name, after.origin.as_deref(), places) {
-                Ok(true) => action = "authorized",
-                Ok(false) => {}
+        if let Some(plan) = plans.iter().find(|p| &p.name == name)
+            && (plan.adds() || plan.drops())
+        {
+            match apply_plan(ctx, id, plan) {
+                Ok(()) => action = "authorized",
                 Err(e) => {
                     action = "failed";
                     failures.push((name.clone(), UploadError::from(e)));
@@ -415,30 +564,10 @@ fn apply_change(
         }
         return Err(error);
     }
-    if follows && secrets.iter().any(|(_, a)| *a == "authorized") {
+    if secrets.iter().any(|(_, a)| *a == "authorized") {
         session.note(&loc.message_args("note-dest-edit-followed", &[("id", id)]));
     }
     Ok(secrets)
-}
-
-/// Adds the new origin and places to the entry `<id>/<name>`; `Ok(false)` when there is no entry.
-fn follow(
-    ctx: &Context<'_>,
-    id: &str,
-    name: &str,
-    origin: Option<&str>,
-    places: &[Placement],
-) -> Result<bool, SecretError> {
-    if ctx.secrets.inspect(id, name)?.is_none() {
-        return Ok(false);
-    }
-    if let Some(origin) = origin {
-        ctx.secrets.authorize(id, name, Some(origin), None)?;
-    }
-    for place in places {
-        ctx.secrets.authorize(id, name, None, Some(place.clone()))?;
-    }
-    Ok(true)
 }
 
 /// `kropa dest edit <ID> [--url URL] [--set KEY=VALUE]...`; without option, the profile opens in
@@ -573,8 +702,14 @@ impl Drop for EditFile {
 }
 
 /// Checks the text a user made of the profile, with the rules of an import. Returns the profile it
-/// describes.
-fn check_edited(bytes: &[u8], id: &str, loc: &Localizer) -> Result<Destination, CliError> {
+/// describes. A value that an import would presume secret is refused (11) only where the edit added
+/// or changed it with respect to `old`: what was in the file before is not the edit's doing.
+fn check_edited(
+    bytes: &[u8],
+    old: &Destination,
+    loc: &Localizer,
+) -> Result<Destination, CliError> {
+    let id = old.id.as_str();
     let invalid = |detail: &str| {
         CliError::new(
             ExitCode::Config,
@@ -596,11 +731,10 @@ fn check_edited(bytes: &[u8], id: &str, loc: &Localizer) -> Result<Destination, 
             "exactly one destination, with the same id (its secrets are filed under it)",
         ));
     }
-    let plan = import(bytes, ImportFormat::Toml, Some(id)).map_err(|e| match e {
-        UploadError::Config { .. } => invalid(&e.to_string()),
-        other => dest_error(&other, loc),
-    })?;
-    if plan.secrets.iter().any(|s| s.value.is_some()) {
+    let edited = file.destination.remove(0);
+    // The shared detector (`kropa_upload::literals`) first: a literal is a refusal, not a syntax
+    // error to fix in a second round.
+    if !presumed_values(&edited, Some(old)).is_empty() {
         return Err(CliError::new(
             ExitCode::SecurityRefused,
             loc,
@@ -610,7 +744,11 @@ fn check_edited(bytes: &[u8], id: &str, loc: &Localizer) -> Result<Destination, 
         .with_reason("secret_in_profile")
         .at_step("dest"));
     }
-    Ok(file.destination.remove(0))
+    import(bytes, ImportFormat::Toml, Some(id)).map_err(|e| match e {
+        UploadError::Config { .. } => invalid(&e.to_string()),
+        other => dest_error(&other, loc),
+    })?;
+    Ok(edited)
 }
 
 fn run_editor(editor: &str, path: &Path, loc: &Localizer) -> Result<(), CliError> {
@@ -682,7 +820,7 @@ fn edit_in_editor(
         if bytes == original.as_bytes() {
             return Ok(None);
         }
-        match check_edited(&bytes, id, loc) {
+        match check_edited(&bytes, old, loc) {
             Ok(new) => {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 require_https(&new, loc)?;
@@ -801,26 +939,6 @@ pub fn set_default(
 // export
 // ---------------------------------------------------------------------------------------------
 
-/// Whether a profile of the file carries what looks like the value of a secret, which only an edit
-/// by hand can put there: a header, query parameter or field named or valued like a credential that
-/// is not a `{secret:NAME}` reference.
-fn holds_a_value(destination: &Destination) -> bool {
-    let Some(request) = &destination.request else {
-        return false;
-    };
-    request
-        .headers
-        .iter()
-        .chain(&request.query)
-        .chain(&request.fields)
-        .any(|(name, value)| {
-            !value.is_empty()
-                && !only_secret_references(value)
-                && !value.contains("{secret:")
-                && (is_sensitive_key(name) || looks_like_credential_value(value))
-        })
-}
-
 /// `kropa dest export [<ID>...]`: the profiles as TOML on stdout, `{secret:NAME}` references only.
 ///
 /// # Errors
@@ -846,7 +964,7 @@ pub fn export(
     }
     let mut text = String::new();
     for destination in &chosen {
-        if holds_a_value(destination) {
+        if !presumed_values(destination, None).is_empty() {
             return Err(CliError::new(
                 ExitCode::SecurityRefused,
                 loc,
