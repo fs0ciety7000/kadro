@@ -291,11 +291,16 @@ pub(crate) fn toml_error(path: &str, text: &str, e: &toml::de::Error) -> UploadE
     });
     let mut message = String::new();
     let mut quote: Option<char> = None;
-    for c in e.message().chars() {
+    let mut chars = e.message().chars();
+    while let Some(c) = chars.next() {
         match (quote, c) {
             (None, '"' | '`') => {
                 quote = Some(c);
                 message.push('…');
+            }
+            // An escaped character inside the quotes (`\"`) does not end them.
+            (Some(_), '\\') => {
+                chars.next();
             }
             (Some(q), c) if c == q => quote = None,
             (Some(_), _) => {}
@@ -507,7 +512,7 @@ fn compile_map(
 ) -> Result<Vec<(String, Template)>, UploadError> {
     map.iter()
         .map(|(k, v)| {
-            if k.is_empty() || k.chars().any(char::is_control) {
+            if k.is_empty() || k.chars().any(crate::engine::is_hostile_char) {
                 return Err(UploadError::config(format!("{what}: invalid name")));
             }
             Ok((
@@ -711,7 +716,7 @@ impl Destination {
             .file_field
             .clone()
             .unwrap_or_else(|| "file".to_owned());
-        if file_field.is_empty() || file_field.chars().any(char::is_control) {
+        if file_field.is_empty() || file_field.chars().any(crate::engine::is_hostile_char) {
             return Err(UploadError::config("file_field: invalid name"));
         }
         let max_size = request
@@ -1090,6 +1095,30 @@ success_status = [200, 201]
         let detail = config_error(&text);
         assert!(!detail.contains("FAKE-value"), "{detail}");
         assert!(detail.contains("d.toml:"), "{detail}");
+    }
+
+    #[test]
+    fn toml_errors_keep_dropping_after_an_escaped_quote() {
+        // Built at run time: nothing in the source looks like a token.
+        let tail = ["Zq7-", "Hx3Lm9"].concat();
+        let text = MAISON.replace(
+            "headers = { Authorization = \"Bearer {secret:token}\", Accept = \"application/json\" }",
+            &format!("headers = \"ab\\\"{tail}\""),
+        );
+        let detail = config_error(&text);
+        assert!(!detail.contains(&tail), "{detail}");
+        assert!(!detail.contains("ab"), "{detail}");
+    }
+
+    #[test]
+    fn invisible_characters_in_a_name_are_refused_at_load() {
+        for bad in ["a\u{202E}b", "a\u{200B}b", "a\u{FEFF}", "a\u{2066}b"] {
+            let text = MAISON.replace(
+                "Accept = \"application/json\"",
+                &format!("Accept = \"application/json\", {bad:?} = \"x\""),
+            );
+            assert!(config_error(&text).contains("invalid name"), "{bad:?}");
+        }
     }
 
     #[test]
