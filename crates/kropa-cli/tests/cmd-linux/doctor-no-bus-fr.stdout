@@ -37,6 +37,10 @@ Magasin de secrets
     Détail technique (non traduit) : the Secret Service could not be reached on the session bus
   Profils qui détiennent des secrets : 0
 
+Application (IPC)
+  État : non sûr, Kropa ne l'utilise pas
+    Raison : pas de dossier d'exécution (XDG_RUNTIME_DIR n'est pas défini ; aucun repli vers /tmp)
+  Fichier de service D-Bus installé : non
+
 Pas encore disponible
-  Socket et version de kropa-app : lot 2.1
   Écrans et leurs noms : lot 2.5

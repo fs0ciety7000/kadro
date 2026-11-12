@@ -240,7 +240,7 @@ fn remove_orphan(socket: &Path) -> Result<(), IpcError> {
 }
 
 /// Runs a server on a thread of its own, with a tokio runtime of its own, for an application whose
-/// main thread is something else (the GTK or AppKit loop).
+/// main thread is something else (the GTK or `AppKit` loop).
 ///
 /// # Errors
 /// The errors of [`Server::bind`] (reported here, before the thread starts) and

@@ -340,13 +340,13 @@ fn shutdown_removes_the_socket() {
 // ---- launching ----
 
 struct Counting<'a> {
-    launches: &'a Cell<u32>,
+    count: &'a Cell<u32>,
     result: fn() -> Result<(), IpcError>,
 }
 
 impl Launcher for Counting<'_> {
     fn launch(&self) -> Result<(), IpcError> {
-        self.launches.set(self.launches.get() + 1);
+        self.count.set(self.count.get() + 1);
         (self.result)()
     }
 }
@@ -354,24 +354,24 @@ impl Launcher for Counting<'_> {
 #[tokio::test]
 async fn a_launcher_that_fails_is_daemon_start_failed() {
     let (_tmp, dir) = runtime();
-    let launches = Cell::new(0);
+    let count = Cell::new(0);
     let launcher = Counting {
-        launches: &launches,
+        count: &count,
         result: || Err(IpcError::StartFailed("no way".into())),
     };
     let err = ensure_running_in(&dir, &launcher, Duration::from_secs(1))
         .await
         .unwrap_err();
     assert_eq!((err.exit_code(), reason(&err)), (14, "daemon_start_failed"));
-    assert_eq!(launches.get(), 1);
+    assert_eq!(count.get(), 1);
 }
 
 #[tokio::test]
 async fn a_launch_that_never_listens_is_a_timeout() {
     let (_tmp, dir) = runtime();
-    let launches = Cell::new(0);
+    let count = Cell::new(0);
     let launcher = Counting {
-        launches: &launches,
+        count: &count,
         result: || Ok(()),
     };
     let err = ensure_running_in(&dir, &launcher, Duration::from_millis(300))
@@ -381,28 +381,28 @@ async fn a_launch_that_never_listens_is_a_timeout() {
         (err.exit_code(), reason(&err)),
         (14, "daemon_start_timeout")
     );
-    assert_eq!(launches.get(), 1);
+    assert_eq!(count.get(), 1);
 }
 
 #[tokio::test]
 async fn nothing_is_launched_into_an_unsafe_directory_or_when_the_server_is_up() {
     let (_tmp, dir) = runtime();
-    let launches = Cell::new(0);
+    let count = Cell::new(0);
     let launcher = Counting {
-        launches: &launches,
+        count: &count,
         result: || Ok(()),
     };
     let _server = start(&dir);
     ensure_running_in(&dir, &launcher, Duration::from_secs(1))
         .await
         .unwrap();
-    assert_eq!(launches.get(), 0, "already listening: no launch");
+    assert_eq!(count.get(), 0, "already listening: no launch");
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     let err = ensure_running_in(&dir, &launcher, Duration::from_secs(1))
         .await
         .unwrap_err();
     assert_eq!(reason(&err), "unsafe_runtime_dir");
-    assert_eq!(launches.get(), 0);
+    assert_eq!(count.get(), 0);
 }
 
 #[tokio::test]

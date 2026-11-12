@@ -65,10 +65,10 @@ fn walk_and_mark() -> io::Result<()> {
     let mut numbers = Vec::new();
     for entry in std::fs::read_dir(directory)? {
         let name = entry?.file_name();
-        if let Some(number) = name.to_str().and_then(|n| n.parse::<libc::c_int>().ok()) {
-            if number >= FIRST {
-                numbers.push(number);
-            }
+        if let Some(number) = name.to_str().and_then(|n| n.parse::<libc::c_int>().ok())
+            && number >= FIRST
+        {
+            numbers.push(number);
         }
     }
     for fd in numbers {
@@ -77,12 +77,13 @@ fn walk_and_mark() -> io::Result<()> {
         // ignored; a descriptor that is open is only given one more flag, and never closed.
         unsafe {
             let flags = libc::fcntl(fd, libc::F_GETFD);
-            if flags >= 0 && flags & libc::FD_CLOEXEC == 0 {
-                if libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) < 0 {
-                    let e = io::Error::last_os_error();
-                    if e.raw_os_error() != Some(libc::EBADF) {
-                        return Err(e);
-                    }
+            if flags >= 0
+                && flags & libc::FD_CLOEXEC == 0
+                && libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) < 0
+            {
+                let e = io::Error::last_os_error();
+                if e.raw_os_error() != Some(libc::EBADF) {
+                    return Err(e);
                 }
             }
         }

@@ -37,6 +37,10 @@ Secret store
     Technical detail (not translated): the Secret Service could not be reached on the session bus
   Profiles holding secrets: 0
 
+Application (IPC)
+  State: not safe, Kropa will not use it
+    Reason: no runtime directory (XDG_RUNTIME_DIR is not set; there is no fallback to /tmp)
+  D-Bus service file installed: no
+
 Not available yet
-  kropa-app socket and version: lot 2.1
   Screens and their names: lot 2.5

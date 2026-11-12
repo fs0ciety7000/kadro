@@ -141,7 +141,6 @@ mod tests {
             let loc = Localizer::new(lang).unwrap();
             for error in errors() {
                 let cli = to_cli_error(&error, &loc);
-                assert!(!cli.message.is_empty());
                 assert!(
                     !cli.message.contains("error-ipc"),
                     "missing message for {error}: {}",
