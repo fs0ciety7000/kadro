@@ -356,7 +356,7 @@ fn print_version(ctx: &Context<'_>, session: &mut Session<'_, '_>) {
             "version": version,
             "commit": COMMIT,
             "target": TARGET,
-            "ipc_protocol": null,
+            "ipc_protocol": kropa_ipc::PROTOCOL,
             "schemas": SCHEMAS,
         }));
         return;
@@ -366,7 +366,8 @@ fn print_version(ctx: &Context<'_>, session: &mut Session<'_, '_>) {
     session.result(&loc.message_args("out-version", &[("version", version)]));
     session.result(&loc.message_args("out-version-commit", &[("commit", &commit)]));
     session.result(&loc.message_args("out-version-target", &[("target", TARGET)]));
-    session.result(&loc.message("out-version-ipc"));
+    let protocol = kropa_ipc::PROTOCOL.to_string();
+    session.result(&loc.message_args("out-version-ipc", &[("protocol", &protocol)]));
     session.result(&loc.message_args("out-version-schemas", &[("schemas", &SCHEMAS.join(", "))]));
 }
 
