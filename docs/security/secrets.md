@@ -406,6 +406,13 @@ stdin porte un fichier). Pas de `--password`, pas de `KROPA_PASSWORD`.
 - **Changement** d'URL ou d'emplacement d'un profil qui utilise un secret : l'autorisation ne suit pas.
   `kropa secrets allow <profil> <nom> --origin <URL> | --placement <P>` montre l'ancien et le nouveau et demande une
   confirmation **interactive seulement** (jamais `--yes`, code 12 sans TTY). Même règle pour `dest edit --url`.
+- **`dest edit` calcule contre le magasin, pas contre le fichier** (revue 2.6, B1) : le fichier peut avoir été modifié par
+  un tiers (dotfiles synchronisés, profil collé), alors que la liaison existe pour qu'il ne soit pas digne de
+  confiance. Ensemble à ajouter = (origine et emplacements du profil après modification) moins (ce que l'entrée
+  autorise, `inspect`). Il est montré en entier, `--quiet` n'y change rien, et seul lui est autorisé. Non vide alors que
+  la demande ne touche ni l'adresse ni un emplacement : rien n'est autorisé, avertissement « le fichier diffère du
+  magasin ». Les anciennes origines et anciens emplacements que le profil n'utilise plus sont proposés au retrait dans
+  la même question. `secrets allow` montre de même, en avertissements, ce que la question autorise.
 
 ### 4.4 Contrôle de sortie (B1, M5)
 
@@ -488,6 +495,11 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   liste blanche (`Accept`, `Content-Type`, `User-Agent`, gabarits purs comme `{filename}`), montrée masquée (4 derniers
   caractères au plus) et **reclassable** par l'utilisateur ; `--yes` range le reste comme secrets. Chaque secret devient
   une entrée **neuve** du profil importé, liée à l'origine de l'URL et à l'emplacement où il a été trouvé.
+- **Un seul détecteur** (`kropa-upload::literals`) décide ce qu'est une valeur littérale présumée secrète : import,
+  `dest edit` (valeurs ajoutées ou modifiées seulement) et `dest export`. Il couvre en-têtes, query, champs,
+  `body_template` (lu en JSON, chaîne par chaîne) et le reste littéral d'une valeur mixte (`{secret:k}:abcdef`, hors
+  schéma d'autorisation, séparateurs et mot court suivi d'une espace comme `Client-ID`). Limite connue : un mot de
+  12 caractères au plus suivi d'une espace, juste avant une référence, passe pour un schéma.
 - **`{secret:x}` dans un TOML importé** : crée une entrée **vide** (« manquante », `dest show`), à remplir par
   `kropa secrets set`. Un import ne réutilise **jamais** une entrée existante, d'aucun profil.
 - **`id` déjà pris** : refus, sauf `--id <autre>` ou confirmation interactive « remplacer le profil X : ses secrets

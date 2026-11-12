@@ -137,16 +137,28 @@ kropa dest export [<ID>…]
   ensemble : si le fichier ne peut pas être écrit, l'entrée est retirée. `--default` écrit `default_destination`.
 - `edit` : changer l'URL d'un profil qui a un secret, ou déplacer un `{secret:}` vers un autre emplacement (en-tête,
   query, champ, corps), exige une confirmation interactive, **jamais** accordée par `--yes` ni sans TTY (code 12) ;
-  sans elle, l'autorisation ne suit pas (voir `secrets allow`). Avec elle, le profil change **et** l'entrée du magasin
-  reçoit la nouvelle origine et les nouveaux emplacements (les anciens restent) ; refusée : code 3, rien n'est changé.
+  sans elle, l'autorisation ne suit pas (voir `secrets allow`). Ce qui s'ajoute est calculé **contre le magasin**
+  (`inspect` de l'entrée), jamais contre le fichier, qui n'est pas digne de confiance (`security/secrets.md` § 4.3) :
+  ensemble ajouté = (origine et emplacements du profil après modification) moins (ce que l'entrée autorise déjà). Cet
+  ensemble est affiché en entier (« ancien » = ce que le magasin autorise), même avec `--quiet`, et il est seul
+  autorisé. Si cet ensemble n'est pas vide alors que la demande ne touche ni l'adresse ni un emplacement, rien n'est
+  autorisé et un avertissement dit que le fichier diffère du magasin (le reste de la modification s'applique, code 0).
+  Si le profil n'utilise plus une ancienne origine ou un ancien emplacement touché par la demande, **la même question**
+  propose de les retirer de l'entrée (une seule réponse pour les deux) ; refusée : code 3, rien n'est changé.
   `--yes` (option cachée) est sans effet. Lot 2.6 : `--set` accepte `label` (texte, vide pour l'effacer) et `kinds`
   (`image`, `file` ou `image,file`) ; les clés propres aux profils S3 (`prefix`, `public_base_url`, `presign`)
   arrivent avec eux (2.7) et le profil n'a pas encore de clé de format de lien. Toute autre clé : code 2 ; une valeur
   qui ressemble à un secret ou qui porte `{secret:…}` : code 11. Sans option, `$EDITOR` (variable standard, séparée
-  aux espaces, sans shell ; TTY exigé, sinon 12) s'ouvre sur une copie `0600` du bloc du profil, commentaires inclus ;
-  le résultat est relu avec les règles d'un import (une valeur de secret tapée dans le fichier : code 11, rien
-  d'écrit) et ne remplace le profil qu'en une fois ; invalide, l'ancien fichier reste (la réouverture de l'éditeur est
-  proposée) ; `id` modifié ou plusieurs profils : refusé ; éditeur en échec : 3 ; aucun changement : rien d'écrit.
+  aux espaces, sans shell ; TTY exigé, sinon 12) s'ouvre sur une copie `0600` du bloc du profil, commentaires inclus,
+  dans un dossier `0700` à nom aléatoire (`$XDG_RUNTIME_DIR/kropa/`, sinon le dossier de configuration), retiré en
+  entier à la fin ; SIGINT, SIGQUIT et SIGHUP sont retenus pendant l'éditeur (s'il y en a eu un : code 3, copie
+  retirée). Le résultat est relu avec les règles d'un import : une valeur que l'import présumerait secrète (en-tête,
+  query, champ, `body_template`, ou reste littéral d'une valeur mixte comme `{secret:k}:abcdef`) est refusée (code 11,
+  rien d'écrit) **seulement si l'édition l'a ajoutée ou modifiée** ; ce qui était déjà dans le fichier n'est pas
+  reproché. Le remplacement se fait en une fois ; invalide, l'ancien fichier reste (la réouverture de l'éditeur est
+  proposée) ; `id` modifié ou plusieurs profils : refusé ; éditeur en échec : 3 ; aucun changement : rien d'écrit. Le
+  fichier garde son mode (`0600` à la création) ; un lien symbolique est suivi (la cible est remplacée, le lien reste ;
+  un lien qui ne mène nulle part est une erreur) ; pas de verrou entre deux écrivains (le dernier gagne).
 - `test` : envoie une image témoin de 1×1 **après confirmation** (`--yes` sans TTY) ; affiche statut, en-têtes
   filtrés, URL extraite et lien formaté.
 - `remove` : supprime le profil et ses secrets (toutes les entrées `<ID>/*` du magasin) après confirmation (`--yes`
@@ -154,6 +166,10 @@ kropa dest export [<ID>…]
   (N2) se retirent de même ; ni profil ni entrée : code 6. Les entrées partent d'abord : un échec du magasin laisse
   le profil, et la commande peut être relancée.
 - `set-default <ID>` : profil existant exigé (6) ; `--none` retire le défaut.
+- `export` : les profils en TOML sur la sortie standard, `{secret:NOM}` seulement. Même détecteur que l'import et
+  l'éditeur (`kropa-upload::literals`) : un profil dont le fichier porte une valeur que l'import présumerait secrète
+  (code 11, rien de montré) est refusé en entier. Un simple réglage littéral (`folder = "shots"`) y passe aussi pour
+  une valeur : on le déclare en variable à valeur par défaut (`[destination.vars.folder]`, `{var:folder}`).
 - `import` : `.sxcu` et `.toml` suivent **les mêmes règles** (`security/secrets.md` § 5). Résumé (origine, HTTPS ou
   non, emplacements, secrets détectés et masqués, query signalée) puis confirmation ; les secrets vont au magasin en
   entrées **neuves** du profil importé, le TOML ne garde que `{secret:…}` ; refus explicite des champs non pris en

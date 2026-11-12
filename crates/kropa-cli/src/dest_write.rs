@@ -359,15 +359,17 @@ fn plan_secrets(
     after: &Reach,
     moved_origin: bool,
     moved_places: &[&(String, Vec<Placement>)],
+    strict: bool,
 ) -> Result<Vec<Plan>, CliError> {
     let mut plans = Vec::new();
     for (name, places) in &after.places {
-        let Some(info) = ctx
-            .secrets
-            .inspect(id, name)
-            .map_err(|e| store_error(e, ctx.loc))?
-        else {
-            continue;
+        let info = match ctx.secrets.inspect(id, name) {
+            Ok(Some(info)) => info,
+            Ok(None) => continue,
+            // A change that moves nothing only looks at the store to warn: an unreadable store is no
+            // reason to refuse a new label.
+            Err(_) if !strict => continue,
+            Err(e) => return Err(store_error(e, ctx.loc)),
         };
         let add_origin = after
             .origin
@@ -500,7 +502,21 @@ fn apply_change(
         })
         .collect();
     let touches = moved_origin || !moved_places.is_empty();
-    let mut plans = plan_secrets(ctx, id, &after, moved_origin, &moved_places)?;
+    let interactive_required = || {
+        CliError::new(
+            ExitCode::InteractionRequired,
+            loc,
+            "error-dest-edit-interactive",
+            &[("id", id)],
+        )
+        .at_step("dest")
+    };
+    let mut plans = match plan_secrets(ctx, id, &after, moved_origin, &moved_places, touches) {
+        // Without a terminal the question could not be asked anyway: that is what is reported, and
+        // the store, which may be locked or missing, is not the news.
+        Err(_) if !session.interactive => return Err(interactive_required()),
+        planned => planned?,
+    };
     if !touches {
         // The request leaves the address and the places alone: whatever the store lacks is a
         // difference between the file and the store, not something this command may allow.
@@ -520,13 +536,7 @@ fn apply_change(
     let follows = plans.iter().any(|p| p.adds() || p.drops());
     if follows {
         if !session.interactive {
-            return Err(CliError::new(
-                ExitCode::InteractionRequired,
-                loc,
-                "error-dest-edit-interactive",
-                &[("id", id)],
-            )
-            .at_step("dest"));
+            return Err(interactive_required());
         }
         show_plans(&plans, loc, session);
         if !(ctx.confirm)(&loc.message_args("prompt-dest-edit", &[("id", id)])) {
@@ -672,9 +682,13 @@ struct EditFile {
 
 /// 12 random bytes, in hexadecimal.
 fn random_name() -> std::io::Result<String> {
+    use std::fmt::Write as _;
     let mut bytes = [0u8; 12];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    Ok(bytes.iter().fold(String::new(), |mut name, b| {
+        let _ = write!(name, "{b:02x}");
+        name
+    }))
 }
 
 fn make_private_dir(path: &Path, recursive: bool) -> std::io::Result<()> {
@@ -857,9 +871,9 @@ fn check_edited(bytes: &[u8], old: &Destination, loc: &Localizer) -> Result<Dest
         .at_step("dest"));
     }
     match import(bytes, ImportFormat::Toml, Some(id)) {
-        Ok(_) => {}
         // Only a profile with a real secret needs https, and `require_https` checks that.
-        Err(UploadError::Security {
+        Ok(_)
+        | Err(UploadError::Security {
             reason: "https_required",
             ..
         }) => {}

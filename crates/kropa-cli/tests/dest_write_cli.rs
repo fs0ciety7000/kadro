@@ -1501,7 +1501,11 @@ fn i1_quiet_does_not_hide_what_the_question_is_about() {
 
 /// A string of hexadecimal digits, made at run time.
 fn hex_tail() -> String {
-    (0..18u8).map(|i| format!("{:02x}", i * 13 + 7)).collect()
+    use std::fmt::Write as _;
+    (0..18u8).fold(String::new(), |mut text, i| {
+        let _ = write!(text, "{:02x}", i * 13 + 7);
+        text
+    })
 }
 
 #[test]
@@ -1602,10 +1606,8 @@ fn i3_the_editor_only_suspects_what_the_edit_added_or_changed() {
     let work = tempfile::tempdir().unwrap();
     let t = sentinel();
     // A public field that was in the file already.
-    let original = format!(
-        "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\nfile_field = \"file\"\n[destination.request.fields]\nfolder = \"shots\"\n[destination.response]\nurl = \"{{json:$.url}}\"\n"
-    );
-    let dir = config(&original, "");
+    let original = "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\nfile_field = \"file\"\n[destination.request.fields]\nfolder = \"shots\"\n[destination.response]\nurl = \"{json:$.url}\"\n";
+    let dir = config(original, "");
     let store = MemorySecretSource::new();
     let input = ScriptedInput::default();
     let label = "perl -pi -e 's|^type = \"http\"|type = \"http\"\\nlabel = \"Edited\"|' \"$1\"\n";
@@ -1623,7 +1625,9 @@ fn i3_the_editor_only_suspects_what_the_edit_added_or_changed() {
     // A value the edit adds or changes is still refused.
     for body in [
         format!("perl -pi -e 's|^folder = .*|folder = \"{t}\"|' \"$1\"\n"),
-        format!("printf 'note = \"{t}\"\\n' >> \"$1\"\n"),
+        format!(
+            "perl -pi -e 's|^folder = \"shots\"|folder = \"shots\"\\nnote = \"{t}\"|' \"$1\"\n"
+        ),
     ] {
         let before = read(&dir, "destinations.toml");
         let out = run(
