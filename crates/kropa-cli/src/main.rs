@@ -29,7 +29,7 @@ fn main() -> ExitCode {
     // First of all: descriptors left open by the process that started us do not pass to our children
     // (a `--password-fd` pipe, say), `docs/lots/lot-2.md` decision D2. Always on, debug builds too.
     #[cfg(unix)]
-    if let Err(e) = kropa_cli::fdguard::mark_inherited_cloexec() {
+    if let Err(e) = kropa_ipc::fdguard::mark_inherited_cloexec() {
         return refuse("FD_CLOEXEC on inherited descriptors", &e);
     }
     // Before anything is read: no core file may keep a secret (`docs/security/secrets.md` section 6).

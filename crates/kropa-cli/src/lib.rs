@@ -6,8 +6,7 @@
 //! [`errors`] localises clap's usage errors, [`output`] separates stdout and stderr and builds the
 //! JSON envelope, [`target`] resolves file names, [`capture`] and [`doctor`] are the commands that
 //! use the capture backend, [`secret_args`] spots secrets given in arguments, and [`exec`] runs the
-//! commands. [`daemon`] reaches the graphical application over `kropa-ipc`, and [`fdguard`] closes
-//! inherited descriptors to children at start.
+//! commands. [`daemon`] reaches the graphical application over `kropa-ipc`.
 
 pub mod args;
 pub mod capture;
@@ -19,8 +18,6 @@ pub mod dest_write;
 pub mod doctor;
 pub mod errors;
 pub mod exec;
-#[cfg(unix)]
-pub mod fdguard;
 pub mod hardening;
 pub mod output;
 pub mod secret_args;

@@ -29,10 +29,8 @@ kropa-upload.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 
-# Hidden prompt of a secret on the terminal (safe termios, no `unsafe`); `libc` for `src/fdguard.rs`,
-# the one module of the command line that is allowed `unsafe` (descriptors inherited at start).
+# Hidden prompt of a secret on the terminal (safe termios, no `unsafe`).
 [target.'cfg(unix)'.dependencies]
-libc.workspace = true
 rustix.workspace = true
 
 [dev-dependencies]

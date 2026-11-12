@@ -9,6 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+# `libc` for `src/fdguard.rs`, the one module of this crate that is allowed `unsafe` (descriptors
+# inherited at start, called by `kropa` and `kropa-gtk`).
+libc.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 serde.workspace = true
 serde_json.workspace = true
