@@ -44,7 +44,8 @@ fn private_bus(root: &Path, services: Option<&Path>) -> (Bus, String) {
   {servicedir}
   <auth>EXTERNAL</auth>
   <policy context="default">
-    <allow send_destination="*"/>
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
     <allow own="*"/>
   </policy>
 </busconfig>
