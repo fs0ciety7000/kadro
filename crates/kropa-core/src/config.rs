@@ -204,29 +204,60 @@ pub fn default_output_dir() -> Result<PathBuf, CoreError> {
 }
 
 /// Writes `text` to `path` in one step: a temporary file next to it (created new, flushed to disk),
-/// then a rename. A reader sees the old file or the new one, never half of it, and nothing is left
-/// behind when a step fails.
+/// then a rename, then a flush of the directory. A reader sees the old file or the new one, never
+/// half of it, and nothing is left behind when a step fails.
+///
+/// The mode of a file that exists is kept (`0600` for a new one: a configuration may name secrets and
+/// hosts). A symbolic link is written **through**: the file it points to is replaced, in its own
+/// directory, and the link stays (a dotfile manager keeps its link). A link that points nowhere is an
+/// error: nothing is created behind it. There is no lock between two writers: the last rename wins.
 ///
 /// # Errors
 /// The I/O error of the step that failed.
 pub fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     use std::io::Write as _;
 
+    let resolved;
+    let path = if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        resolved = std::fs::canonicalize(path)?;
+        resolved.as_path()
+    } else {
+        path
+    };
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir)?;
     let name = path
         .file_name()
         .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned());
     let temporary = dir.join(format!(".{name}.{}.tmp", std::process::id()));
-    let written = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    let mode = {
+        use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
+        let mode = std::fs::metadata(path).map_or(0o600, |m| m.mode() & 0o7777);
+        options.mode(mode);
+        mode
+    };
+    let written = options
         .open(&temporary)
-        .and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|mut f| {
+            // The umask may have taken bits off at creation: the mode is set exactly.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                f.set_permissions(std::fs::Permissions::from_mode(mode))?;
+            }
+            f.write_all(text.as_bytes()).and_then(|()| f.sync_all())
+        })
         .and_then(|()| std::fs::rename(&temporary, path));
     if written.is_err() {
         let _ = std::fs::remove_file(&temporary);
+        return written;
     }
+    // The rename itself reaches the disk only once the directory does.
+    #[cfg(unix)]
+    std::fs::File::open(dir).and_then(|d| d.sync_all())?;
     written
 }
 
@@ -474,5 +505,47 @@ mod tests {
             std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
             1
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_keeps_the_mode_and_creates_new_files_private() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let fresh = dir.path().join("fresh.toml");
+        write_atomic(&fresh, "a = 1\n").unwrap();
+        assert_eq!(mode(&fresh), 0o600);
+        let shared = dir.path().join("shared.toml");
+        std::fs::write(&shared, "a = 0\n").unwrap();
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o640)).unwrap();
+        write_atomic(&shared, "a = 1\n").unwrap();
+        assert_eq!(mode(&shared), 0o640);
+        let private = dir.path().join("private.toml");
+        std::fs::write(&private, "a = 0\n").unwrap();
+        std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o600)).unwrap();
+        write_atomic(&private, "a = 1\n").unwrap();
+        assert_eq!(mode(&private), 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_writes_through_a_link_and_refuses_a_dangling_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("dotfiles");
+        std::fs::create_dir(&real).unwrap();
+        let target = real.join("destinations.toml");
+        std::fs::write(&target, "a = 0\n").unwrap();
+        let link = dir.path().join("destinations.toml");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        write_atomic(&link, "a = 1\n").unwrap();
+        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "a = 1\n");
+        assert_eq!(std::fs::read_dir(&real).unwrap().count(), 1);
+        // A link to nothing: an error, and nothing is created behind it.
+        let dangling = dir.path().join("dangling.toml");
+        std::os::unix::fs::symlink(dir.path().join("nowhere.toml"), &dangling).unwrap();
+        assert!(write_atomic(&dangling, "a = 1\n").is_err());
+        assert!(!dir.path().join("nowhere.toml").exists());
     }
 }
