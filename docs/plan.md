@@ -94,60 +94,38 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 **Critère** : sur les trois plateformes, fichier enregistré et lien Zipline réel sur stdout ; copié sur KDE et macOS ; refus explicite sur GNOME ; « zéro requête » vert.
 
 ## Lot 2 — v0.2 Sélection, profils, S3, coffre
-Dépend de : 1 et D2.
-- [ ] 2.1 (2.1a fait : `kropa-ipc`, client, activation D-Bus, `fdguard` ; restent 2.1b serveur `kropa-gtk`, 2.1c `kropa-app`) IPC socket JSON-RPC (`hello` versionné, 0600) ; la CLI lance `kropa-app` à la demande. Agent : `backend-dev`.
-- [x] 2.1d Suites de la revue sécurité 2.1a (`docs/reviews/2026-11-12-security-2.1a.md`) : test réel entre deux UID (I1), cas « faux serveur du même UID » écrit au § 7 de `secrets.md` (I2), `fdguard` déplacé dans `kropa-ipc` pour `kropa-gtk` (m4), mineurs m1-m13. Agent : `backend-dev`.
-- [x] 2.2 Modèle de sélection commun (souris, flèches, Maj+flèches, `R` dernière zone, Échap, délai) et loupe. Agent : `backend-dev`. Fin : tests sans écran.
-- [ ] 2.3 Overlay GTK (image figée par écran, layer-shell KDE/wlroots, plein écran GNOME, échelles mixtes, copie d'image sous focus). Agent : `linux-desktop-dev`. Fin : check-list GNOME et KDE à 100 % et 200 %.
-- [ ] 2.4 Overlay AppKit (sans bord, au-dessus, un par écran, Retina, exclus de la capture). Agent : `macos-desktop-dev`.
-- [ ] 2.5 `kropa capture area [--last] [--delay]`. Agent : `backend-dev`.
-- [x] 2.6 (revue : 1 bloquant, corrigé en 2.6b) Profils et défaut, `kropa dest …`, jeton via stdin/TTY (refusé en argument), modèle Imgur dans `docs/examples/`. Agent : `backend-dev`.
-- [x] 2.6b Suites de la revue sécurité 2.6 (`docs/reviews/2026-11-12-security-2.6.md`) : **B1** autorisation calculée contre le magasin et non le fichier, I1-I3, m1-m5. Agent : `backend-dev`. Fin : `security-reviewer` sans bloquant.
-- [x] 2.6c Contre-revue 2.6b : N1 (valeurs par défaut des variables), N2 (mot de schéma restreint), N3 (`secrets set -q`), n1-n6, import d'une même référence à deux emplacements. Agent : `backend-dev`.
-- [ ] 2.7 S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j en option). Agent : `backend-dev`. Fin : tests Garage ; `security-reviewer` sans bloquant.
-- [ ] 2.8 Repli `age` : `kropa secrets unlock`, `--password-fd`. Dépend de S.3. Agent : `backend-dev`. Fin : `security-reviewer` sans bloquant.
-- [ ] 2.9 Job hebdomadaire Sway headless. Agents : `devops`, `qa-tester`.
-- [ ] 2.10 **[Utilisateur]** Essai du parcours sans annotation sur GNOME, KDE, Mac.
+Dépend de : 1 et D2. Plan détaillé : `docs/lots/lot-2.md`. Une PR par fonctionnalité ; vérification normale (diff, tests,
+lint, build) par la session, sans relecteur séparé (rigueur standard, 12/11/2026).
+- [x] 2.A Profils et défaut : `kropa dest add|edit|remove|set-default|export`, jeton via TTY/stdin/fd, modèle Imgur (ex-2.6, 2.6b, 2.6c). Base faite : IPC `kropa-ipc` (ex-2.1a, 2.1d), modèle de sélection (ex-2.2).
+- [ ] 2.B Sélection de zone : serveur `kropa-gtk` et `kropa-app`, overlay GTK (layer-shell KDE/wlroots, plein écran GNOME) et AppKit, `kropa capture area [--last] [--delay]` (ex-2.1b, 2.1c, 2.3, 2.4, 2.5). Agents : `linux-desktop-dev`, `macos-desktop-dev`, `backend-dev`.
+- [ ] 2.C S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j), `dest add --type s3`, test Garage (ex-2.7a, 2.7b). Agent : `backend-dev`.
+- [ ] 2.D Coffre `age` de repli : magasin, `kropa secrets use|migrate`, `--password-fd` (ex-2.8a, 2.8b ; `unlock|lock` au 4.C, décision D11). Agent : `backend-dev`.
+- [ ] 2.E **[Utilisateur]** Essai du parcours sans annotation (KDE, Mac ; GNOME non vérifié, D8).
+- Retiré (rigueur standard) : 2.9 job hebdomadaire Sway séparé (les tests sway restent dans la CI normale).
 
 ## Lot 3 — v0.3 Éditeur
 Dépend de : 2 et D2.2.
-- [ ] 3.1 `kropa-doc` : objets, styles, annuler/rétablir ; format `.kropa` v1 (ZIP ; jamais envoyé) ; `docs/format-kropa.md` ; fixtures figées. Agent : `backend-dev`.
-- [ ] 3.2 `kropa-render` : formes, crayon, texte, flou fort, pixellisation, masque, compteurs, surligneur ; export PNG sans métadonnées. Agent : `backend-dev`.
-- [ ] 3.2b Outil Recadrer (touche `C`) : recadrage non destructif dans `kropa-doc`, rendu et export. Agent : `backend-dev`.
-- [ ] 3.3 Instantanés d'image (Δ 3/255, 0,1 %) Linux et macOS. Agents : `qa-tester`, `devops`.
-- [ ] 3.4 Machine d'états de l'éditeur (raccourcis à une touche, Tab, Suppr, Ctrl+Z, Ctrl+U). Agent : `backend-dev`.
-- [ ] 3.5 Coquille éditeur GTK (AT-SPI). Agent : `linux-desktop-dev`.
-- [ ] 3.6 Coquille éditeur AppKit (NSAccessibility). Agent : `macos-desktop-dev`.
-- [ ] 3.7 `kropa edit <fichier>`. Agent : `backend-dev`.
-- [ ] 3.8 Performance sur une capture 5K (< 16 ms par image en glisser). Agent : `qa-tester`.
-- [ ] 3.9 Critique de l'éditeur réel. Agent : `design-critic`.
-- [ ] 3.10 **[Utilisateur]** Parcours complet sans souris sur les trois plateformes.
+- [ ] 3.A Éditeur d'annotation : `kropa-doc` (objets, annuler/rétablir, `.kropa` v1, `docs/format-kropa.md`), `kropa-render` (formes, crayon, texte, flou, pixellisation, masque, compteurs, surligneur, Recadrer `C`, export PNG sans métadonnées), machine d'états au clavier, coquilles GTK et AppKit accessibles, `kropa edit <fichier>` ; fluide sur une capture 5K (ex-3.1, 3.2, 3.2b, 3.4, 3.5, 3.6, 3.7, 3.8). Agents : `backend-dev`, plateformes.
+- [ ] 3.B **[Utilisateur]** Parcours complet sans souris.
+- Retiré (rigueur standard) : 3.3 instantanés d'image comme tâche séparée (tests de rendu dans 3.A), 3.9 critique de design séparée.
 
 ## Lot 4 — v0.4 Usage quotidien
 Dépend de : 3.
-- [ ] 4.1 Résident Linux (`GtkApplication` unique, démarrage auto, icône ksni sur KDE ; GNOME sans icône sans extension). Agent : `linux-desktop-dev`.
-- [ ] 4.2 Résident macOS (`LSUIElement`, `NSStatusItem`). Agent : `macos-desktop-dev`.
-- [ ] 4.3 Raccourcis globaux (portail GlobalShortcuts ; `global-hotkey` sur macOS, refus d'Option seule) ; repli « raccourci du bureau → `kropa capture area` » documenté. Agents : plateformes.
-- [ ] 4.4 Notifications avec actions ; « Lien prêt, Copier » sur GNOME. Agents : plateformes. Fin : jamais de faux « copié ».
-- [ ] 4.5 File SQLite (états, reprise au redémarrage, backoff, sans sonde réseau), `kropa queue …`. Agent : `backend-dev`.
-- [ ] 4.6 Historique minimal `kropa history list [--search] --json`. Agent : `backend-dev`.
-- [ ] 4.7 Session du coffre dans le résident (15 min, verrouillage avec l'écran). Agents : `backend-dev`, plateformes. Fin : `security-reviewer` sans bloquant. Avant toute méthode `secrets.*` sur l'IPC : vérifier que le PID du pair du socket est le propriétaire du nom D-Bus (revue 2.1a, I2).
-- [ ] 4.8 Retrait des métadonnées sur la copie envoyée. Agent : `backend-dev`. Fin : fixtures EXIF GPS vérifiées.
-- [ ] 4.9 SFTP (russh, `known_hosts` strict). Agent : `backend-dev`. Fin : tests OpenSSH ; `security-reviewer` sans bloquant.
-- [ ] 4.10 Réglages graphiques simples. Agents : plateformes.
-- [ ] 4.11 Premier lancement et permissions expliquées. Agents : plateformes.
-- [ ] 4.12 **[Utilisateur]** Deux semaines d'usage réel.
+- [ ] 4.A Application résidente : résident Linux et macOS (icône KDE, `NSStatusItem`), raccourcis globaux et repli documenté, notifications avec « Lien prêt, Copier » sur GNOME, réglages simples, premier lancement et permissions expliquées (ex-4.1, 4.2, 4.3, 4.4, 4.10, 4.11). Agents : plateformes.
+- [ ] 4.B File d'envoi SQLite (reprise, backoff, `kropa queue …`) et historique `kropa history list` (ex-4.5, 4.6). Agent : `backend-dev`.
+- [ ] 4.C Session du coffre dans le résident (15 min, verrouillage avec l'écran, `secrets unlock|lock`) ; avant toute méthode `secrets.*` sur l'IPC, PID du pair = propriétaire du nom D-Bus (revue 2.1a, I2) (ex-4.7). Agents : `backend-dev`, plateformes.
+- [ ] 4.D Retrait des métadonnées sur la copie envoyée, fixtures EXIF GPS (ex-4.8). Agent : `backend-dev`.
+- [ ] 4.E SFTP (russh, `known_hosts` strict), tests OpenSSH (ex-4.9). Agent : `backend-dev`.
+- [ ] 4.F **[Utilisateur]** Deux semaines d'usage réel.
 
 ## Lot 5 — v1.0 Paquets et docs
 Dépend de : 4.
-- [ ] 5.1 `.deb` et `.rpm` (conteneurs Debian 13, Fedora), `.desktop`, MetaInfo, icônes. Agent : `devops`.
-- [ ] 5.2 `.dmg` universel (`lipo`, `codesign` auto-signé, `hdiutil`). Agents : `devops`, `macos-desktop-dev`.
-- [ ] 5.3 Workflow de release (environnement `release` approuvé à la main, `SHA256SUMS`, provenance, `cargo vendor`, `git-cliff`, `cargo-about`). Agent : `devops`. Fin : `security-reviewer` sans bloquant.
-- [ ] 5.4 Tap Homebrew (formule compilée, `.app`). Agent : `devops` ; **[Utilisateur]** crée `homebrew-tap` et teste `brew install`.
-- [ ] 5.5 Should si prêts : miniature flottante (macOS, KDE, wlroots ; notification sur GNOME), réouverture `.kropa`, wlroots et X11 au mieux. Agents : plateformes. Fin : livré ou reporté dans `compat.md`.
-- [ ] 5.6 Docs FR/EN : README, installation, « Signature macOS et ses conséquences », `compat.md`, référence CLI, `CHANGELOG.md`. Agent : `copywriter`.
-- [ ] 5.7 Audit final et critique finale. Agents : `security-reviewer`, `design-critic`.
-- [ ] 5.8 **[Utilisateur]** Check-list manuelle, fusion, étiquette, release v1.0.
+- [ ] 5.A Paquets : `.deb`, `.rpm`, `.dmg` universel auto-signé, tap Homebrew, `.desktop`, MetaInfo, icônes (ex-5.1, 5.2, 5.4 ; l'utilisateur crée `homebrew-tap`). Agents : `devops`, `macos-desktop-dev`.
+- [ ] 5.B Workflow de release (approbation manuelle, `SHA256SUMS`, provenance, `cargo vendor`, `git-cliff`, `cargo-about`) (ex-5.3). Agent : `devops`.
+- [ ] 5.C Docs FR/EN : README, installation, signature macOS, `compat.md`, référence CLI, `CHANGELOG.md` (ex-5.6). Agent : `copywriter`.
+- [ ] 5.D Should si prêts : miniature flottante, réouverture `.kropa`, wlroots et X11 au mieux ; sinon reporté dans `compat.md` (ex-5.5). Agents : plateformes.
+- [ ] 5.E **[Utilisateur]** Check-list manuelle, fusion, étiquette, release v1.0.
+- Retiré (rigueur standard) : 5.7 audit et critique finale séparés.
 
 ## Après v1
 - **Lot 6, v1.1 Rendu soigné** : fenêtre propre, habillage et préréglages, projecteur, historique graphique.
