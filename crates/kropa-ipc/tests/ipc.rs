@@ -523,8 +523,8 @@ fn a_fifo_in_place_of_the_lock_is_refused_without_blocking() {
     let outcome = rx
         .recv_timeout(Duration::from_secs(10))
         .expect("the server blocked on the FIFO");
-    let err = outcome.unwrap_err();
-    assert_eq!(reason(&err), "unsafe_runtime_dir");
+    // `ENXIO` from the open (no reader), or the refusal after `fstat`: an error either way.
+    assert_eq!(outcome.unwrap_err().exit_code(), 14);
 }
 
 /// m7: a lock that belongs to someone else (or a directory) is refused too.

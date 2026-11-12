@@ -174,7 +174,8 @@ précède. Chaque ajout : `cargo deny check` vert, et `security-reviewer` pour o
   `data/io.github.fs0ciety7000.Kropa.service`, `data/*.desktop` (`DBusActivatable=true`), `scripts/dev-install.sh`,
   `.github/workflows/ci.yml` (`libgtk-4-dev` dans chaque job Linux qui compile).
 - **Tests (conteneur)** : `kropa-gtk` lancé sous `sway --headless` (`WLR_BACKENDS=headless`) et `dbus-run-session`,
-  activé par `kropa doctor` → `hello` OK ; s'arrête seul après le délai ; deux activations = une seule instance.
+  activé par le lanceur (`DbusActivation`, ou une commande de test explicite) → `hello` OK ; `kropa doctor` ne
+  lance rien, sa sonde ne fait que lire l'état ; s'arrête seul après le délai ; deux activations = une seule instance.
 - **Fin** : CI Linux verte avec les paquets GTK ; CI macOS verte (rien de GTK compilé). **Non vérifiable ici** :
   environnement d'activation d'une vraie session KDE (vérifié en 2.10).
 

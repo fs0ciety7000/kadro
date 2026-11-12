@@ -349,9 +349,12 @@ Un document JSON versionné, sérialisé dans un tampon `Zeroizing` :
 ### 3.7 Descripteurs (`--password-fd`, `--secret-fd`) (M7)
 
 Lecture jusqu'à EOF ou `\n` ; **4 Kio max** (au-delà : refus) ; un seul `\n` final retiré.
-**Limite actuelle** : le descripteur est rouvert par `/dev/fd/N`, il n'est ni passé `CLOEXEC` ni fermé après la
-lecture (et un fichier est relu depuis 0, un socket échoue). Inoffensif tant que `kropa` ne lance aucun processus ; à
-régler avant le résident (2.1), soit par un `unsafe` justifié (règle 12 d'`AGENTS.md`), soit par cette limite écrite.
+**État (lot 2.1a, D2)** : au tout début de `main`, `kropa` marque `CLOEXEC` tout descripteur hérité à partir de 3
+(`kropa_ipc::fdguard`, `close_range` avec repli sur `/proc/self/fd` puis sur `fcntl` jusqu'à `RLIMIT_NOFILE` plafonné à
+65 536 ; un échec refuse de démarrer). Le descripteur reste lisible par `kropa` mais ne passe à aucun processus lancé
+ensuite (éditeur, `__clipboard-serve`, application). Il est rouvert par `/dev/fd/N` et n'est pas fermé après la
+lecture (un fichier est relu depuis 0, un socket échoue). Limite du repli `fcntl` : sans `close_range` ni `/proc`, un
+descripteur au-dessus de 65 536 n'est pas marqué. `unsafe` justifié, confiné à ce module (règle 12 d'`AGENTS.md`).
 Un secret lu sur un TTY par `--secret-stdin` s'affiche (pas d'écho coupé) ; un Ctrl-C pendant la saisie masquée laisse
 l'écho coupé (restes de la revue 1.8). Refus de 1 et 2, et d'un descripteur à double usage (même fd pour phrase et secret, ou 0 quand
 stdin porte un fichier). Pas de `--password`, pas de `KROPA_PASSWORD`.
@@ -548,6 +551,19 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
 Hors périmètre, dit dans la doc : processus malveillant du **même utilisateur** (il lit la mémoire hors
 la mémoire du processus (`ptrace` et `/proc/<pid>/mem`, que seul Yama `ptrace_scope` limite), le bus de session, le trousseau déverrouillé, et **appelle l'IPC** : les confirmations d'origine et
 d'emplacement ne l'arrêtent pas), root, machine compromise, serveur de destination malveillant pour son propre jeton.
+**Faux serveur du même utilisateur (revue 2.1a, I2)** : un processus du même UID qui se pose en serveur reçoit
+ce que le client lui envoie. Il peut prendre le nom `io.github.fs0ciety7000.Kropa` sur le bus de session (l'activation
+répond alors `AlreadyRunning`) ou lier `app.sock` avant l'application ; tous les contrôles de l'IPC passent (UID du pair,
+dossier `0700`, `app.lock`), car ils prouvent « même utilisateur », pas « binaire de Kropa ». Avec Yama
+`ptrace_scope = 1`, se poser en serveur reste possible quand lire la mémoire de l'application ne l'est pas : la
+frontière « même utilisateur hors périmètre » est donc plus faible ici qu'ailleurs. Au lot 2, aucune méthode ne porte
+de secret (`hello`, `app.*`, `capture.*` : chemins, états), le cas reste **hors périmètre**. **À fermer avant toute
+méthode `secrets.*`** (`secrets.set`, `secrets.unlock` : phrase de passe et jetons envoyés au serveur, plan 4.7) : le
+client vérifie que le PID du pair (`SO_PEERCRED`) est celui du propriétaire du nom D-Bus (`GetNameOwner`, puis
+`GetConnectionUnixProcessID`) et que `/proc/<pid>/exe` est le binaire installé de l'application ; sans cela, pas de
+méthode `secrets.*`. macOS : `LOCAL_PEERPID` et la signature de code du pair (`SecCodeCopyGuestWithAttributes`).
+Flatpak et Snap arrêtent ce cas (le bus et le dossier d'exécution sont cloisonnés). Aucun code maintenant.
+
 À documenter aussi : sous **X11**, la frappe dans un dialogue est lisible par tout client X ; le jeton **collé** dans
 un dialogue reste dans le presse-papiers — le dialogue propose de le vider s'il contient la valeur saisie.
 
@@ -578,7 +594,7 @@ si le point 7 du § 2.2.1 n'est pas confirmé, l'enchaînement « créer la pair
 | Secret en argument ou en `--var` | Pas d'option, refus des motifs | `trycmd` : `--header "Authorization: …"` et `--var` vers emplacement secret → code 11 |
 | Secret en variable d'environnement | Aucune lecture, `.no_proxy()` | `AWS_SECRET_ACCESS_KEY`, `HTTPS_PROXY` définis → ignorés, zéro requête au proxy |
 | Fuite par `Debug`/panique | `Debug` masqué | `format!("{:?}")` d'un profil chargé ; panique provoquée pendant un envoi → stderr sans valeur |
-| IPC usurpée (client ou serveur) | Contrôle d'UID des deux côtés, dossier `0700`, pas de `/tmp` | identifiants de pair injectés + CI `sudo -u nobody`, dans les deux sens → refus, rien envoyé |
+| IPC usurpée (client ou serveur) | Contrôle d'UID des deux côtés, dossier `0700`, pas de `/tmp` | identifiants de pair injectés, et vrais UID en CI Linux (`crates/kropa-ipc/tests/uid.rs`, `sudo -n -u nobody`, `KROPA_REQUIRE_IPC_UID_TESTS=1`), dans les deux sens → refus, rien envoyé |
 | Coffre laissé ouvert | 15 min sans action humaine, 8 h, `LockedHint`, veille | horloge injectable ; envois périodiques sans TTY ne prolongent pas ; signaux logind simulés sur bus privé ; compteur de `Drop` des tampons |
 | Invites Keychain à chaque mise à jour | Un élément (macOS), modification en place, courtier (U1) | manuel 1.6 : deux binaires × deux builds, invites relevées |
 | Courtier appelé par un autre que `kropa-app` | § 2.2.1 : pair = parent, jeton d'audit, exigence de signature, réponse limitée au profil | `kropa __store-broker` depuis un shell, avec fd 3 forgé, ou parent signé autrement → refus, zéro requête à `securityd` |

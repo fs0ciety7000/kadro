@@ -86,16 +86,23 @@ jobs:
           KROPA_REQUIRE_WAYLAND_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
           # Linux: strace and an empty network namespace are required by the "zero request" test (lot 1.11).
           KROPA_REQUIRE_NO_NETWORK_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: the IPC tests with two real users run `sudo -n -u nobody` (passwordless sudo on the
+          # runners); they fail if it is missing instead of skipping (lot 2.1d, review 2.1a I1).
+          KROPA_REQUIRE_IPC_UID_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
         run: cargo nextest run --profile ci --workspace --locked
       - name: Doctests
         run: cargo test --doc --workspace --locked
       # The memory-dump protection is wired in `main` for release builds only: run the release binary.
-      - name: Release binary forbids core dumps (Linux)
+      # The same build must not carry the test-only features (`test-support` of `kropa-ipc` and
+      # `kropa-capture`) nor the fake application `kropa-ipc-fake` (lot 2.1d, review 2.1a m1).
+      - name: Release binary forbids core dumps and carries no test support (Linux)
         if: runner.os == 'Linux'
         run: |
           cargo build --release -p kropa --locked
           KROPA_RELEASE_BIN="$PWD/target/release/kropa" \
             cargo nextest run --profile ci -p kropa --locked --test release_hardening --no-tests=fail
+          cargo build -p kropa --release --locked --message-format=json > "$RUNNER_TEMP/release-build.json"
+          scripts/check-release-features.sh "$RUNNER_TEMP/release-build.json" target/release
       # Kropa.app: the command line inside a bundle, universal, ad hoc signed (no certificate and no
       # Screen Recording permission on a runner: only the build and the layout are checked here).
       - name: Add the second macOS architecture

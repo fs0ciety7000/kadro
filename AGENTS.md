@@ -35,7 +35,7 @@ build:   cargo build --workspace --locked
 │   ├── kropa-store          # SQLite (historique, file), secrets
 │   ├── kropa-keychain       # Keychain macOS (un élément), courtier `kropa __store-broker`, protocole (lot 1.8m)
 │   ├── kropa-i18n           # Fluent FR/EN
-│   ├── kropa-ipc            # IPC CLI <-> application : JSON-RPC sur socket Unix, client, serveur, lanceurs (lot 2.1a)
+│   ├── kropa-ipc            # IPC CLI <-> application : JSON-RPC sur socket Unix, client, serveur, lanceurs, `fdguard` (lot 2.1a)
 │   ├── kropa-cli            # paquet `kropa` : la CLI
 │   ├── kropa-gtk            # interface Linux (binaire kropa-gtk)
 │   └── kropa-macos          # interface macOS (binaire kropa-app)
@@ -62,8 +62,9 @@ build:   cargo build --workspace --locked
     `kropa-upload`. Horloge injectable dans le code testé.
 11. Toute chaîne visible passe par Fluent (`kropa-i18n`), en français et en anglais.
 12. `unsafe` interdit hors du code macOS (`kropa-macos`, backend macOS de `kropa-capture`, modules `system`, `spawn` et
-    `apple` de `kropa-keychain`) et du module `crates/kropa-cli/src/fdguard.rs` (marquage CLOEXEC des descripteurs
-    hérités, `rustix` n'offre pas `close_range` sans `unsafe`), et toujours justifié (`// SAFETY:`).
+    `apple` de `kropa-keychain`) et du module `crates/kropa-ipc/src/fdguard.rs` (marquage CLOEXEC des descripteurs
+    hérités, appelé en tête de `main` par `kropa` et `kropa-gtk` ; `rustix` n'offre pas `close_range` sans `unsafe`),
+    et toujours justifié (`// SAFETY:`).
 
 ## Sécurité
 
