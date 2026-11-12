@@ -101,7 +101,8 @@ Dépend de : 1 et D2.
 - [ ] 2.3 Overlay GTK (image figée par écran, layer-shell KDE/wlroots, plein écran GNOME, échelles mixtes, copie d'image sous focus). Agent : `linux-desktop-dev`. Fin : check-list GNOME et KDE à 100 % et 200 %.
 - [ ] 2.4 Overlay AppKit (sans bord, au-dessus, un par écran, Retina, exclus de la capture). Agent : `macos-desktop-dev`.
 - [ ] 2.5 `kropa capture area [--last] [--delay]`. Agent : `backend-dev`.
-- [x] 2.6 (revue de sécurité à passer) Profils et défaut, `kropa dest …`, jeton via stdin/TTY (refusé en argument), modèle Imgur dans `docs/examples/`. Agent : `backend-dev`.
+- [x] 2.6 (revue : 1 bloquant, corrigé en 2.6b) Profils et défaut, `kropa dest …`, jeton via stdin/TTY (refusé en argument), modèle Imgur dans `docs/examples/`. Agent : `backend-dev`.
+- [ ] 2.6b Suites de la revue sécurité 2.6 (`docs/reviews/2026-11-12-security-2.6.md`) : **B1** autorisation calculée contre le magasin et non le fichier, I1-I3, m1-m5. Agent : `backend-dev`. Fin : `security-reviewer` sans bloquant.
 - [ ] 2.7 S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j en option). Agent : `backend-dev`. Fin : tests Garage ; `security-reviewer` sans bloquant.
 - [ ] 2.8 Repli `age` : `kropa secrets unlock`, `--password-fd`. Dépend de S.3. Agent : `backend-dev`. Fin : `security-reviewer` sans bloquant.
 - [ ] 2.9 Job hebdomadaire Sway headless. Agents : `devops`, `qa-tester`.
