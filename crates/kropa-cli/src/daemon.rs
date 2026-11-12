@@ -38,7 +38,7 @@ struct Unavailable;
 
 #[cfg(not(target_os = "linux"))]
 impl Launcher for Unavailable {
-    fn launch(&self) -> Result<(), IpcError> {
+    fn launch(&self, _budget: std::time::Duration) -> Result<(), IpcError> {
         Err(IpcError::StartFailed(
             "launching kropa-app is not implemented yet (lot 2.1c)".to_owned(),
         ))

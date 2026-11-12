@@ -345,7 +345,7 @@ struct Counting<'a> {
 }
 
 impl Launcher for Counting<'_> {
-    fn launch(&self) -> Result<(), IpcError> {
+    fn launch(&self, _budget: Duration) -> Result<(), IpcError> {
         self.count.set(self.count.get() + 1);
         (self.result)()
     }

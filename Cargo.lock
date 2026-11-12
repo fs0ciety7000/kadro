@@ -1635,7 +1635,6 @@ dependencies = [
  "kropa-keychain",
  "kropa-store",
  "kropa-upload",
- "libc",
  "rustix",
  "serde_json",
  "tempfile",
@@ -1707,6 +1706,7 @@ name = "kropa-ipc"
 version = "0.0.1"
 dependencies = [
  "kropa-ipc",
+ "libc",
  "rustix",
  "serde",
  "serde_json",
