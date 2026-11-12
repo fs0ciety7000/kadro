@@ -7,13 +7,15 @@
 
 | Fichier | Rôle |
 |---|---|
-| `compose.yaml` | Zipline 4.8.3 + PostgreSQL 18.6 derrière Caddy 2.11.9 (profil par défaut) ; Garage 2.5.0 (profil `s3`, lot 2.7) et OpenSSH 10.3 (profil `sftp`, lot 4.9), **déclarés mais pas encore exercés**. Images épinglées par **digest** de l'index multi-architecture, vérifié auprès du registre le 11/11/2026 ; Renovate met à jour tag et digest. |
-| `Caddyfile`, `garage.toml` | Configuration sans secret. |
+| `compose.yaml` | Zipline 4.8.3 + PostgreSQL 18.6 derrière Caddy 2.11.9 (profil par défaut) ; Garage 2.5.0 (profil `s3`, lot 2.7a, exercé) et OpenSSH 10.3 (profil `sftp`, lot 4.9), **déclaré mais pas encore exercé**. Images épinglées par **digest** de l'index multi-architecture, vérifié auprès du registre le 11/11/2026 ; Renovate met à jour tag et digest. |
+| `Caddyfile`, `garage.toml` | Configuration sans secret. Caddy sert aussi `https://localhost:18444` (conteneur : 8443) vers `garage:3900`. |
 | `run.sh` | `test` (monte, teste, démonte même en cas d'échec), `up`, `down`. |
 | `crates/kropa-cli/tests/zipline_integration.rs` | Le test (`#[ignore]` : `cargo nextest run` ne le lance pas). |
+| `crates/kropa-cli/tests/s3_integration.rs` | Le test S3 (`#[ignore]`), lancé par `run.sh test --profile s3`. |
 
 ```sh
 tests/integration/run.sh test                  # Docker, openssl, curl, jq, cargo-nextest, gnome-keyring, dbus-run-session
+tests/integration/run.sh test --profile s3     # Zipline puis Garage (S3) : les deux tests
 tests/integration/run.sh up --profile s3       # à la main : serveurs gardés, `down` pour tout retirer
 tests/integration/run.sh down
 ```
@@ -31,8 +33,9 @@ démarrer sans eux, d'où `run.sh` plutôt que `docker compose` seul). Le premie
 API ; son jeton est écrit dans un fichier 0600 et le test le passe à `kropa secrets set zipline token --secret-stdin`.
 Jamais en argument, jamais dans l'environnement de `kropa`. Sur GitHub Actions, les valeurs sont masquées dans le journal.
 
-**Réseau.** Seul Caddy publie un port, sur `127.0.0.1:18443` (variable `KROPA_IT_HTTPS_PORT`). Garage (`13900`,
-`13903`) et OpenSSH (`12222`) aussi sur `127.0.0.1`. PostgreSQL et Zipline ne sont pas publiés ; leurs données vivent en
+**Réseau.** Seul Caddy publie des ports, sur `127.0.0.1` : `18443` (Zipline, `KROPA_IT_HTTPS_PORT`) et `18444` (Garage,
+`KROPA_IT_S3_HTTPS_PORT`). OpenSSH (`12222`) aussi sur `127.0.0.1`. Garage n'est pas publié (son API S3 en clair ne sert à
+rien : un secret exige HTTPS) ; `run.sh` pilote sa ligne de commande par `docker compose exec`. PostgreSQL et Zipline ne sont pas publiés ; leurs données vivent en
 mémoire (`tmpfs`).
 
 **TLS.** Kropa refuse un secret en HTTP et n'a aucune option pour faire confiance à un certificat. Zipline est donc
@@ -47,10 +50,10 @@ détruite dès le certificat signé. Cette CA n'arrive à Kropa que par le **mag
   natifs (convention OpenSSL), pas une option de Kropa.
 
 **CI.** Job `integration` de `.github/workflows/ci.yml` : sur `push` vers `main` et `workflow_dispatch` seulement
-(quota Actions), pas sur chaque PR. Il lance `run.sh test --trust system`.
+(quota Actions), pas sur chaque PR. Il lance `run.sh test --trust system --profile s3`.
 
-**Limites.** Linux seulement (les runners macOS n'ont pas Docker). Ni S3 ni SFTP ne sont testés ici : Garage et OpenSSH
-démarrent (vérifié), la couche et le test viennent aux lots 2.7 et 4.9. L'envoi par morceaux de Zipline n'est pas
+**Limites.** Linux seulement (les runners macOS n'ont pas Docker). SFTP n'est pas testé ici : OpenSSH démarre (vérifié), la
+couche et le test viennent au lot 4.9. L'envoi par morceaux de Zipline n'est pas
 encore dans le code de `kropa-upload`, donc pas dans ce test.
 
 ## 2. « Zéro requête » (`crates/kropa-cli/tests/no_network.rs`)
@@ -71,3 +74,20 @@ test avec un message `SKIPPED`, et un `unshare -rn` refusé le fait tourner avec
 `NETWORK NAMESPACE UNAVAILABLE`). Avec elle, les deux sont des échecs. Ubuntu 24.04 refuse les espaces de noms
 utilisateur non privilégiés par AppArmor : le job `test` exécute d'abord
 `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`.
+
+## 1 bis. Garage réel (S3, lot 2.7a)
+
+`run.sh up --profile s3` prépare Garage par sa propre ligne de commande : disposition d'un nœud (`layout assign` +
+`apply`), clé (`key create kropa-it`), bucket `kropa-test` (`bucket create`), droits (`bucket allow --read --write
+--owner`). Aucun secret en argument : la clé est créée **par Garage**, `run.sh` lit sa sortie, écrit l'identifiant (non
+secret) et la clé secrète dans deux fichiers 0600 du dossier privé (la clé est masquée dans le journal GitHub). Le secret RPC et
+le jeton d'administration sont des fichiers `secrets:` de compose, générés à chaque exécution (Garage refuse un fichier
+lisible par tous : mode 0600). Rien de commité ne ressemble à un secret.
+
+**Ce que fait le test** (`s3_integration.rs`). `destinations.toml` écrit à la main (le câblage `dest add --type s3` est
+2.7b) pour deux profils du même bucket, en `path_style` : `garage` (`presign = "10m"`) et `garage-pub`
+(`public_base_url`). La clé secrète va au vrai GNOME Keyring par `kropa secrets set … --secret-stdin`. Il vérifie : codes
+0, stdout = le lien seul ; le lien présigné vise Garage, porte `X-Amz-Credential=<identifiant>`, `X-Amz-Expires=600` et une
+signature, jamais la clé secrète ; un `GET` du lien rend les octets envoyés ; le lien du second profil est
+`public_base_url` + clé ; la clé secrète n'est dans aucun flux ni dans le fichier ; sans la CA dans le magasin l'envoi
+échoue (essai témoin).

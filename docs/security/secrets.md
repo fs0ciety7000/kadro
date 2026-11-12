@@ -65,7 +65,8 @@
 | Secret | Destination | Forme | Saisi par |
 |---|---|---|---|
 | Jeton Zipline | HTTP (préréglage) | en-tête `Authorization` | TTY, stdin, dialogue, import |
-| Clé d'accès + clé secrète S3 | `object_store` | identifiants statiques (jamais `from_env`, IMDS, profils AWS) | TTY, stdin, dialogue |
+| Clé secrète S3 (`secret_access_key`) | `object_store` | identifiants statiques (jamais `from_env`, IMDS, profils AWS) ; signature SigV4, la clé ne part jamais | TTY, stdin, dialogue |
+| Identifiant de clé S3 (`access_key_id`) | — | **pas un secret** (décision D9) : dans `destinations.toml`, en clair dans chaque requête signée et dans les URL présignées, que le contrôle de sortie refuserait s'il était un secret | `--access-key-id`, `dest edit` |
 | Mot de passe SFTP ; phrase de passe de clé privée | `russh` | mot de passe ; la clé reste un fichier de l'utilisateur, jamais copiée | TTY, stdin, dialogue |
 | En-têtes, arguments, paramètres d'une destination HTTP | `kropa-upload` | `{secret:nom}` dans un emplacement autorisé (§ 4.3) | TTY, stdin, dialogue, import `.sxcu`/`.toml` |
 | Phrase de passe du coffre `age` | coffre local | jamais stockée, jamais gardée en mémoire après usage (§ 3.6) | TTY, `--password-fd`, dialogue |
@@ -483,6 +484,15 @@ Tout ce qui est tiré de la réponse passe par **un seul point de contrôle** av
   SigV4 n'envoie pas la clé ; le risque est l'écriture dans un autre bucket : changer un élément du triplet demande la
   confirmation du § 4.3. Clés absentes = refus **avant** `build()` (jamais l'IMDS `InstanceCredentialProvider` [7]) ;
   `with_http_connector` branche le client unique (même TLS, même absence de proxy).
+  - **Forme de l'origine** (2.7a) : `s3:<https://hôte:port>|<région>|<bucket>`, l'endpoint canonique comme au § 4.1
+    (l'endpoint par défaut est `https://s3.<région>.amazonaws.com:443`). Un élément qui change est une autre origine.
+  - **Emplacement** : `sigv4:s3` (`Placement::Sigv4`), le seul d'un secret S3 : la clé signe, elle n'est ni en-tête, ni
+    paramètre, ni champ. Un `http://` avec la clé donne le code 11 (`https_required`) avant toute lecture.
+  - `object_store` est compilé avec `aws-base` + `reqwest` **sans** `aws` (qui active `reqwest/rustls`, donc une seconde
+    pile TLS) ; il reçoit le client unique par son connecteur et nos hachages/HMAC par `aws-lc-rs`, comme `rustls`. Aucune
+    variable `AWS_*`, aucun profil, aucun IMDS, aucun `HTTPS_PROXY` n'est lu (test : un processus fils qui les définit).
+  - L'URL présignée (≤ 7 j) contient `access_key_id` et la signature, jamais la clé secrète : le contrôle de sortie
+    cherche la clé et l'accepte.
 - SFTP : origine `sftp://hôte:port`, `known_hosts` strict (4.9). Un secret S3 ou SFTP ne sert qu'à son profil.
 
 ## 5. Import `.sxcu` et `.toml` (B2, Q7, M8)

@@ -37,11 +37,30 @@ const COMMANDS: &[(&[&str], i32)] = &[
     (&["--json", "doctor"], 0),
     (&["dest", "list"], 0),
     (&["--json", "dest", "list"], 0),
+    // An S3 profile (written below) is only read: listing and showing it opens no connection.
+    (&["dest", "show", "garage"], 0),
+    (&["--json", "dest", "show", "garage"], 0),
     (&["secrets", "status"], 0),
     (&["--json", "secrets", "status"], 0),
     // An existing file, no destination given and none configured: refused before anything is sent (code 6).
     (&["upload", "{png}"], 6),
 ];
+
+/// An S3 profile: loading it, listing it and showing it must send nothing.
+const S3_PROFILE: &str = r#"
+[[destination]]
+id = "garage"
+type = "s3"
+endpoint = "https://s3.example.org"
+region = "garage"
+bucket = "kropa-test"
+path_style = true
+public_base_url = "https://cdn.example.org/pub"
+access_key_id = "GKtest0123456789abcdef"
+
+[destination.secrets]
+secret_access_key = {}
+"#;
 
 /// The address families that stay on the machine.
 const LOCAL_FAMILIES: &[&str] = &["AF_UNIX", "AF_LOCAL", "AF_NETLINK"];
@@ -157,6 +176,7 @@ fn without_a_destination_kropa_opens_no_network_socket() {
     let cfg = dir.path().join("config");
     std::fs::create_dir(&cfg).unwrap();
     std::fs::write(cfg.join("config.toml"), "").unwrap();
+    std::fs::write(cfg.join("destinations.toml"), S3_PROFILE).unwrap();
     let png = dir.path().join("capture.png");
     std::fs::write(&png, b"\x89PNG\r\n\x1a\n").unwrap();
     let png = png.to_str().unwrap().to_owned();

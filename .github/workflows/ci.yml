@@ -131,10 +131,10 @@ jobs:
           grep -q '"key":"app_bundle","state":"present"' "$RUNNER_TEMP/doctor.json"
           grep -q '"key":"bundle_identifier","state":"present","value":"io.github.fs0ciety7000.Kropa"' "$RUNNER_TEMP/doctor.json"
 
-  # Real servers (Zipline 4 + PostgreSQL behind a TLS proxy), docs/testing/integration.md. Docker and the
+  # Real servers (Zipline 4 + PostgreSQL, and Garage for S3, behind a TLS proxy), docs/testing/integration.md. Docker and the
   # Actions quota make it costly: it runs on main and by hand, not on every pull request.
   integration:
-    name: integration (Zipline)
+    name: integration (Zipline, S3)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -157,10 +157,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends dbus gnome-keyring
-      # Starts Zipline, PostgreSQL and Caddy, makes the throwaway CA known to the system trust store,
-      # creates the Zipline user through its API, runs the test, stops everything (even on failure).
-      - name: Zipline integration test
-        run: tests/integration/run.sh test --trust system
+      # Starts Zipline, PostgreSQL, Garage and Caddy, makes the throwaway CA known to the system trust store,
+      # creates the Zipline user through its API and the Garage key and bucket, runs the tests, stops
+      # everything (even on failure).
+      - name: Zipline and S3 integration tests
+        run: tests/integration/run.sh test --trust system --profile s3
 
   msrv:
     name: msrv (1.95)

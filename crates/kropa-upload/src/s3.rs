@@ -82,11 +82,14 @@ impl S3Settings {
     }
 
     /// The address of the service: the endpoint, or the regional endpoint of AWS.
+    ///
+    /// # Panics
+    /// Never in practice: the region of a checked destination only holds letters, digits, `-` and `_`.
     #[must_use]
     pub fn endpoint_url(&self) -> Url {
         self.endpoint.clone().unwrap_or_else(|| {
             Url::parse(&format!("https://s3.{}.amazonaws.com", self.region))
-                .unwrap_or_else(|_| Url::parse("https://s3.amazonaws.com").expect("constant"))
+                .expect("a checked region makes a host")
         })
     }
 

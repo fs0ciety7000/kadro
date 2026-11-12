@@ -166,14 +166,17 @@ async fn a_presigned_link_lasts_seven_days_at_most() {
     let secret = crate::secret::SecretValue::new(SECRET).unwrap();
     let http = crate::http::HttpClient::with_extra_root(server.ca_for_tests()).unwrap();
     let backend = crate::s3::ObjectStoreBackend::new(&settings, &secret, &http).unwrap();
-    for ttl in [Duration::ZERO, Duration::from_secs(7 * 86_400 + 1)] {
+    for ttl in [
+        Duration::ZERO,
+        Duration::from_hours(7 * 24) + Duration::from_secs(1),
+    ] {
         assert!(matches!(
             backend.presign_get("a.png", ttl).await,
             Err(UploadError::Config { .. })
         ));
     }
     let url = backend
-        .presign_get("a.png", Duration::from_secs(7 * 86_400))
+        .presign_get("a.png", Duration::from_hours(7 * 24))
         .await
         .unwrap();
     assert!(url.as_str().contains("X-Amz-Expires=604800"), "{url}");
@@ -576,4 +579,23 @@ async fn aws_environment_child() {
         "{auth}"
     );
     assert!(!requests[0].headers.contains_key("x-amz-security-token"));
+}
+
+#[test]
+fn a_received_s3_file_is_not_imported() {
+    let text = TOML
+        .replace("BASE", "https://s3.example.org")
+        .replace("KEYID", KEY_ID);
+    let err = crate::import::import(text.as_bytes(), crate::import::ImportFormat::Toml, None)
+        .unwrap_err();
+    assert!(
+        matches!(
+            &err,
+            UploadError::Config {
+                reason: "import_unsupported",
+                ..
+            }
+        ),
+        "{err:?}"
+    );
 }
