@@ -14,9 +14,10 @@
     Caddy, test réel) ; magasin du coffre `age` (`crates/kropa-store/src/vault.rs`).
   - Plan allégé (12/11, demande utilisateur via la session claude-kit) : une tâche par fonctionnalité livrable (2.A-2.E,
     3.A-3.B, 4.A-4.F, 5.A-5.E), revues et vérifications séparées retirées.
-- **En cours** : revue de sécurité de 2.8a (coffre) lancée avant le changement de règle ; si son rapport n'est pas dans
-  `docs/reviews/2026-11-12-security-2.8a.md`, ne pas la relancer (rigueur standard) — vérifier soi-même.
-  PR brouillon [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1), CI verte sauf GitGuardian.
+- **En cours** : rien. PR fs0ciety7000/kropa#1 **fusionnée** sur `main` (12/11). Branche
+  `claude/adoring-pascal-u36glt` repartie de `main` ; ouvrir une nouvelle PR pour la suite du lot 2.
+  Revue de sécurité du coffre faite : `docs/reviews/2026-11-12-security-2.8a.md` (aucun bloquant, I1-I3 à traiter
+  avec 2.D, dont I2 qui touche aussi le Keychain macOS).
 - **Prochaine action exacte** : 2.C — `dest add --type s3 --bucket … --region … [--endpoint] [--path-style]
   [--prefix] [--public-base-url | --presign] [--access-key-id] [--secret-stdin|--secret-fd] [--default]`, puis envoi
   Garage de bout en bout par la CLI (`tests/integration/run.sh test --profile s3`). Ensuite 2.D, puis 2.B.
