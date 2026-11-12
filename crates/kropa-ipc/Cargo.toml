@@ -1,0 +1,38 @@
+[package]
+name = "kropa-ipc"
+description = "Kropa IPC between the command line and the graphical application (lot 2.1a)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rustix = { workspace = true, features = ["fs"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "io-util", "time", "sync", "macros"] }
+
+# Activation of the application by the session bus (`StartServiceByName`, lot 2.1a decision D1).
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { workspace = true, features = ["default-rt", "proxy"] }
+
+[features]
+# A fake application (`kropa-ipc-fake`) for the tests of this crate and of its clients.
+test-support = []
+
+[[bin]]
+name = "kropa-ipc-fake"
+path = "src/bin/fake.rs"
+required-features = ["test-support"]
+
+[dev-dependencies]
+# Switches `test-support` on for the tests of this crate (the fake server is a binary it builds).
+kropa-ipc = { path = ".", features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+
+[lints]
+workspace = true
