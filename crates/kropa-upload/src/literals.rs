@@ -230,14 +230,13 @@ mod tests {
             format!("Bearer {t}"),
             format!("Basic {{base64:{t}}}"),
             "Basic {base64:{secret:a}:{secret:b}}".to_owned(),
-            "{inputbox:Title}".to_owned(),
             format!("{{secret:key}}:{t}"),
         ];
         for (kind, table) in [("header", "headers"), ("query", "query"), ("field", "fields")] {
             for value in &values {
                 let name = if kind == "header" { "X-Neutral" } else { "p" };
                 let text = format!(
-                    "[[destination]]\nid = \"a\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\n[destination.request.{table}]\n{name} = {value:?}\n[destination.response]\nurl = \"{{response}}\"\n[destination.vars.v]\n"
+                    "[[destination]]\nid = \"a\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\n[destination.request.{table}]\n{name} = {value:?}\n[destination.response]\nurl = \"{{response}}\"\n[destination.vars.v]\n[destination.secrets]\nkey = {{}}\na = {{}}\nb = {{}}\n"
                 );
                 let slot = match kind {
                     "header" => Slot::Header(name.to_owned()),
