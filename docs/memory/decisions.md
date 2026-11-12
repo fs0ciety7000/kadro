@@ -32,3 +32,9 @@
   anglais technique, sans `tracing`. Raison : pas de dépendance, aucune bibliothèque tierce ne journalise.
 - **2026-11-11** — Tests d'intégration Zipline derrière Caddy (TLS local), CA de test reconnue par le seul magasin
   système ; job CI `integration` sur `main` et `workflow_dispatch` seulement (quota Actions).
+- **2026-11-12** — Lot 2 : décisions D1-D13 de `docs/lots/lot-2.md` validées par l'utilisateur (« recommandé partout »,
+  dashboard) : activation D-Bus de `kropa-gtk`, exception `unsafe` bornée pour marquer CLOEXEC les fd hérités
+  (règle 12 amendée), crate `kropa-ipc`, image copiée par `kropa-gtk` sous focus et lien par `__clipboard-serve`,
+  `clipboard.verified`, layer-shell optionnel + `overlay.surface`, Ubuntu 24.04 gardée (plein écran), GNOME « non
+  vérifié », `access_key_id` S3 non secret, pas de `dest add --type http`, `secrets unlock|lock` reportés au 4.7
+  (écart validé), diceware EFF si licence compatible, D13 au premier essai Mac.

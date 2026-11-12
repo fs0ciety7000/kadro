@@ -2,7 +2,7 @@
 
 > Rédigé par `architect` le 12/11/2026, sans code. Sources : `docs/decisions.md` (prioritaire), `docs/plan.md` (lot 2),
 > `cli.md`, `security/secrets.md`, `architecture.md`, `platform-linux.md`, `platform-macos.md`, `uploads.md`,
-> `DESIGN.md`, `docs/memory/`, et le code à la fin du lot 1. **À valider** : les décisions du § 1 fixent 2.1, 2.3, 2.6,
+> `DESIGN.md`, `docs/memory/`, et le code à la fin du lot 1. **Validé le 12/11/2026 (recommandations retenues partout)** : les décisions du § 1 fixent 2.1, 2.3, 2.6,
 > 2.7 et 2.8. Retours d'essai pris en compte : KDE Plasma 6.8.2, portail Screenshot **v2** (aucune cible), une boîte
 > d'autorisation, data-control présent ; pas de GNOME chez l'utilisateur ; Mac plus tard, certificat 1.6 pas fait (le
 > courtier Keychain refuse la signature ad hoc).
