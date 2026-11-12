@@ -680,7 +680,7 @@ fn the_editor_gets_a_private_copy_and_its_result_replaces_the_profile_atomically
     let input = ScriptedInput::default();
     let log = work.path().join("seen");
     let body = format!(
-        "stat -c %a \"$1\" > {log}.mode\ncp \"$1\" {log}.copy\nsed -i 's|^# the main one|# my edit|; s|# the server|# still the server|' \"$1\"\nprintf 'label = \"Edited\"\\n' >> {log}.unused\nsed -i 's|^type = \"zipline\"|type = \"zipline\"\\nlabel = \"Edited\"|' \"$1\"\n",
+        "{{ stat -c %a \"$1\" 2>/dev/null || stat -f %Lp \"$1\"; }} > {log}.mode\ncp \"$1\" {log}.copy\nperl -pi -e 's|^# the main one|# my edit|; s|# the server|# still the server|' \"$1\"\nprintf 'label = \"Edited\"\\n' >> {log}.unused\nperl -pi -e 's|^type = \"zipline\"|type = \"zipline\"\\nlabel = \"Edited\"|' \"$1\"\n",
         log = log.display()
     );
     let out = run(
@@ -770,7 +770,7 @@ fn an_invalid_result_keeps_the_old_file_and_can_be_fixed_in_a_second_round() {
     let store = MemorySecretSource::new();
     let input = ScriptedInput::default();
     // The user declines to try again: 6, old file intact.
-    let breaks = "sed -i 's|^url = .*|url = \"not a url\"|' \"$1\"\n";
+    let breaks = "perl -pi -e 's|^url = .*|url = \"not a url\"|' \"$1\"\n";
     let out = run(
         &["dest", "edit", "zipline"],
         dir.path(),
@@ -781,7 +781,7 @@ fn an_invalid_result_keeps_the_old_file_and_can_be_fixed_in_a_second_round() {
     assert_eq!(read(&dir, "destinations.toml"), COMMENTED);
     // Another id, or two profiles, are refused too.
     for body in [
-        "sed -i 's|^id = \"zipline\"|id = \"other\"|' \"$1\"\n",
+        "perl -pi -e 's|^id = \"zipline\"|id = \"other\"|' \"$1\"\n",
         "cat \"$1\" \"$1\" > \"$1.x\" && mv \"$1.x\" \"$1\"\n",
         "printf '\\377\\376' > \"$1\"\n",
     ] {
@@ -804,7 +804,7 @@ fn a_secret_value_typed_in_the_editor_is_refused_and_never_written() {
     let dir = config(original, "");
     let store = MemorySecretSource::new();
     let input = ScriptedInput::default();
-    let body = format!("sed -i 's|{{secret:key}}|{secret}|' \"$1\"\n");
+    let body = format!("perl -pi -e 's|{{secret:key}}|{secret}|' \"$1\"\n");
     let out = run(
         &["--json", "dest", "edit", "api"],
         dir.path(),
@@ -838,7 +838,7 @@ fn moving_a_secret_place_in_the_editor_asks_like_a_new_address() {
         )
         .unwrap();
     let input = ScriptedInput::default();
-    let body = "sed -i 's|^X-Api-Key = |Other-Header = |' \"$1\"\n";
+    let body = "perl -pi -e 's|^X-Api-Key = |Other-Header = |' \"$1\"\n";
     // Declined: nothing changes.
     let out = run(
         &["dest", "edit", "api"],
