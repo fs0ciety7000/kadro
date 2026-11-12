@@ -1112,10 +1112,10 @@ success_status = [200, 201]
 
     #[test]
     fn invisible_characters_in_a_name_are_refused_at_load() {
-        for bad in ["a\u{202E}b", "a\u{200B}b", "a\u{FEFF}", "a\u{2066}b"] {
+        for bad in ["a\\u202Eb", "a\\u200Bb", "a\\uFEFF", "a\\u2066b"] {
             let text = MAISON.replace(
                 "Accept = \"application/json\"",
-                &format!("Accept = \"application/json\", {bad:?} = \"x\""),
+                &format!("Accept = \"application/json\", \"{bad}\" = \"x\""),
             );
             assert!(config_error(&text).contains("invalid name"), "{bad:?}");
         }
