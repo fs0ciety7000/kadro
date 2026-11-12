@@ -497,3 +497,75 @@ fn a_token_in_the_path_is_refused_in_toml_as_in_sxcu() {
     );
     assert!(import(&ok, ImportFormat::Toml, None).is_ok());
 }
+
+fn toml_with(extra: &str) -> Vec<u8> {
+    format!(
+        "[[destination]]\nid = \"a\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\n{extra}\n[destination.response]\nurl = \"{{response}}\"\n"
+    )
+    .into_bytes()
+}
+
+/// N1: the default of a variable in a header of credentials is a value, refused like any literal.
+#[test]
+fn a_token_as_the_default_of_a_variable_is_refused_in_toml() {
+    let t = token();
+    let file = toml_with(&format!(
+        "[destination.request.headers]\nX-Api-Key = \"{{var:k}}\"\n[destination.vars.k]\ndefault = \"{t}\"\n"
+    ));
+    let e = import(&file, ImportFormat::Toml, None).unwrap_err();
+    assert_eq!(e.reason(), "secret_in_var");
+    assert_eq!(e.exit_code().code(), 11);
+    assert!(!e.to_string().contains(&t));
+    // A public setting as a default is what a variable is for.
+    let ok = toml_with(
+        "[destination.request.fields]\nfolder = \"{var:folder}\"\n[destination.vars.folder]\ndefault = \"shots\"\nchoices = [\"shots\", \"docs\"]\n",
+    );
+    assert!(import(&ok, ImportFormat::Toml, None).is_ok());
+}
+
+/// The same reference in two places, or twice in one: one entry, allowed in each place.
+#[test]
+fn one_reference_in_two_places_is_one_entry_allowed_in_both() {
+    for extra in [
+        "[destination.request.headers]\nX-Api-Key = \"{secret:k}\"\n[destination.request.query]\nkey = \"{secret:k}\"\n[destination.secrets]\nk = {}\n",
+        "[destination.request.headers]\nX-Api-Key = \"{secret:k}\"\nX-Other = \"{secret:k}\"\n[destination.secrets]\nk = {}\n",
+        "[destination.request.headers]\nAuthorization = \"{secret:k}:{secret:k}\"\n[destination.secrets]\nk = {}\n",
+    ] {
+        let plan = import(&toml_with(extra), ImportFormat::Toml, None)
+            .unwrap_or_else(|e| panic!("{extra}: {e}"));
+        let k: Vec<_> = plan.secrets.iter().filter(|s| s.name == "k").collect();
+        assert_eq!(k.len(), 1, "{extra}");
+        let places = 1 + k[0].also_in.len();
+        let expected = if extra.contains("{secret:k}:{secret:k}") {
+            1
+        } else {
+            2
+        };
+        assert_eq!(places, expected, "{extra}");
+    }
+}
+
+/// N2: the Imgur model stays importable; a token-like word in front of a reference does not.
+#[test]
+fn a_word_before_a_reference_is_a_scheme_only_in_a_header() {
+    let w = ["Zq7Hx3", "Lm9Vt2"].concat();
+    let ok = toml_with(
+        "[destination.request.headers]\nAuthorization = \"Client-ID {secret:client_id}\"\n[destination.secrets]\nclient_id = {}\n",
+    );
+    assert!(import(&ok, ImportFormat::Toml, None).is_ok());
+    for extra in [
+        format!(
+            "[destination.request.headers]\nAuthorization = \"{w} {{secret:k}}\"\n[destination.secrets]\nk = {{}}\n"
+        ),
+        format!(
+            "[destination.request.fields]\nf = \"{w} {{secret:k}}\"\n[destination.secrets]\nk = {{}}\n"
+        ),
+        format!(
+            "[destination.request.query]\nq = \"{{secret:k}} {w} x\"\n[destination.secrets]\nk = {{}}\n"
+        ),
+    ] {
+        let e = import(&toml_with(&extra), ImportFormat::Toml, None).unwrap_err();
+        assert_eq!(e.reason(), "import_unsupported", "{extra}");
+        assert!(!e.to_string().contains(&w));
+    }
+}

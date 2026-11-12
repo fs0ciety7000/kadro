@@ -150,15 +150,17 @@ kropa dest export [<ID>…]
   arrivent avec eux (2.7) et le profil n'a pas encore de clé de format de lien. Toute autre clé : code 2 ; une valeur
   qui ressemble à un secret ou qui porte `{secret:…}` : code 11. Sans option, `$EDITOR` (variable standard, séparée
   aux espaces, sans shell ; TTY exigé, sinon 12) s'ouvre sur une copie `0600` du bloc du profil, commentaires inclus,
-  dans un dossier `0700` à nom aléatoire (`$XDG_RUNTIME_DIR/kropa/`, sinon le dossier de configuration), retiré en
-  entier à la fin ; SIGINT, SIGQUIT et SIGHUP sont retenus pendant l'éditeur (s'il y en a eu un : code 3, copie
+  dans un dossier `0700` à nom aléatoire (`$XDG_RUNTIME_DIR/kropa/`, repris seulement s'il appartient à l'UID effectif et si ni le groupe ni les autres n'y
+  ont accès ; sinon le dossier de configuration), retiré en entier à la fin ; SIGINT, SIGQUIT, SIGHUP et SIGTERM sont
+  retenus pendant l'éditeur (s'il y en a eu un : code 3, copie
   retirée). Le résultat est relu avec les règles d'un import : une valeur que l'import présumerait secrète (en-tête,
-  query, champ, `body_template`, ou reste littéral d'une valeur mixte comme `{secret:k}:abcdef`) est refusée (code 11,
-  rien d'écrit) **seulement si l'édition l'a ajoutée ou modifiée** ; ce qui était déjà dans le fichier n'est pas
+  query, champ, `body_template`, reste littéral d'une valeur mixte comme `{secret:k}:abcdef`, valeur par défaut ou choix
+  d'une variable) est refusée (code 11, rien d'écrit) **seulement si l'édition l'a ajoutée ou modifiée** ; ce qui était déjà dans le fichier n'est pas
   reproché. Le remplacement se fait en une fois ; invalide, l'ancien fichier reste (la réouverture de l'éditeur est
   proposée) ; `id` modifié ou plusieurs profils : refusé ; éditeur en échec : 3 ; aucun changement : rien d'écrit. Le
-  fichier garde son mode (`0600` à la création) ; un lien symbolique est suivi (la cible est remplacée, le lien reste ;
-  un lien qui ne mène nulle part est une erreur) ; pas de verrou entre deux écrivains (le dernier gagne).
+  fichier garde ses droits d'accès (`rwx`, masque `0o777` : jamais setuid, setgid ni sticky ; `0600` à la création) ;
+  un lien symbolique est suivi si sa cible appartient à l'UID effectif (la cible est remplacée, le lien reste ; une
+  cible d'un autre utilisateur, ou un lien qui ne mène nulle part, est une erreur et rien n'est écrit) ; pas de verrou entre deux écrivains (le dernier gagne).
 - `test` : envoie une image témoin de 1×1 **après confirmation** (`--yes` sans TTY) ; affiche statut, en-têtes
   filtrés, URL extraite et lien formaté.
 - `remove` : supprime le profil et ses secrets (toutes les entrées `<ID>/*` du magasin) après confirmation (`--yes`
@@ -169,12 +171,17 @@ kropa dest export [<ID>…]
 - `export` : les profils en TOML sur la sortie standard, `{secret:NOM}` seulement. Même détecteur que l'import et
   l'éditeur (`kropa-upload::literals`) : un profil dont le fichier porte une valeur que l'import présumerait secrète
   (code 11, rien de montré) est refusé en entier. Un simple réglage littéral (`folder = "shots"`) y passe aussi pour
-  une valeur : on le déclare en variable à valeur par défaut (`[destination.vars.folder]`, `{var:folder}`).
+  une valeur : on le déclare en variable à valeur par défaut (`[destination.vars.folder]`, `{var:folder}`), à
+  condition que ce soit un réglage public. La valeur par défaut et les choix d'une variable sont lus par le même
+  détecteur : dans un emplacement dont le nom est celui d'un secret (`X-Api-Key`, `token`...), toute valeur de la
+  longueur d'un secret est refusée ; ailleurs, seule une valeur qui a la forme d'un identifiant ou d'un jeton l'est.
+  Le message de refus d'une variable ne renvoie pas vers une variable : un secret va dans le magasin.
 - `import` : `.sxcu` et `.toml` suivent **les mêmes règles** (`security/secrets.md` § 5). Résumé (origine, HTTPS ou
   non, emplacements, secrets détectés et masqués, query signalée) puis confirmation ; les secrets vont au magasin en
   entrées **neuves** du profil importé, le TOML ne garde que `{secret:…}` ; refus explicite des champs non pris en
   charge (`uploads.md` § 2.4). Sans TTY : `--yes` **et** `--expect-host <HÔTE>` exigés (code 12 sinon ; code 11 si
-  l'hôte du fichier diffère). `id` déjà pris (config ou magasin) : refusé, sauf `--id` ou confirmation interactive de
+  l'hôte du fichier diffère). La même référence `{secret:k}` à plusieurs endroits donne une seule entrée, autorisée pour
+  chacun de ces emplacements. `id` déjà pris (config ou magasin) : refusé, sauf `--id` ou confirmation interactive de
   remplacement (les secrets du profil remplacé sont supprimés). Jeton dans le chemin de l'URL, ou import `http://`
   avec secret : refusé (code 11).
 - `export` : TOML des profils sur stdout, références de secrets seulement, jamais les valeurs. Un profil du fichier

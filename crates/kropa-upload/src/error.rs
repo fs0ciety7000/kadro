@@ -51,6 +51,7 @@ pub const ALL_REASONS: &[&str] = &[
     "secret_in_argument",
     "secret_too_short",
     "secret_in_path",
+    "secret_in_var",
     "import_host_mismatch",
     "io",
 ];

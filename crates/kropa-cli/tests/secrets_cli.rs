@@ -1288,3 +1288,52 @@ fn no_command_prints_the_value() {
         }
     }
 }
+
+/// N3: what the question is about is not hidden by `--quiet`; with `--yes`, nothing is asked, so the
+/// quiet flag keeps its meaning.
+#[test]
+fn n3_quiet_does_not_hide_what_a_new_entry_is_confirmed_for() {
+    let dir = config();
+    let c = cfg(dir.path());
+    let base = [
+        "--quiet",
+        "--lang",
+        "en",
+        "--config",
+        c.as_str(),
+        "secrets",
+        "set",
+        "zipline",
+        "token",
+        "--secret-stdin",
+    ];
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::with(&sentinel());
+    let r = run(&base, &store, &input, true, true);
+    assert_eq!(r.code, 0, "{}", r.err);
+    r.no_leak(&sentinel());
+    assert!(
+        r.err.contains("https://zipline.example.org:443") && r.err.contains("header:authorization"),
+        "{}",
+        r.err
+    );
+    // Declined: the question was seen, nothing is stored.
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::with(&sentinel());
+    let r = run(&base, &store, &input, true, false);
+    assert_eq!(r.code, 3, "{}", r.err);
+    assert!(
+        r.err.contains("https://zipline.example.org:443"),
+        "{}",
+        r.err
+    );
+    assert!(store.inspect("zipline", "token").unwrap().is_none());
+    // `--yes` answers by itself: `--quiet` still hides the lines.
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::with(&sentinel());
+    let mut yes = base.to_vec();
+    yes.push("--yes");
+    let r = run(&yes, &store, &input, true, false);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("zipline.example.org"), "{}", r.err);
+}

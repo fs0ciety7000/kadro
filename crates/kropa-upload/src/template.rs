@@ -283,8 +283,28 @@ impl Template {
         out
     }
 
+    /// The literal text before the first function (the head), and the literal text of everything
+    /// from that function on (the tail), both as [`Template::literal_text`] reads it.
+    #[must_use]
+    pub fn literal_head_tail(&self) -> (String, String) {
+        let split = self
+            .nodes
+            .iter()
+            .position(|n| matches!(n, Node::Call(_)))
+            .unwrap_or(self.nodes.len());
+        let (head, tail) = self.nodes.split_at(split);
+        let (mut h, mut t) = (String::new(), String::new());
+        Self::collect_nodes(head, &mut h);
+        Self::collect_nodes(tail, &mut t);
+        (h, t)
+    }
+
     fn collect_literal_text(&self, out: &mut String) {
-        for node in &self.nodes {
+        Self::collect_nodes(&self.nodes, out);
+    }
+
+    fn collect_nodes(nodes: &[Node], out: &mut String) {
+        for node in nodes {
             match node {
                 Node::Text(t) => out.push_str(t),
                 Node::Call(call) if call.function == Function::Base64 => {

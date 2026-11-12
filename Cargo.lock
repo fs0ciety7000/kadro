@@ -1678,6 +1678,7 @@ dependencies = [
  "directories",
  "jiff",
  "proptest",
+ "rustix",
  "serde",
  "tempfile",
  "thiserror",

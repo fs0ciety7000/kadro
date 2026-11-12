@@ -19,6 +19,10 @@ thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# `geteuid` without `unsafe`: a symbolic link is followed only to a file of the effective user.
+rustix.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
 tempfile.workspace = true

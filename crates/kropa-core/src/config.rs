@@ -207,9 +207,11 @@ pub fn default_output_dir() -> Result<PathBuf, CoreError> {
 /// then a rename, then a flush of the directory. A reader sees the old file or the new one, never
 /// half of it, and nothing is left behind when a step fails.
 ///
-/// The mode of a file that exists is kept (`0600` for a new one: a configuration may name secrets and
-/// hosts). A symbolic link is written **through**: the file it points to is replaced, in its own
-/// directory, and the link stays (a dotfile manager keeps its link). A link that points nowhere is an
+/// The permission bits of a file that exists are kept (`0600` for a new one: a configuration may name
+/// secrets and hosts); setuid, setgid and sticky are never copied. A symbolic link is written
+/// **through** when its target belongs to the user running Kropa: the file it points to is replaced, in
+/// its own directory, and the link stays (a dotfile manager keeps its link). A target of another user is
+/// an error. A link that points nowhere is an
 /// error: nothing is created behind it. There is no lock between two writers: the last rename wins.
 ///
 /// # Errors
@@ -220,6 +222,19 @@ pub fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     let resolved;
     let path = if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         resolved = std::fs::canonicalize(path)?;
+        // A link is followed only to a file of the user running Kropa: a link to a file of someone
+        // else (as root, `/etc/...`) is not ours to replace (n2).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            let owner = std::fs::metadata(&resolved)?.uid();
+            if owner != rustix::process::geteuid().as_raw() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "the symbolic link points to a file that belongs to another user: not replaced",
+                ));
+            }
+        }
         resolved.as_path()
     } else {
         path
@@ -235,7 +250,7 @@ pub fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     #[cfg(unix)]
     let mode = {
         use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
-        let mode = std::fs::metadata(path).map_or(0o600, |m| m.mode() & 0o7777);
+        let mode = std::fs::metadata(path).map_or(0o600, |m| m.mode() & 0o777);
         options.mode(mode);
         mode
     };
@@ -552,5 +567,57 @@ mod tests {
         std::os::unix::fs::symlink(dir.path().join("nowhere.toml"), &dangling).unwrap();
         assert!(write_atomic(&dangling, "a = 1\n").is_err());
         assert!(!dir.path().join("nowhere.toml").exists());
+    }
+
+    /// n2: setuid, setgid and sticky bits are never copied to the new file.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_never_copies_setuid_or_setgid() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("destinations.toml");
+        std::fs::write(&path, "a = 0\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o6755)).unwrap();
+        write_atomic(&path, "a = 1\n").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7777, 0o755, "{mode:o}");
+    }
+
+    /// n2: a link to a file of another user is not followed; nothing is written there.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_does_not_follow_a_link_to_a_file_of_someone_else() {
+        use std::os::unix::fs::MetadataExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let me = rustix::process::geteuid().as_raw();
+        let target = if me == 0 {
+            // Root can hand a file to another user.
+            let t = dir.path().join("theirs.toml");
+            std::fs::write(&t, "a = 0\n").unwrap();
+            std::os::unix::fs::chown(&t, Some(me + 12345), None).unwrap();
+            t
+        } else {
+            // An ordinary user: a file that is not theirs (root's).
+            let t = std::path::PathBuf::from("/etc/passwd");
+            assert_ne!(std::fs::metadata(&t).unwrap().uid(), me);
+            t
+        };
+        let before = std::fs::read(&target).unwrap();
+        let link = dir.path().join("destinations.toml");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let e = write_atomic(&link, "a = 1\n").unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(std::fs::read(&target).unwrap(), before);
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        // Nothing was left in the directory of the target, nor in ours.
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            if me == 0 { 2 } else { 1 }
+        );
     }
 }

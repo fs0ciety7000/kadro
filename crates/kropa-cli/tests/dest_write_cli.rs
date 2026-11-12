@@ -15,7 +15,7 @@
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use kropa_capture::{ClipboardReason, UnavailableClipboard};
@@ -1716,8 +1716,9 @@ fn signal_child_scenario() {
     let dir = config(COMMENTED, "");
     let store = MemorySecretSource::new();
     let input = ScriptedInput::default();
-    // The editor is hit by Ctrl-C (SIGINT goes to the process group: here, to us), then ends well.
-    let body = "perl -pi -e 's|^# the main one|# edited|' \"$1\"\nkill -INT $PPID\nsleep 1\nkill -HUP $PPID\nsleep 1\nexit 0\n";
+    // The editor is hit by Ctrl-C (SIGINT goes to the process group: here, to us), a closed terminal and a
+    // `kill` (n3), then ends well.
+    let body = "perl -pi -e 's|^# the main one|# edited|' \"$1\"\nkill -INT $PPID\nsleep 1\nkill -HUP $PPID\nsleep 1\nkill -TERM $PPID\nsleep 1\nexit 0\n";
     let out = run(
         &["dest", "edit", "zipline"],
         dir.path(),
@@ -1814,4 +1815,247 @@ fn an_unreadable_store_never_lets_an_address_move_unasked() {
         &setup(false, false),
     );
     assert_eq!(out.code, 0, "{}", out.err);
+}
+
+fn var_profile(default: &str) -> String {
+    format!(
+        "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\n[destination.request.headers]\nX-Api-Key = \"{{var:k}}\"\n[destination.vars.k]\ndefault = \"{default}\"\n[destination.response]\nurl = \"{{json:$.url}}\"\n"
+    )
+}
+
+/// N1: the default of a variable is a value in the file in the clear; `export`, `edit` and `import`
+/// refuse a token there, and the message does not send the user back to a variable.
+#[test]
+fn n1_a_token_as_the_default_of_a_variable_is_refused_everywhere() {
+    let work = tempfile::tempdir().unwrap();
+    let t = sentinel();
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    // Export of a file that holds it.
+    let dir = config(&var_profile(&t), "");
+    let out = run(
+        &["dest", "export", "api"],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 11, "{}", out.err);
+    assert!(!out.out.contains(&t) && !out.err.contains(&t));
+    assert!(
+        !out.err.contains("declare a variable"),
+        "no advice to use a variable: {}",
+        out.err
+    );
+    // Import of the same text.
+    let file = work.path().join("api.toml");
+    std::fs::write(&file, var_profile(&t)).unwrap();
+    let empty = config("", "");
+    let out = run(
+        &[
+            "dest",
+            "import",
+            file.to_str().unwrap(),
+            "--yes",
+            "--expect-host",
+            "api.example.org",
+        ],
+        empty.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 11, "{}", out.err);
+    assert!(!out.err.contains(&t));
+    assert!(store.inspect("api", "k").unwrap().is_none());
+    // The editor: the edit puts the token in the default.
+    let dir = config(&var_profile("shots"), "");
+    let body = format!("perl -pi -e 's|^default = .*|default = \"{t}\"|' \"$1\"\n");
+    let before = read(&dir, "destinations.toml");
+    let out = run(
+        &["dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), &body), true),
+    );
+    assert_eq!(out.code, 11, "{}", out.err);
+    assert!(!out.err.contains(&t) && !out.err.contains("declare a variable"));
+    assert_eq!(read(&dir, "destinations.toml"), before);
+    // What was in the file already is not the edit's doing (I3): only the label changes.
+    let dir = config(&var_profile(&t), "");
+    let label = "perl -pi -e 's|^type = \"http\"|type = \"http\"\\nlabel = \"Edited\"|' \"$1\"\n";
+    let out = run(
+        &["dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), label), false),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert!(read(&dir, "destinations.toml").contains("label = \"Edited\""));
+}
+
+/// n4: a `kropa` directory found under the runtime directory is used only if it is ours and closed to
+/// others; otherwise the copy goes to the configuration directory.
+#[cfg(unix)]
+#[test]
+fn n4_a_runtime_subdirectory_that_is_open_or_a_link_is_not_used() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let work = tempfile::tempdir().unwrap();
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let log = work.path().join("seen");
+    let body = format!(
+        "dirname \"$1\" > {}\nperl -pi -e 's|^# the main one|# edited|' \"$1\"\n",
+        log.display()
+    );
+    let attempt = |prepare: &dyn Fn(&Path)| -> (String, PathBuf, tempfile::TempDir) {
+        let runtime = tempfile::tempdir().unwrap();
+        prepare(runtime.path());
+        let dir = config(COMMENTED, "");
+        let out = run(
+            &["dest", "edit", "zipline"],
+            dir.path(),
+            &Setup {
+                runtime: Some(runtime.path().to_owned()),
+                ..terminal(&store, &input, editor(work.path(), &body), false)
+            },
+        );
+        assert_eq!(out.code, 0, "{}", out.err);
+        assert!(read(&dir, "destinations.toml").contains("# edited"));
+        let seen = std::fs::read_to_string(&log).unwrap();
+        (seen.trim().to_owned(), runtime.path().to_owned(), dir)
+    };
+    // Open to the group and to others: not used.
+    let (seen, runtime, dir) = attempt(&|r| {
+        std::fs::create_dir(r.join("kropa")).unwrap();
+        std::fs::set_permissions(r.join("kropa"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    });
+    assert!(!seen.starts_with(runtime.to_str().unwrap()), "{seen}");
+    assert!(seen.starts_with(dir.path().to_str().unwrap()), "{seen}");
+    // A link: not used either.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let target = elsewhere.path().to_owned();
+    let (seen, runtime, _dir) = attempt(&|r| {
+        std::os::unix::fs::symlink(&target, r.join("kropa")).unwrap();
+    });
+    assert!(!seen.starts_with(runtime.to_str().unwrap()), "{seen}");
+    assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+    // Ours and closed: used.
+    let (seen, runtime, _dir) = attempt(&|r| {
+        std::fs::create_dir(r.join("kropa")).unwrap();
+        std::fs::set_permissions(r.join("kropa"), std::fs::Permissions::from_mode(0o700)).unwrap();
+    });
+    assert!(
+        seen.starts_with(runtime.join("kropa").to_str().unwrap()),
+        "{seen}"
+    );
+    // Someone else's (as root only: it needs a chown): not used.
+    if rustix::process::geteuid().is_root() {
+        let (seen, runtime, _dir) = attempt(&|r| {
+            std::fs::create_dir(r.join("kropa")).unwrap();
+            std::fs::set_permissions(r.join("kropa"), std::fs::Permissions::from_mode(0o700))
+                .unwrap();
+            std::os::unix::fs::chown(r.join("kropa"), Some(54321), None).unwrap();
+        });
+        assert!(!seen.starts_with(runtime.to_str().unwrap()), "{seen}");
+    }
+}
+
+/// n5: what the file already said, and the store lacks, is marked as absent from the change.
+#[test]
+fn n5_what_comes_from_the_file_and_not_from_the_change_is_marked() {
+    let tampered = api(
+        "https://api.example.org/up",
+        "",
+        "key = \"{secret:key}\"\n",
+        "",
+    );
+    let dir = config(&tampered, "");
+    let store = MemorySecretSource::new();
+    api_entry(&store);
+    let input = ScriptedInput::default();
+    let out = run(
+        &[
+            "dest",
+            "edit",
+            "api",
+            "--url",
+            "https://api2.example.org/up",
+        ],
+        dir.path(),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
+    );
+    assert_eq!(out.code, 3, "{}", out.err);
+    let line = |needle: &str| {
+        out.err
+            .lines()
+            .find(|l| l.contains(needle))
+            .unwrap_or("")
+            .to_owned()
+    };
+    // The address was asked for: not marked. The place was not: marked.
+    assert!(
+        !line("api2.example.org").contains("absent from your change"),
+        "{}",
+        out.err
+    );
+    assert!(
+        line("query:key").contains("absent from your change"),
+        "{}",
+        out.err
+    );
+    // In French too.
+    let out = run(
+        &[
+            "--lang",
+            "fr",
+            "dest",
+            "edit",
+            "api",
+            "--url",
+            "https://api2.example.org/up",
+        ],
+        dir.path(),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
+    );
+    assert!(
+        out.err.contains("absent de votre modification"),
+        "{}",
+        out.err
+    );
+}
+
+/// The same `{secret:k}` in two places: one entry, allowed in both, no "already exists" (7).
+#[test]
+fn one_reference_in_two_places_imports_as_one_entry_allowed_in_both() {
+    let work = tempfile::tempdir().unwrap();
+    let file = work.path().join("api.toml");
+    std::fs::write(
+        &file,
+        "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\n[destination.request.headers]\nX-Api-Key = \"{secret:k}\"\n[destination.request.query]\nkey = \"{secret:k}\"\n[destination.secrets]\nk = {}\n[destination.response]\nurl = \"{json:$.url}\"\n",
+    )
+    .unwrap();
+    let dir = config("", "");
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let out = run(
+        &[
+            "dest",
+            "import",
+            file.to_str().unwrap(),
+            "--yes",
+            "--expect-host",
+            "api.example.org",
+        ],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    let info = store.inspect("api", "k").unwrap().unwrap();
+    assert_eq!(info.origins, ["https://api.example.org:443"]);
+    assert_eq!(info.placements.len(), 2, "{:?}", info.placements);
+    assert!(info.placements.contains(&Placement::header("x-api-key")));
+    assert!(info.placements.contains(&Placement::Query("key".into())));
 }

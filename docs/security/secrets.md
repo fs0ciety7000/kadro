@@ -497,9 +497,17 @@ Les deux formats suivent **les mêmes règles** ; un TOML reçu n'est pas plus f
   une entrée **neuve** du profil importé, liée à l'origine de l'URL et à l'emplacement où il a été trouvé.
 - **Un seul détecteur** (`kropa-upload::literals`) décide ce qu'est une valeur littérale présumée secrète : import,
   `dest edit` (valeurs ajoutées ou modifiées seulement) et `dest export`. Il couvre en-têtes, query, champs,
-  `body_template` (lu en JSON, chaîne par chaîne) et le reste littéral d'une valeur mixte (`{secret:k}:abcdef`, hors
-  schéma d'autorisation, séparateurs et mot court suivi d'une espace comme `Client-ID`). Limite connue : un mot de
-  12 caractères au plus suivi d'une espace, juste avant une référence, passe pour un schéma.
+  `body_template` (lu en JSON, chaîne par chaîne ; un corps non JSON, XML par exemple, est lu comme balisage : le
+  texte entre les balises et les valeurs d'attributs sont son reste littéral, noms de balises et d'attributs, guillemets
+  et ponctuation étant retirés) et le reste littéral d'une valeur mixte (`{secret:k}:abcdef`). Hors reste : un schéma
+  connu (`Bearer`, `Basic`...) ; dans un **en-tête** seulement, un mot de lettres et `-` (sans chiffre, 12 caractères
+  au plus) qui ouvre la valeur et précède immédiatement la première référence, suivi d'espaces (`Client-ID {secret:id}`) ;
+  après la première référence, des séparateurs (espaces, `:`) seulement. Limite connue : un mot de 12 lettres au plus,
+  sans chiffre, placé ainsi dans un en-tête, passe pour un schéma. `default` et `choices` d'une variable passent aussi
+  par le détecteur : dans un emplacement dont le nom est celui d'un secret, toute valeur de la longueur d'un secret ;
+  ailleurs, la forme d'un identifiant ou d'un jeton (limite : un jeton sans cette forme, dans une variable d'un
+  emplacement au nom neutre ou dans un corps, n'est pas vu). La même référence à plusieurs endroits donne une seule
+  entrée, autorisée pour chaque emplacement.
 - **`{secret:x}` dans un TOML importé** : crée une entrée **vide** (« manquante », `dest show`), à remplir par
   `kropa secrets set`. Un import ne réutilise **jamais** une entrée existante, d'aucun profil.
 - **`id` déjà pris** : refus, sauf `--id <autre>` ou confirmation interactive « remplacer le profil X : ses secrets

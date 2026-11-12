@@ -323,22 +323,26 @@ fn plan_summary(plan: &ImportPlan, loc: &Localizer, session: &mut Session<'_, '_
         session.note(&loc.message("out-import-http-warning"));
     }
     for s in &plan.secrets {
-        session.note(
-            &loc.message_args(
-                "out-import-secret",
-                &[
-                    ("name", &s.name),
-                    (
-                        "placement",
-                        &format!("{}", s.placement)
-                            .split(':')
-                            .next()
-                            .map_or_else(String::new, |k| format!("{k}:{}", slot_name(&s.slot))),
-                    ),
-                    ("preview", &s.preview),
-                ],
-            ),
-        );
+        let places = std::iter::once((&s.slot, &s.placement))
+            .chain(s.also_in.iter().map(|(slot, p)| (slot, p)));
+        for (slot, placement) in places {
+            session.note(
+                &loc.message_args(
+                    "out-import-secret",
+                    &[
+                        ("name", &s.name),
+                        (
+                            "placement",
+                            &format!("{placement}")
+                                .split(':')
+                                .next()
+                                .map_or_else(String::new, |k| format!("{k}:{}", slot_name(slot))),
+                        ),
+                        ("preview", &s.preview),
+                    ],
+                ),
+            );
+        }
     }
     for n in &plan.notes {
         let id = format!("out-import-note-{}", n.code.replace('_', "-"));
@@ -487,7 +491,9 @@ pub fn import_command(
         let entry = NewSecret {
             value: secret.value,
             origins: vec![secret.origin],
-            placements: vec![secret.placement],
+            placements: std::iter::once(secret.placement)
+                .chain(secret.also_in.into_iter().map(|(_, p)| p))
+                .collect(),
         };
         if let Err(e) = ctx.secrets.put(&id, &name, entry) {
             let mut warnings = Vec::new();

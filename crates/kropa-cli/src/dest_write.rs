@@ -17,7 +17,7 @@ use kropa_i18n::Localizer;
 use kropa_upload::UploadError;
 use kropa_upload::destination::{Destination, DestinationFile, DestinationType, MediaKind};
 use kropa_upload::import::{ImportFormat, MAX_IMPORT_SIZE, import};
-use kropa_upload::literals::presumed_values;
+use kropa_upload::literals::{presumed_values, presumed_vars};
 use kropa_upload::profiles::{
     append_destination, destination_toml, load_destinations, remove_destination,
     replace_destination, replace_destination_text,
@@ -327,6 +327,11 @@ struct Plan {
     store_places: Vec<Placement>,
     add_origin: Option<String>,
     add_places: Vec<Placement>,
+    /// The origin to add is one the file had already before this change: the store lacks it, the
+    /// change did not bring it (n5).
+    origin_from_file: bool,
+    /// The places to add that the file had already before this change (n5).
+    places_from_file: Vec<Placement>,
     drop_origins: Vec<String>,
     drop_places: Vec<Placement>,
 }
@@ -356,6 +361,7 @@ fn origins_text(origins: &[String], loc: &Localizer) -> String {
 fn plan_secrets(
     ctx: &Context<'_>,
     id: &str,
+    before: &Reach,
     after: &Reach,
     moved_origin: bool,
     moved_places: &[&(String, Vec<Placement>)],
@@ -379,6 +385,17 @@ fn plan_secrets(
         let add_places: Vec<Placement> = places
             .iter()
             .filter(|p| !info.placements.contains(p))
+            .cloned()
+            .collect();
+        let origin_from_file = add_origin.is_some() && !moved_origin;
+        let before_places: &[Placement] = before
+            .places
+            .iter()
+            .find(|(n, _)| n == name)
+            .map_or(&[], |(_, p)| p.as_slice());
+        let places_from_file: Vec<Placement> = add_places
+            .iter()
+            .filter(|p| before_places.contains(p))
             .cloned()
             .collect();
         let drop_origins = match &after.origin {
@@ -405,6 +422,8 @@ fn plan_secrets(
             store_places: info.placements,
             add_origin,
             add_places,
+            origin_from_file,
+            places_from_file,
             drop_origins,
             drop_places,
         });
@@ -415,25 +434,50 @@ fn plan_secrets(
 /// Shows, as warnings that `--quiet` does not hide, exactly what the answer would change.
 fn show_plans(plans: &[Plan], loc: &Localizer, session: &mut Session<'_, '_>) {
     for plan in plans {
+        // What the file already said before this change is marked as such: it has the shape of a
+        // change that was asked for, and was not (n5).
+        let from_file = |session: &mut Session<'_, '_>, id: &str, args: &[(&str, &str)]| {
+            session.warn(&loc.message_args(id, args));
+        };
         if let Some(origin) = &plan.add_origin {
-            session.warn(&loc.message_args(
-                "out-edit-origin-add",
+            let id = if plan.origin_from_file {
+                "out-edit-origin-add-file"
+            } else {
+                "out-edit-origin-add"
+            };
+            from_file(
+                session,
+                id,
                 &[
                     ("name", &plan.name),
                     ("old", &origins_text(&plan.store_origins, loc)),
                     ("new", origin),
                 ],
-            ));
+            );
         }
         if !plan.add_places.is_empty() {
-            session.warn(&loc.message_args(
-                "out-edit-placement-add",
-                &[
-                    ("name", &plan.name),
-                    ("old", &places_text(&plan.store_places, loc)),
-                    ("new", &places_text(&plan.add_places, loc)),
-                ],
-            ));
+            let asked: Vec<Placement> = plan
+                .add_places
+                .iter()
+                .filter(|p| !plan.places_from_file.contains(p))
+                .cloned()
+                .collect();
+            for (id, places) in [
+                ("out-edit-placement-add", &asked),
+                ("out-edit-placement-add-file", &plan.places_from_file),
+            ] {
+                if !places.is_empty() {
+                    from_file(
+                        session,
+                        id,
+                        &[
+                            ("name", &plan.name),
+                            ("old", &places_text(&plan.store_places, loc)),
+                            ("new", &places_text(places, loc)),
+                        ],
+                    );
+                }
+            }
             if plan
                 .add_places
                 .iter()
@@ -518,7 +562,15 @@ fn apply_change(
     }
     // On a terminal an unreadable store is an error (7) and nothing is written; only a change that
     // moves nothing may go on without it.
-    let mut plans = plan_secrets(ctx, id, &after, moved_origin, &moved_places, touches)?;
+    let mut plans = plan_secrets(
+        ctx,
+        id,
+        &before,
+        &after,
+        moved_origin,
+        &moved_places,
+        touches,
+    )?;
     if !touches {
         // The request leaves the address and the places alone: whatever the store lacks is a
         // difference between the file and the store, not something this command may allow.
@@ -690,6 +742,23 @@ fn random_name() -> std::io::Result<String> {
     }))
 }
 
+/// Whether `path` is a directory (not a link) of the effective user that nobody else can enter.
+fn is_ours_and_private(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        std::fs::symlink_metadata(path).is_ok_and(|m| {
+            m.is_dir()
+                && m.uid() == rustix::process::geteuid().as_raw()
+                && m.mode().trailing_zeros() >= 6
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_dir()
+    }
+}
+
 fn make_private_dir(path: &Path, recursive: bool) -> std::io::Result<()> {
     let mut builder = std::fs::DirBuilder::new();
     builder.recursive(recursive);
@@ -714,10 +783,10 @@ impl EditFile {
         let parent = match scratch.filter(|p| p.is_absolute() && p.is_dir()) {
             Some(runtime) => {
                 let parent = runtime.join("kropa");
+                // Created private, or found there: used only if it is ours and closed to others (n4).
                 match make_private_dir(&parent, true) {
-                    Ok(()) => parent,
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => parent,
-                    Err(_) => fallback.to_owned(),
+                    Ok(()) | Err(_) if is_ours_and_private(&parent) => parent,
+                    _ => fallback.to_owned(),
                 }
             }
             None => fallback.to_owned(),
@@ -771,7 +840,7 @@ impl Drop for EditFile {
     }
 }
 
-/// Signals that would kill `kropa` without a `Drop` (Ctrl-C, Ctrl-\, a closed terminal) are held back
+/// Signals that would kill `kropa` without a `Drop` (Ctrl-C, Ctrl-\, a closed terminal, `kill`) are held back
 /// while the editor runs, so that its private directory is removed. The editor, which shares the
 /// terminal, gets them too and deals with them as it likes; if one arrived, [`Self::raised`] says so
 /// and the command is cancelled. When the guard goes away the signals act as usual again.
@@ -785,14 +854,14 @@ struct EditorSignals {
 #[cfg(unix)]
 impl EditorSignals {
     fn new() -> std::io::Result<Self> {
-        use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT};
+        use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
         use std::sync::Arc;
         use std::sync::atomic::AtomicBool;
         let (raised, armed) = (
             Arc::new(AtomicBool::new(false)),
             Arc::new(AtomicBool::new(false)),
         );
-        for signal in [SIGINT, SIGQUIT, SIGHUP] {
+        for signal in [SIGINT, SIGQUIT, SIGHUP, SIGTERM] {
             // Once `armed`, the default action runs again; before, the signal is only noted.
             signal_hook::flag::register_conditional_default(signal, Arc::clone(&armed))?;
             signal_hook::flag::register(signal, Arc::clone(&raised))?;
@@ -859,21 +928,23 @@ fn check_edited(bytes: &[u8], old: &Destination, loc: &Localizer) -> Result<Dest
     let edited = file.destination.remove(0);
     // The shared detector (`kropa_upload::literals`) first: a literal is a refusal, not a syntax
     // error to fix in a second round.
+    let literal = |message: &str| {
+        CliError::new(ExitCode::SecurityRefused, loc, message, &[("id", id)])
+            .with_reason("secret_in_profile")
+            .at_step("dest")
+    };
     if !presumed_values(&edited, Some(old)).is_empty() {
-        return Err(CliError::new(
-            ExitCode::SecurityRefused,
-            loc,
-            "error-dest-edit-literal-secret",
-            &[("id", id)],
-        )
-        .with_reason("secret_in_profile")
-        .at_step("dest"));
+        return Err(literal("error-dest-edit-literal-secret"));
+    }
+    if !presumed_vars(&edited, Some(old)).is_empty() {
+        return Err(literal("error-dest-edit-literal-var"));
     }
     match import(bytes, ImportFormat::Toml, Some(id)) {
         // Only a profile with a real secret needs https, and `require_https` checks that.
+        // `secret_in_var`: the variables were judged above, for what this edit changed only.
         Ok(_)
         | Err(UploadError::Security {
-            reason: "https_required",
+            reason: "https_required" | "secret_in_var",
             ..
         }) => {}
         Err(e @ UploadError::Config { .. }) => return Err(invalid(&e.to_string())),
@@ -1106,15 +1177,21 @@ pub fn export(
     }
     let mut text = String::new();
     for destination in &chosen {
-        if !presumed_values(destination, None).is_empty() {
-            return Err(CliError::new(
+        let refuse = |message: &str| {
+            CliError::new(
                 ExitCode::SecurityRefused,
                 loc,
-                "error-dest-export-literal-secret",
+                message,
                 &[("id", &destination.id)],
             )
             .with_reason("secret_in_profile")
-            .at_step("dest"));
+            .at_step("dest")
+        };
+        if !presumed_values(destination, None).is_empty() {
+            return Err(refuse("error-dest-export-literal-secret"));
+        }
+        if !presumed_vars(destination, None).is_empty() {
+            return Err(refuse("error-dest-export-literal-var"));
         }
         if !text.is_empty() {
             text.push('\n');

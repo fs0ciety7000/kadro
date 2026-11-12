@@ -305,11 +305,18 @@ pub fn set(
     };
     let mut authorization = Authorization::default();
     if let Some((origins, placements)) = fresh {
-        session.note(&loc.message_args(
+        // What the question is about must survive `--quiet` unless `--yes` already answered it (N3).
+        let must_see = !yes;
+        let line = loc.message_args(
             "out-secrets-new-entry",
             &[("profile", profile), ("name", name)],
-        ));
-        show_authorization(&origins, &placements, loc, session, false);
+        );
+        if must_see {
+            session.warn(&line);
+        } else {
+            session.note(&line);
+        }
+        show_authorization(&origins, &placements, loc, session, must_see);
         if !yes {
             if !session.interactive {
                 return Err(CliError::new(

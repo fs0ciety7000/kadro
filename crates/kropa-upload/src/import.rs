@@ -28,7 +28,7 @@ use crate::destination::{
     ResponseSpec, SecretDecl, VarDecl, is_identifier,
 };
 use crate::error::UploadError;
-use crate::literals::presumed_value;
+use crate::literals::{presumed_value, presumed_vars};
 use crate::origin::origin_of;
 use crate::secret::{MIN_SECRET_LEN, Placement, SecretValue};
 use crate::sensitive::{
@@ -70,6 +70,8 @@ pub struct ImportedSecret {
     pub slot: Slot,
     /// Place the secret will be allowed in.
     pub placement: Placement,
+    /// Other places the same reference stands in: one entry, allowed in each of them.
+    pub also_in: Vec<(Slot, Placement)>,
     /// Canonical origin it will be tied to.
     pub origin: String,
     /// The value found in the file, `None` for an empty entry to fill (`{secret:x}`, `{inputbox:}`).
@@ -259,6 +261,20 @@ impl Builder {
             // Bound to the final template once the profile is complete.
             Slot::Body => Placement::Body(String::new()),
         };
+        // The same reference in another place (or twice in one): one entry, allowed in each place.
+        if value.is_none()
+            && let Some(existing) = self
+                .secrets
+                .iter_mut()
+                .find(|s| s.name == name && s.value.is_none())
+        {
+            if existing.placement != placement
+                && !existing.also_in.iter().any(|(_, p)| *p == placement)
+            {
+                existing.also_in.push((slot.clone(), placement));
+            }
+            return Ok(());
+        }
         if matches!(slot, Slot::Query(_)) && !self.notes.iter().any(|n| n.code == "query_secret") {
             self.notes.push(ImportNote {
                 code: "query_secret",
@@ -270,6 +286,7 @@ impl Builder {
             name,
             slot: slot.clone(),
             placement,
+            also_in: Vec::new(),
             origin: self.origin.clone(),
             value,
         });
@@ -774,6 +791,22 @@ fn finish(
         {
             secret.placement = p.clone();
         }
+        for (slot, placement) in &mut secret.also_in {
+            if *slot == Slot::Body
+                && let Some(p) = &body_placement
+            {
+                *placement = p.clone();
+            }
+        }
+    }
+    // A default or a choice of a variable is in the file in the clear: the detector reads it too (N1).
+    // Last, so that every other refusal comes first; `dest edit` tolerates this one for the values it
+    // did not change.
+    if !presumed_vars(&destination, None).is_empty() {
+        return Err(UploadError::security(
+            "secret_in_var",
+            "the default or a choice of a variable looks like a secret: a variable is a public setting, a secret goes in the store ({secret:})",
+        ));
     }
     notes.append(&mut builder.notes);
     Ok(ImportPlan {
