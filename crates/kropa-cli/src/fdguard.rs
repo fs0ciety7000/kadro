@@ -93,58 +93,9 @@ fn walk_and_mark() -> io::Result<()> {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use std::os::fd::{AsRawFd, OwnedFd};
-    use std::process::Command;
-
-    use super::{mark_inherited_cloexec, walk_and_mark};
-
-    /// A descriptor that a child would inherit: `dup` does not set close-on-exec.
-    fn inheritable() -> OwnedFd {
-        rustix::io::dup(std::io::stdin()).unwrap()
-    }
-
-    /// Whether a child process started now has this descriptor open.
-    fn child_has(fd: i32) -> bool {
-        // `test` is a built-in of `sh`, so `/proc/self` is the child itself.
-        Command::new("sh")
-            .args(["-c", &format!("test -e /proc/self/fd/{fd}")])
-            .status()
-            .unwrap()
-            .success()
-    }
+    use super::mark_inherited_cloexec;
 
     // Each test of `nextest` is a process of its own.
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn inherited_descriptors_do_not_reach_a_child() {
-        let kept = inheritable();
-        let fd = kept.as_raw_fd();
-        assert!(fd >= 3);
-        assert!(
-            child_has(fd),
-            "the test would prove nothing: the child must see it before"
-        );
-        mark_inherited_cloexec().unwrap();
-        assert!(!child_has(fd), "the descriptor reached the child");
-        // Still open and usable here.
-        rustix::io::fcntl_getfd(&kept).unwrap();
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn the_walk_does_the_same_without_close_range() {
-        let kept = inheritable();
-        let fd = kept.as_raw_fd();
-        assert!(child_has(fd));
-        walk_and_mark().unwrap();
-        assert!(!child_has(fd));
-        assert!(
-            rustix::io::fcntl_getfd(&kept)
-                .unwrap()
-                .contains(rustix::io::FdFlags::CLOEXEC)
-        );
-    }
-
     #[test]
     fn it_is_idempotent_and_leaves_the_standard_streams_alone() {
         mark_inherited_cloexec().unwrap();
@@ -154,6 +105,60 @@ mod tests {
             let borrowed = unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) };
             assert!(
                 !rustix::io::fcntl_getfd(borrowed)
+                    .unwrap()
+                    .contains(rustix::io::FdFlags::CLOEXEC)
+            );
+        }
+    }
+
+    /// The proof through a real child: `/proc/<pid>/fd` of a process started after the call.
+    #[cfg(target_os = "linux")]
+    mod children {
+        use std::os::fd::{AsRawFd, OwnedFd};
+        use std::process::Command;
+
+        use super::mark_inherited_cloexec;
+        use crate::fdguard::walk_and_mark;
+
+        /// A descriptor that a child would inherit: `dup` does not set close-on-exec.
+        fn inheritable() -> OwnedFd {
+            rustix::io::dup(std::io::stdin()).unwrap()
+        }
+
+        /// Whether a child process started now has this descriptor open.
+        fn child_has(fd: i32) -> bool {
+            // `test` is a built-in of `sh`, so `/proc/self` is the child itself.
+            Command::new("sh")
+                .args(["-c", &format!("test -e /proc/self/fd/{fd}")])
+                .status()
+                .unwrap()
+                .success()
+        }
+
+        #[test]
+        fn inherited_descriptors_do_not_reach_a_child() {
+            let kept = inheritable();
+            let fd = kept.as_raw_fd();
+            assert!(fd >= 3);
+            assert!(
+                child_has(fd),
+                "the test would prove nothing: the child must see it before"
+            );
+            mark_inherited_cloexec().unwrap();
+            assert!(!child_has(fd), "the descriptor reached the child");
+            // Still open and usable here.
+            rustix::io::fcntl_getfd(&kept).unwrap();
+        }
+
+        #[test]
+        fn the_walk_does_the_same_without_close_range() {
+            let kept = inheritable();
+            let fd = kept.as_raw_fd();
+            assert!(child_has(fd));
+            walk_and_mark().unwrap();
+            assert!(!child_has(fd));
+            assert!(
+                rustix::io::fcntl_getfd(&kept)
                     .unwrap()
                     .contains(rustix::io::FdFlags::CLOEXEC)
             );

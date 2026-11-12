@@ -88,7 +88,7 @@ fn main() {
         })
     });
     #[cfg(not(target_os = "linux"))]
-    let _ = bus_name;
+    let _ = (bus_name, bus_address);
     let timer = quit.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(idle));
