@@ -98,8 +98,8 @@ Dépend de : 1 et D2. Plan détaillé : `docs/lots/lot-2.md`. Une PR par fonctio
 lint, build) par la session, sans relecteur séparé (rigueur standard, 12/11/2026).
 - [x] 2.A Profils et défaut : `kropa dest add|edit|remove|set-default|export`, jeton via TTY/stdin/fd, modèle Imgur (ex-2.6, 2.6b, 2.6c). Base faite : IPC `kropa-ipc` (ex-2.1a, 2.1d), modèle de sélection (ex-2.2).
 - [ ] 2.B Sélection de zone : serveur `kropa-gtk` et `kropa-app`, overlay GTK (layer-shell KDE/wlroots, plein écran GNOME) et AppKit, `kropa capture area [--last] [--delay]` (ex-2.1b, 2.1c, 2.3, 2.4, 2.5). Agents : `linux-desktop-dev`, `macos-desktop-dev`, `backend-dev`.
-- [ ] 2.C S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j), `dest add --type s3`, test Garage (ex-2.7a, 2.7b). Agent : `backend-dev`.
-- [ ] 2.D Coffre `age` de repli : magasin, `kropa secrets use|migrate`, `--password-fd` (ex-2.8a, 2.8b ; `unlock|lock` au 4.C, décision D11). Agent : `backend-dev`.
+- [ ] 2.C (moteur fait et testé sur Garage ; reste `dest add --type s3` et envoi par la CLI) S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j), `dest add --type s3`, test Garage (ex-2.7a, 2.7b). Agent : `backend-dev`.
+- [ ] 2.D (magasin fait, revue de sécurité en cours ; restent les commandes) Coffre `age` de repli : magasin, `kropa secrets use|migrate`, `--password-fd` (ex-2.8a, 2.8b ; `unlock|lock` au 4.C, décision D11). Agent : `backend-dev`.
 - [ ] 2.E **[Utilisateur]** Essai du parcours sans annotation (KDE, Mac ; GNOME non vérifié, D8).
 - Retiré (rigueur standard) : 2.9 job hebdomadaire Sway séparé (les tests sway restent dans la CI normale).
 

@@ -16,7 +16,7 @@
 
 ## État d'avancement
 
-- Conception validée le 11/11/2026. Faits : lots 0, D1, S, D2 (sauf D2.4) ; lot 1 tâches 1.1-1.5, 1.7-1.11 (+ suites de revue). Suite : D2.4 puis essais réels 1.12 (utilisateur), puis lot 2. Suivi : `docs/plan.md`, relais : `docs/memory/handoff.md`.
+- Conception validée le 11/11/2026. Faits : lots 0, D1, S, D2 ; lot 1 (code ; essais Mac à faire) ; lot 2 : profils `kropa dest`, IPC, modèle de sélection, moteur S3, magasin du coffre `age`. Suite : 2.C CLI S3, 2.D commandes du coffre, 2.B sélection de zone. Rigueur standard (12/11/2026). Suivi : `docs/plan.md`, relais : `docs/memory/handoff.md`.
 
 ## Documents du projet
 

@@ -3,33 +3,38 @@
 > Réécrit à la fin de chaque session (`/handoff`), relu au début de la suivante (`/resume`, hook de démarrage).
 > Court et concret : la prochaine session doit pouvoir repartir sans rien relire d'autre.
 
-- **Date** : 2026-11-11
+- **Date** : 2026-11-12
 - **Fait cette session** :
-  - Conception complète, décisions validées, renommage **Kropa**, identité, maquettes, `DESIGN.md`, spec CLI,
-    modèle de secrets ; lot 0 (workspace, CI Linux + macOS 15, Renovate, équipe d'agents).
-  - Lot 1, toutes les tâches de code (1.1-1.5, 1.7-1.11) et D2.4, avec leurs revues de sécurité et de code
-    (`docs/reviews/`) : CLI, capture portail/ScreenCaptureKit, envoi HTTP + Zipline + `.sxcu`, TLS aws-lc-rs, secrets
-    (Secret Service ; Keychain en un seul élément via `kropa __store-broker`), liens échappés, journal expurgé,
-    presse-papiers (data-control avec relecture, NSPasteboard, GNOME `unavailable`), compose Zipline derrière TLS
-    local, test « zéro requête » (`unshare -rn` + `strace`), textes FR/EN relus et glossaire.
-  - 473 tests verts ; CI verte Linux + macOS 15 (tous les tests macOS exécutés), sauf GitGuardian (faux positifs).
-- **En cours** : rien. Branche `claude/adoring-pascal-u36glt`, PR brouillon
-  [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1) vers `main`, surveillée (contrôle programmé).
-- **Prochaine action exacte** : essais réels **1.12** par l'utilisateur (check-lists `docs/testing/manual-linux.md`,
-  `manual-macos.md`, `integration.md`), puis cadrage du **lot 2** (sélection, profils, S3, coffre `age`).
+  - Lot 1 terminé côté code et essayé en vrai sur KDE Plasma 6.8 (capture, refus, presse-papiers, envoi Zipline réel,
+    `kropa doctor --reset-screenshot-permission`).
+  - Lot 2 : plan `docs/lots/lot-2.md` (décisions D1-D13 validées « recommandé partout ») ; IPC `kropa-ipc` (socket
+    0700, UID du pair, activation D-Bus, `fdguard` CLOEXEC, tests à deux vrais UID) ; modèle de sélection ; `kropa dest
+    …` (bloquant B1 corrigé : ce qui « suit » est calculé contre le magasin ; jamais de déplacement d'adresse sans
+    question, même magasin injoignable) ; moteur S3 (`object_store` sans feature `aws`, client unique, Garage derrière
+    Caddy, test réel) ; magasin du coffre `age` (`crates/kropa-store/src/vault.rs`).
+  - Plan allégé (12/11, demande utilisateur via la session claude-kit) : une tâche par fonctionnalité livrable (2.A-2.E,
+    3.A-3.B, 4.A-4.F, 5.A-5.E), revues et vérifications séparées retirées.
+- **En cours** : revue de sécurité de 2.8a (coffre) lancée avant le changement de règle ; si son rapport n'est pas dans
+  `docs/reviews/2026-11-12-security-2.8a.md`, ne pas la relancer (rigueur standard) — vérifier soi-même.
+  PR brouillon [fs0ciety7000/kropa#1](https://github.com/fs0ciety7000/kropa/pull/1), CI verte sauf GitGuardian.
+- **Prochaine action exacte** : 2.C — `dest add --type s3 --bucket … --region … [--endpoint] [--path-style]
+  [--prefix] [--public-base-url | --presign] [--access-key-id] [--secret-stdin|--secret-fd] [--default]`, puis envoi
+  Garage de bout en bout par la CLI (`tests/integration/run.sh test --profile s3`). Ensuite 2.D, puis 2.B.
+- **Règles du kit (12/11/2026, claude-kit#28)** : rigueur standard (pas de relecteur séparé sauf demande ; vérifier soi-même
+  diff, tests, lint, build) ; une PR par fonctionnalité ; Engram seulement à la demande ; pas de `docker build` pour
+  vérifier un changement.
 - **Bloquant / questions ouvertes pour l'utilisateur** :
+  - Format de lien par destination (`link_format`, utilisé quand `--copy` est absent) : l'ajouter (recommandé) ou le
+    retirer de la spec.
   - Marquer faux positifs les incidents GitGuardian 39943012, 39943013, 39960789.
-  - Tâches à lui : 0.8 réserver le crate `kropa`, 0.9 recherche de marques, 1.6 certificat auto-signé + test TCC,
-    1.12 essais réels. Fusionner la PR Engram fs0ciety7000/engram#22.
-  - À trancher : code de sortie quand `--copy` explicite échoue (aujourd'hui 0 + avertissement) ; X11 seul sans
-    presse-papiers ; journal `-vv` en anglais seulement ; espaces insécables FR dans la CLI ; mot « lot » visible dans
-    des messages ; `unsafe` hors macOS (règle 12) pour un mineur de la revue 1.8.
+  - Essais Mac (1.6 certificat auto-signé, 1.12) ; GNOME non vérifié (pas d'accès).
+  - Exceptions `deny.toml` RUSTSEC-2026-0387 (crypto-bigint via `age`) et -0374 (basic-toml) acceptées par
+    l'utilisateur, revue au plus tard le 2027-02-28.
 - **À savoir** :
-  - Hook claude-kit : faux positifs sur certains mots (fichiers d'environnement, `*.key`, `env`) ; passer par
-    Write/Edit, ne jamais contourner pour un vrai secret.
-  - Hook « commit and push » : les commits `wip` intermédiaires peuvent rougir la CI ; seul le commit de fin fait foi.
-  - Après redémarrage du conteneur, `git remote get-url origin` peut revenir à `kadro` : remettre
-    `https://github.com/fs0ciety7000/kropa`.
-  - Disque serré (~3 Go libres) : supprimer `target/debug/incremental` avant les gros builds.
-  - Valeurs de test ressemblant à des secrets : construites à l'exécution ; dans les compose, passer par `secrets:`.
-  - macOS : sockets AF_UNIX (`shutdown`, `setsockopt` après fermeture) se comportent autrement que sous Linux.
+  - Disque serré (~5 Go) : supprimer `target/debug/incremental` et les vieux binaires de `target/debug/deps` avant les
+    gros builds. Dossiers de scratchpad laissés par des relecteurs (suppression refusée par les permissions).
+  - Après redémarrage du conteneur : `git remote set-url origin https://github.com/fs0ciety7000/kropa` ; `dockerd`
+    peut être arrêté.
+  - Hook « commit and push » : commits `wip` fréquents, CI rouge sur eux ; seul le dernier commit fait foi.
+  - Les cas `trycmd` sont isolés du trousseau réel (`DBUS_SESSION_BUS_ADDRESS` inexistant, `XDG_RUNTIME_DIR` privé).
+  - macOS : sockets AF_UNIX (`shutdown`, `setsockopt` après fermeture), `sed -i`/`stat` BSD dans les scripts de test.

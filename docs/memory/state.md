@@ -2,12 +2,14 @@
 
 > Réécrit à la fin de chaque session de travail : où on en est, ce qui bloque, prochaines étapes (3 max).
 
-- **Fait** : conception validée ; lot 0 ; lot 1 tâches 1.1-1.5, 1.7-1.11 et leurs suites de revue (1.3b, 1.7b, 1.8b,
-  1.8r, 1.8m, 1.9b) : CLI, capture Linux/macOS, envoi HTTP + Zipline, secrets (Secret Service, Keychain un seul
-  élément via `kropa __store-broker`), liens échappés, journal expurgé, presse-papiers (data-control, NSPasteboard,
-  GNOME honnête), compose Zipline + test « zéro requête ». 473 tests verts, CI verte Linux + macOS 15 (sauf
-  GitGuardian : faux positifs).
-- **En cours** : D2.4 (relecture des chaînes FR/EN, glossaire). PR brouillon fs0ciety7000/kropa#1 vers `main`.
-- **Bloquant** : 3 incidents GitGuardian à marquer faux positifs par l'utilisateur (39943012, 39943013, 39960789).
-- **Prochaines étapes** : 1) finir D2.4 ; 2) essais réels 1.12 par l'utilisateur (GNOME, KDE, Mac, check-lists
-  `docs/testing/manual-*.md`) ; 3) lot 2 (sélection, profils, S3, coffre) après validation.
+- **Fait** : lot 1 complet côté code (essais réels KDE + Zipline OK ; Mac à faire). Lot 2 : profils `kropa dest
+  add|edit|remove|set-default|export` (avec suites de revue : autorisation calculée contre le magasin), IPC
+  `kropa-ipc` + `fdguard`, modèle de sélection, moteur S3 (`object_store` sur le client unique, testé sur Garage),
+  magasin du coffre `age` (`vault.rs`). 685 tests verts, CI verte Linux + macOS (sauf GitGuardian : faux positifs).
+- **En cours** : revue de sécurité du coffre 2.8a (lancée avant le passage en rigueur standard). PR brouillon
+  fs0ciety7000/kropa#1.
+- **Bloquant** : rien côté code. Utilisateur : 3 incidents GitGuardian à marquer, essais Mac (1.6, 1.12), réponse sur
+  le format de lien par destination.
+- **Prochaines étapes** : 1) 2.C `dest add --type s3` et envoi CLI ; 2) 2.D commandes du coffre (`use`, `migrate`,
+  `--password-fd`, ajouter les raisons `vault_*` à `ALL_REASONS` de `kropa-upload`) ; 3) 2.B sélection de zone
+  (serveur `kropa-gtk`, overlay GTK, `capture area`).

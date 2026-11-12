@@ -38,3 +38,8 @@
   `clipboard.verified`, layer-shell optionnel + `overlay.surface`, Ubuntu 24.04 gardée (plein écran), GNOME « non
   vérifié », `access_key_id` S3 non secret, pas de `dest add --type http`, `secrets unlock|lock` reportés au 4.7
   (écart validé), diceware EFF si licence compatible, D13 au premier essai Mac.
+- **2026-11-12** — Rigueur standard (claude-kit#28, demande de l'utilisateur) : plus de relecteur séparé par lot ;
+  plan à une tâche par fonctionnalité livrable ; Engram seulement à la demande.
+- **2026-11-12** — S3 : `object_store` sans feature `aws`, sur le client HTTP unique et un fournisseur de hachage
+  aws-lc-rs ; import d'un profil S3 refusé ; exceptions `deny.toml` pour `age` (RUSTSEC-2026-0387, -0374) acceptées
+  par l'utilisateur.
