@@ -100,12 +100,7 @@ fn a_client_running_as_another_user_is_dropped_and_gets_nothing() {
     let Some(_nobody_uid) = nobody() else { return };
     let tmp = shared_dir(0o711);
     let dir = tmp.path().join("kropa");
-    let server = serve(
-        &dir,
-        ServerConfig::new("kropa-gtk", "1"),
-        Arc::new(Nothing),
-    )
-    .unwrap();
+    let server = serve(&dir, ServerConfig::new("kropa-gtk", "1"), Arc::new(Nothing)).unwrap();
     let socket = socket_path(&dir);
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o711)).unwrap();
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o666)).unwrap();

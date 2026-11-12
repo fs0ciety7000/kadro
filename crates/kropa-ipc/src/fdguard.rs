@@ -148,7 +148,9 @@ mod tests {
     static SERIAL: Mutex<()> = Mutex::new(());
 
     fn serial() -> MutexGuard<'static, ()> {
-        SERIAL.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     #[test]

@@ -18,7 +18,9 @@ use tokio::time::timeout;
 
 use crate::dir::{check_socket_len, current_uid, verify_dir};
 use crate::error::IpcError;
-use crate::proto::{HelloParams, HelloReply, Line, PROTOCOL, WireError, encode, read_line, strip_control};
+use crate::proto::{
+    HelloParams, HelloReply, Line, PROTOCOL, WireError, encode, read_line, strip_control,
+};
 
 /// How long the connection and the `hello` may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);

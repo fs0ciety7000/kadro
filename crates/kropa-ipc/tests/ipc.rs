@@ -457,3 +457,176 @@ fn the_service_file_is_looked_up_in_the_bus_directories() {
         assert_eq!(kropa_ipc::service_file_present(&lookup), None);
     }
 }
+
+// ---- lot 2.1d: review 2.1a ----
+
+/// m13: a request without `id` is not executed and gets an explicit error; `hello` alone may omit it.
+#[tokio::test]
+async fn a_request_without_an_id_is_refused_not_executed() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Counter(Arc<AtomicUsize>);
+    impl Handler for Counter {
+        fn call(&self, _method: &str, _params: Value) -> BoxFuture<'_, Result<Value, RpcError>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok(Value::Null) })
+        }
+    }
+
+    let (_tmp, dir) = runtime();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let _server = serve(
+        &dir,
+        ServerConfig::new("kropa-gtk", "1"),
+        Arc::new(Counter(Arc::clone(&calls))),
+    )
+    .unwrap();
+    let mut stream = greeted(&dir).await;
+    let mut ask = async |text: &str| -> Value {
+        stream
+            .write_all(format!("{text}\n").as_bytes())
+            .await
+            .unwrap();
+        let mut buf = [0u8; 1024];
+        let n = stream.read(&mut buf).await.unwrap();
+        serde_json::from_slice(&buf[..n]).unwrap()
+    };
+    let answer = ask(r#"{"jsonrpc":"2.0","method":"app.quit"}"#).await;
+    assert_eq!(answer["error"]["code"], -32600);
+    assert_eq!(answer["error"]["data"]["reason"], "ipc_protocol_error");
+    assert_eq!(calls.load(Ordering::SeqCst), 0, "a notification was run");
+    // With an id the same method runs.
+    let answer = ask(r#"{"jsonrpc":"2.0","id":9,"method":"app.quit"}"#).await;
+    assert_eq!(answer["id"], 9);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+/// m7: a FIFO at the name of the lock must not block the server for ever.
+#[test]
+fn a_fifo_in_place_of_the_lock_is_refused_without_blocking() {
+    let (_tmp, dir) = runtime();
+    ensure_dir(&dir, current_uid()).unwrap();
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        dir.join("app.lock"),
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::from_raw_mode(0o600),
+        0,
+    )
+    .unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let dir2 = dir.clone();
+    std::thread::spawn(move || {
+        let outcome = serve(&dir2, ServerConfig::new("kropa-gtk", "1"), Arc::new(Echo));
+        tx.send(outcome.map(|_| ())).ok();
+    });
+    let outcome = rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the server blocked on the FIFO");
+    let err = outcome.unwrap_err();
+    assert_eq!(reason(&err), "unsafe_runtime_dir");
+}
+
+/// m7: a lock that belongs to someone else (or a directory) is refused too.
+#[test]
+fn a_lock_that_is_not_a_regular_file_is_refused() {
+    let (_tmp, dir) = runtime();
+    ensure_dir(&dir, current_uid()).unwrap();
+    std::fs::create_dir(dir.join("app.lock")).unwrap();
+    // A directory cannot be opened for writing: refused as an I/O error, never taken as a lock.
+    let err = serve(&dir, ServerConfig::new("kropa-gtk", "1"), Arc::new(Echo)).unwrap_err();
+    assert_eq!(err.exit_code(), 14);
+}
+
+/// m12: the whole call, launch included, is bound by one deadline.
+#[tokio::test]
+async fn the_deadline_covers_a_slow_launch() {
+    struct Slow(Cell<Option<Duration>>);
+    impl Launcher for Slow {
+        fn launch(&self, budget: Duration) -> Result<(), IpcError> {
+            self.0.set(Some(budget));
+            std::thread::sleep(Duration::from_millis(400));
+            Ok(())
+        }
+    }
+    let (_tmp, dir) = runtime();
+    let slow = Slow(Cell::new(None));
+    let started = std::time::Instant::now();
+    let err = ensure_running_in(&dir, &slow, Duration::from_millis(500))
+        .await
+        .unwrap_err();
+    assert_eq!(reason(&err), "daemon_start_timeout");
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "took {:?}",
+        started.elapsed()
+    );
+    let budget = slow.0.get().expect("launched");
+    assert!(budget <= Duration::from_millis(500), "budget {budget:?}");
+}
+
+/// m12: a server that accepts but never answers `hello` does not hold the call for the 5 s of one
+/// connection, nor for the sum of several.
+#[tokio::test]
+async fn the_deadline_covers_a_server_that_never_answers() {
+    let (_tmp, dir) = runtime();
+    ensure_dir(&dir, current_uid()).unwrap();
+    let listener = tokio::net::UnixListener::bind(socket_path(&dir)).unwrap();
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((stream, _)) = listener.accept().await {
+            held.push(stream); // never answered, never closed
+        }
+    });
+    let count = Cell::new(0);
+    let launcher = Counting {
+        count: &count,
+        result: || Ok(()),
+    };
+    let started = std::time::Instant::now();
+    let err = ensure_running_in(&dir, &launcher, Duration::from_millis(600))
+        .await
+        .unwrap_err();
+    assert_eq!(reason(&err), "daemon_start_timeout");
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+/// m8: a server short of descriptors stays up. The limit is lowered for the whole process: this test
+/// is meant for `nextest`, where each test has a process of its own.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn an_accept_that_fails_for_lack_of_descriptors_does_not_stop_the_server() {
+    use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+
+    let (_tmp, dir) = runtime();
+    let _server = start(&dir);
+    let socket = socket_path(&dir);
+    let saved = getrlimit(Resource::Nofile);
+    let lowered = Rlimit {
+        current: Some(256),
+        maximum: saved.maximum,
+    };
+    setrlimit(Resource::Nofile, lowered).unwrap();
+    // Take every descriptor but none: the next socket of this process is the last one.
+    let mut filler = Vec::new();
+    while let Ok(file) = std::fs::File::open("/dev/null") {
+        filler.push(file);
+    }
+    filler.pop(); // one is free again: the client's socket will use it
+    let queued = StdStream::connect(&socket).unwrap();
+    // The server's accept now fails with EMFILE. Give it time to notice.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    drop(filler);
+    drop(queued);
+    setrlimit(Resource::Nofile, saved).unwrap();
+    // It is still there and answers.
+    let mut client = Client::connect(&socket).await.unwrap();
+    let back: Value = client.call("echo", 1).await.unwrap();
+    assert_eq!(back, json!(1));
+}
+
+use std::os::unix::net::UnixStream as StdStream;

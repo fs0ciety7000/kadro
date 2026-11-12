@@ -164,7 +164,8 @@ fn spy_mode(dir: &std::path::Path) {
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o711)).expect("chmod dir");
     let socket = kropa_ipc::socket_path(dir);
     let listener = UnixListener::bind(&socket).expect("bind");
-    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o666)).expect("chmod socket");
+    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o666))
+        .expect("chmod socket");
     println!("ready");
     std::io::stdout().flush().expect("flush");
     for _ in 0..2 {
