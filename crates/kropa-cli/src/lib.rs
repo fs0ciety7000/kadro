@@ -578,7 +578,7 @@ mod tests {
         assert_eq!(lines[0], format!("kropa {}", env!("CARGO_PKG_VERSION")));
         assert!(lines[1].starts_with("commit: "), "{}", r.out);
         assert!(lines[2].starts_with("target: "), "{}", r.out);
-        assert_eq!(lines[3], "IPC protocol: not available yet (lot 2.1)");
+        assert_eq!(lines[3], "IPC protocol: 1");
         assert!(
             lines[4].ends_with("kropa.version/1, kropa.error/1"),
             "{}",
