@@ -341,6 +341,22 @@ pub trait SecretStore: SecretSource {
         origin: Option<&str>,
         placement: Option<Placement>,
     ) -> Result<(), SecretError>;
+
+    /// Takes origins and places out of an entry that exists (`kropa dest edit`, when a profile moved
+    /// and the old address or place is no longer used). What is not in the entry is ignored.
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be written, or the entry does not exist. A store that
+    /// does not implement it answers [`SecretError::NotDelivered`].
+    fn revoke(
+        &self,
+        _profile: &str,
+        _name: &str,
+        _origins: &[String],
+        _placements: &[Placement],
+    ) -> Result<(), SecretError> {
+        Err(SecretError::NotDelivered)
+    }
 }
 
 /// The source of a build without a store: nothing to read, and a clear error
@@ -582,6 +598,27 @@ impl SecretStore for MemorySecretSource {
         {
             placements.push(placement);
         }
+        Ok(())
+    }
+
+    fn revoke(
+        &self,
+        profile: &str,
+        name: &str,
+        gone_origins: &[String],
+        gone_placements: &[Placement],
+    ) -> Result<(), SecretError> {
+        let mut entries = self.entries.lock().expect("lock");
+        let Some((_, origins, placements)) =
+            entries.get_mut(&(profile.to_owned(), name.to_owned()))
+        else {
+            return Err(SecretError::Store {
+                reason: "secret_missing",
+                detail: name.to_owned(),
+            });
+        };
+        origins.retain(|o| !gone_origins.contains(o));
+        placements.retain(|p| !gone_placements.contains(p));
         Ok(())
     }
 }

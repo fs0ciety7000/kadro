@@ -577,4 +577,27 @@ impl SecretStore for SecretServiceStore {
             s.rewrite(&item, &profile, &name, &record)
         })
     }
+
+    fn revoke(
+        &self,
+        profile: &str,
+        name: &str,
+        origins: &[String],
+        placements: &[Placement],
+    ) -> Result<(), SecretError> {
+        let (profile, name) = (profile.to_owned(), name.to_owned());
+        let (origins, placements) = (origins.to_vec(), placements.to_vec());
+        self.run(move |s| {
+            let Some(item) = s.find_one(&profile, &name)? else {
+                return Err(SecretError::Store {
+                    reason: "secret_missing",
+                    detail: name.clone(),
+                });
+            };
+            let mut record = s.read(&item, &profile, &name)?;
+            record.origins.retain(|o| !origins.contains(o));
+            record.placements.retain(|p| !placements.contains(p));
+            s.rewrite(&item, &profile, &name, &record)
+        })
+    }
 }

@@ -261,6 +261,24 @@ impl<B: ItemStore> SecretStore for KeychainStore<B> {
         }
         self.rewrite(profile, name, &record)
     }
+
+    fn revoke(
+        &self,
+        profile: &str,
+        name: &str,
+        origins: &[String],
+        placements: &[Placement],
+    ) -> Result<(), SecretError> {
+        let Some(mut record) = self.find_one(profile, name)? else {
+            return Err(SecretError::Store {
+                reason: "secret_missing",
+                detail: name.to_owned(),
+            });
+        };
+        record.origins.retain(|o| !origins.contains(o));
+        record.placements.retain(|p| !placements.contains(p));
+        self.rewrite(profile, name, &record)
+    }
 }
 
 #[cfg(test)]
@@ -350,6 +368,32 @@ mod tests {
         assert_eq!(info.origins.len(), 2);
         assert_eq!(info.placements.len(), 2);
         let e = s.authorize("p", "nope", None, None).unwrap_err();
+        assert_eq!(reason(&e), "secret_missing");
+    }
+
+    #[test]
+    fn revoke_takes_out_what_is_named_and_needs_the_entry() {
+        let s = store();
+        s.set("p", "n", value("abcd-efgh"), fresh()).unwrap();
+        s.authorize(
+            "p",
+            "n",
+            Some("https://n:443"),
+            Some(Placement::Query("k".into())),
+        )
+        .unwrap();
+        s.revoke(
+            "p",
+            "n",
+            &["https://z:443".to_owned(), "https://absent:443".to_owned()],
+            &[Placement::header("authorization")],
+        )
+        .unwrap();
+        let info = s.inspect("p", "n").unwrap().unwrap();
+        assert_eq!(info.origins, ["https://n:443"]);
+        assert_eq!(info.placements, [Placement::Query("k".into())]);
+        assert!(s.load("p", "n").unwrap().is_some(), "the value stays");
+        let e = s.revoke("p", "nope", &[], &[]).unwrap_err();
         assert_eq!(reason(&e), "secret_missing");
     }
 
