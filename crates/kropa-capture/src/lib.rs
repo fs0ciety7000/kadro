@@ -23,9 +23,13 @@ pub mod apple;
 pub mod clipboard;
 mod diagnosis;
 mod error;
+pub mod hud;
+pub mod last_area;
 mod permission;
 mod png;
+pub mod region;
 pub mod screens;
+pub mod selection;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
@@ -41,9 +45,15 @@ pub use diagnosis::{
     Fact, FactValue, Status,
 };
 pub use error::{ALL_ERROR_REASONS, CaptureError, Denial, Failure, Unsupported};
+pub use hud::{HelpLayout, HudLayout, hud_layout};
 pub use kropa_core::ImageFormat;
+pub use last_area::{LastAreaError, StoredArea, default_last_area_path, last_area_path};
 pub use permission::{ALL_RESET_REASONS, ResetError, ResetOutcome};
 pub use png::{CleanPng, PngError, sanitize as sanitize_png};
+pub use region::{Loupe, Region, RgbaView, crop_png, magnifier};
+pub use selection::{
+    Input, Key, MapError, Monitor, MonitorGeom, Outcome, PxRect, RectF, Selection, map_monitors,
+};
 
 #[cfg(feature = "test-support")]
 pub use png::{build_png, sample_png};

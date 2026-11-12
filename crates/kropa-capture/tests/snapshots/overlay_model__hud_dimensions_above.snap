@@ -1,0 +1,31 @@
+---
+source: crates/kropa-capture/tests/overlay_model.rs
+expression: "layout_text(&sel, (1280, 720))"
+---
+HudLayout {
+    dimensions: Some(
+        PxRect {
+            x: 400,
+            y: 364,
+            width: 236,
+            height: 28,
+        },
+    ),
+    dimensions_inside: false,
+    magnifier: Some(
+        PxRect {
+            x: 816,
+            y: 523,
+            width: 136,
+            height: 180,
+        },
+    ),
+    help: Pill(
+        PxRect {
+            x: 1184,
+            y: 664,
+            width: 76,
+            height: 36,
+        },
+    ),
+}

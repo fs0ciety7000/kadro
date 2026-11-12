@@ -39,6 +39,12 @@ pub enum PngError {
     /// There is no `IDAT` chunk, or no `IEND` at the end.
     #[error("missing image data or IEND chunk")]
     Incomplete,
+    /// The image data cannot be decoded (corrupt stream, unsupported or too large).
+    #[error("the PNG image data cannot be decoded")]
+    Decode,
+    /// A crop rectangle that is empty or leaves the image.
+    #[error("the crop rectangle is empty or outside the image")]
+    OutOfBounds,
 }
 
 /// A PNG without metadata chunks.
