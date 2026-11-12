@@ -1,5 +1,5 @@
 bin.name = "kropa"
-args = ["--lang", "en", "dest", "add", "z", "--type", "zipline", "--url", "https://z.example.org", "--secret-stdin"]
+args = ["--lang", "en", "dest", "add", "z", "--type", "s3", "--bucket", "b", "--region", "r"]
 status.code = 5
 env.inherit = false
 env.add.HOME = "/nonexistent-kropa-home"

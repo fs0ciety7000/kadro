@@ -6,7 +6,7 @@ Arguments :
   <ID>  Identifiant du profil
 
 Options :
-      --type <TYPE>            Type de destination : zipline, s3, sftp ou http
+      --type <TYPE>            Type de destination : zipline, s3 ou sftp (une API HTTP se décrit dans un fichier : 'kropa dest import')
       --url <URL>              URL de base de la destination
       --default                En faire la destination par défaut
       --bucket <BUCKET>        Bucket S3

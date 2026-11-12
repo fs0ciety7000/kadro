@@ -1,1 +1,1 @@
-{"schema":"kropa.error/1","status":"error","exit_code":12,"error":{"code":"interaction_required","reason":null,"message":"A secret is required but input is not interactive. Use --secret-stdin or --secret-fd N.","step":null}}
+{"schema":"kropa.dest.change/1","status":"error","exit_code":12,"error":{"code":"interaction_required","reason":null,"message":"A secret is required but input is not interactive. Use --secret-stdin or --secret-fd N.","step":null}}

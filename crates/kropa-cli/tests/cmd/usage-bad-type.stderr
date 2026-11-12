@@ -1,4 +1,4 @@
 error: invalid value for '--type <TYPE>'
-  possible values: zipline, s3, sftp, http
+  possible values: zipline, s3, sftp
 
 For more information, try '--help'.
