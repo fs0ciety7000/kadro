@@ -690,6 +690,8 @@ mod tests {
                 "kropa.dest.show/1",
                 "kropa.dest.test/1",
                 "kropa.dest.import/1",
+                "kropa.dest.change/1",
+                "kropa.dest.export/1",
                 "kropa.queue.list/1",
                 "kropa.history.list/1",
                 "kropa.doctor/1",

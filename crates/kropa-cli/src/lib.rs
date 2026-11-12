@@ -397,6 +397,9 @@ mod tests {
         fn status(&self) -> StoreStatus {
             self.inner.status()
         }
+        fn names(&self, p: &str) -> Result<Vec<String>, SecretError> {
+            self.inner.names(p)
+        }
         fn inspect(&self, p: &str, n: &str) -> Result<Option<EntryInfo>, SecretError> {
             self.inner.inspect(p, n)
         }

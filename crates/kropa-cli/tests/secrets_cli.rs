@@ -533,6 +533,9 @@ impl SecretStore for Broken {
             profiles: std::collections::BTreeMap::new(),
         }
     }
+    fn names(&self, _: &str) -> Result<Vec<String>, SecretError> {
+        Err(self.error())
+    }
     fn inspect(&self, _: &str, _: &str) -> Result<Option<EntryInfo>, SecretError> {
         Err(self.error())
     }
@@ -914,6 +917,9 @@ impl SecretStore for FailsOnSecondPut {
     fn status(&self) -> StoreStatus {
         self.inner.status()
     }
+    fn names(&self, p: &str) -> Result<Vec<String>, SecretError> {
+        self.inner.names(p)
+    }
     fn inspect(&self, p: &str, n: &str) -> Result<Option<EntryInfo>, SecretError> {
         self.inner.inspect(p, n)
     }
@@ -1025,6 +1031,9 @@ impl SecretSource for CannotRollBack {
 impl SecretStore for CannotRollBack {
     fn status(&self) -> StoreStatus {
         self.inner.status()
+    }
+    fn names(&self, p: &str) -> Result<Vec<String>, SecretError> {
+        self.inner.names(p)
     }
     fn inspect(&self, p: &str, n: &str) -> Result<Option<EntryInfo>, SecretError> {
         self.inner.inspect(p, n)
