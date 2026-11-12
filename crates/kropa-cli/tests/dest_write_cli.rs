@@ -1274,3 +1274,487 @@ fn no_command_prints_or_writes_the_value() {
     assert!(!seen.contains(&secret), "the value leaked");
     assert!(seen.len() > 1000, "the commands ran");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Review of 2.6 (2.6b): B1, I1, I2, I3, m1, m2, m4
+// ---------------------------------------------------------------------------------------------
+
+/// An HTTP profile `api` with one secret, `key`.
+fn api(url: &str, headers: &str, query: &str, extra_request: &str) -> String {
+    format!(
+        "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"{url}\"\n{extra_request}[destination.request.headers]\n{headers}[destination.request.query]\n{query}[destination.secrets.key]\n[destination.response]\nurl = \"{{json:$.url}}\"\n"
+    )
+}
+
+/// The entry `api/key`, allowed only for `api.example.org` and the header `x-api-key`.
+fn api_entry(store: &MemorySecretSource) {
+    store
+        .set(
+            "api",
+            "key",
+            SecretValue::new("abcdefghij").unwrap(),
+            Authorization {
+                origins: vec!["https://api.example.org:443".into()],
+                placements: vec![Placement::header("x-api-key")],
+            },
+        )
+        .unwrap();
+}
+
+fn assert_entry_untouched(store: &MemorySecretSource) {
+    let info = store.inspect("api", "key").unwrap().unwrap();
+    assert_eq!(info.origins, ["https://api.example.org:443"]);
+    assert_eq!(info.placements, [Placement::header("x-api-key")]);
+}
+
+#[test]
+fn b1_an_origin_the_file_gained_behind_the_stores_back_is_shown_and_never_allowed_silently() {
+    let work = tempfile::tempdir().unwrap();
+    // Someone changed `url` in the file; the store still only knows api.example.org.
+    let tampered = api(
+        "https://evil.example.net/up",
+        "X-Api-Key = \"{secret:key}\"\n",
+        "",
+        "",
+    );
+    let dir = config(&tampered, "");
+    let store = MemorySecretSource::new();
+    api_entry(&store);
+    let input = ScriptedInput::default();
+    let body = "perl -pi -e 's|^X-Api-Key = |Other-Header = |' \"$1\"\n";
+    // The user only renames a header. The question shows the foreign origin too, even with --quiet,
+    // and "old" is what the store allows.
+    let out = run(
+        &["--quiet", "dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), body), false),
+    );
+    assert_eq!(out.code, 3, "{}", out.err);
+    assert!(
+        out.err.contains("https://evil.example.net:443"),
+        "{}",
+        out.err
+    );
+    assert!(
+        out.err.contains("https://api.example.org:443"),
+        "{}",
+        out.err
+    );
+    assert!(out.err.contains("header:other-header"), "{}", out.err);
+    assert_eq!(read(&dir, "destinations.toml"), tampered);
+    assert_entry_untouched(&store);
+    // Answering yes allows exactly what was shown: the foreign origin and the new place.
+    let out = run(
+        &["--quiet", "dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), body), true),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    let info = store.inspect("api", "key").unwrap().unwrap();
+    assert_eq!(
+        info.origins,
+        [
+            "https://api.example.org:443",
+            "https://evil.example.net:443"
+        ]
+    );
+    assert_eq!(info.placements, [Placement::header("other-header")]);
+}
+
+#[test]
+fn b1_a_place_the_file_gained_behind_the_stores_back_is_shown_and_does_not_ride_along_with_an_address()
+ {
+    let tampered = api(
+        "https://api.example.org/up",
+        "",
+        "key = \"{secret:key}\"\n",
+        "",
+    );
+    let dir = config(&tampered, "");
+    let store = MemorySecretSource::new();
+    api_entry(&store);
+    let input = ScriptedInput::default();
+    // `--url` moves the address: the question shows the new origin AND the query place the file has
+    // and the store does not allow.
+    let out = run(
+        &[
+            "dest",
+            "edit",
+            "api",
+            "--url",
+            "https://api2.example.org/up",
+        ],
+        dir.path(),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
+    );
+    assert_eq!(out.code, 3, "{}", out.err);
+    assert!(
+        out.err.contains("https://api2.example.org:443"),
+        "{}",
+        out.err
+    );
+    assert!(out.err.contains("query:key"), "{}", out.err);
+    assert_eq!(read(&dir, "destinations.toml"), tampered);
+    assert_entry_untouched(&store);
+    // A change that touches neither the address nor a place allows nothing, and says the file
+    // differs from the store. No terminal is needed for that, and the store is left alone.
+    let out = run(
+        &["--quiet", "dest", "edit", "api", "--set", "label=Mine"],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert!(out.prompts.is_empty());
+    assert!(
+        out.err.contains("differs from the secret store") && out.err.contains("key"),
+        "{}",
+        out.err
+    );
+    assert!(read(&dir, "destinations.toml").contains("Mine"));
+    assert_entry_untouched(&store);
+}
+
+#[test]
+fn b1_what_the_store_allows_already_is_not_asked_again() {
+    // The address goes back to what the store knows: nothing to add, and nothing to ask on a
+    // terminal-less run either.
+    let dir = config(
+        &api(
+            "https://api2.example.org/up",
+            "X-Api-Key = \"{secret:key}\"\n",
+            "",
+            "",
+        ),
+        "",
+    );
+    let store = MemorySecretSource::new();
+    api_entry(&store);
+    let input = ScriptedInput::default();
+    let out = run(
+        &["dest", "edit", "api", "--url", "https://api.example.org/up"],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert!(out.prompts.is_empty());
+    assert_entry_untouched(&store);
+}
+
+#[test]
+fn i1_quiet_does_not_hide_what_the_question_is_about() {
+    let dir = config(COMMENTED, "");
+    let store = MemorySecretSource::new();
+    with_entry(&store, "zipline", "abcdefghij");
+    let input = ScriptedInput::default();
+    let out = run(
+        &[
+            "--quiet",
+            "dest",
+            "edit",
+            "zipline",
+            "--url",
+            "https://other.example.org",
+        ],
+        dir.path(),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
+    );
+    assert_eq!(out.code, 3);
+    assert!(
+        out.err.contains("https://other.example.org:443"),
+        "{}",
+        out.err
+    );
+    // `secrets allow` is the same.
+    let out = run(
+        &[
+            "--quiet",
+            "secrets",
+            "allow",
+            "zipline",
+            "token",
+            "--origin",
+            "https://x.example.org",
+        ],
+        dir.path(),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
+    );
+    assert_eq!(out.code, 3, "{}", out.err);
+    assert!(out.err.contains("https://x.example.org:443"), "{}", out.err);
+    assert!(
+        out.err.contains("https://zipline.example.org:443"),
+        "{}",
+        out.err
+    );
+}
+
+/// A string of hexadecimal digits, made at run time.
+fn hex_tail() -> String {
+    (0..18u8).map(|i| format!("{:02x}", i * 13 + 7)).collect()
+}
+
+#[test]
+fn i2_export_and_edit_refuse_every_literal_an_import_would_presume_secret() {
+    let work = tempfile::tempdir().unwrap();
+    let t = sentinel();
+    let cases = [
+        // A neutral name, a value that is only hexadecimal.
+        api(
+            "https://api.example.org/up",
+            &format!("X-Request-Tag = \"{}\"\n", hex_tail()),
+            "",
+            "",
+        ),
+        // A reference with a literal behind it.
+        api(
+            "https://api.example.org/up",
+            &format!("X-Neutral = \"{{secret:key}}:{t}\"\n"),
+            "",
+            "",
+        ),
+        // A literal in the body template.
+        api(
+            "https://api.example.org/up",
+            "",
+            "",
+            &format!("body = \"json\"\nbody_template = '{{\"note\":\"{t}\"}}'\n"),
+        ),
+        // A literal in a query parameter and in a field.
+        api(
+            "https://api.example.org/up",
+            "",
+            &format!("folder = \"{t}\"\n"),
+            "",
+        ),
+    ];
+    for (n, text) in cases.iter().enumerate() {
+        let dir = config(text, "");
+        let store = MemorySecretSource::new();
+        let input = ScriptedInput::default();
+        let out = run(
+            &["--json", "dest", "export"],
+            dir.path(),
+            &plain(&store, &input),
+        );
+        assert_eq!(out.code, 11, "case {n}: {}", out.err);
+        assert!(out.out.contains("secret_in_profile"), "case {n}");
+        let leaks = [hex_tail(), t.clone()];
+        for leak in &leaks {
+            assert!(
+                !out.out.contains(leak) && !out.err.contains(leak),
+                "case {n}"
+            );
+        }
+    }
+    // The editor refuses the mixed value too (it used to let it through), without a second round.
+    let clean = api(
+        "https://api.example.org/up",
+        "X-Neutral = \"{secret:key}\"\n",
+        "",
+        "",
+    );
+    let dir = config(&clean, "");
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let body = format!("perl -pi -e 's|\\{{secret:key\\}}|{{secret:key}}:{t}|' \"$1\"\n");
+    let out = run(
+        &["--json", "dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), &body), true),
+    );
+    assert_eq!(out.code, 11, "{}", out.err);
+    assert_eq!(read(&dir, "destinations.toml"), clean);
+    assert!(out.prompts.is_empty());
+    assert!(!out.out.contains(&t) && !out.err.contains(&t));
+    // So does an import, with the same detector.
+    let file = work.path().join("mixed.toml");
+    std::fs::write(&file, &cases[1]).unwrap();
+    let other = config("", "");
+    let out = run(
+        &[
+            "dest",
+            "import",
+            file.to_str().unwrap(),
+            "--yes",
+            "--expect-host",
+            "api.example.org",
+        ],
+        other.path(),
+        &plain(&MemorySecretSource::new(), &input),
+    );
+    assert_ne!(out.code, 0);
+    assert!(!out.out.contains(&t) && !out.err.contains(&t));
+}
+
+#[test]
+fn i3_the_editor_only_suspects_what_the_edit_added_or_changed() {
+    let work = tempfile::tempdir().unwrap();
+    let t = sentinel();
+    // A public field that was in the file already.
+    let original = format!(
+        "[[destination]]\nid = \"api\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\nfile_field = \"file\"\n[destination.request.fields]\nfolder = \"shots\"\n[destination.response]\nurl = \"{{json:$.url}}\"\n"
+    );
+    let dir = config(&original, "");
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let label = "perl -pi -e 's|^type = \"http\"|type = \"http\"\\nlabel = \"Edited\"|' \"$1\"\n";
+    let out = run(
+        &["dest", "edit", "api"],
+        dir.path(),
+        &terminal(&store, &input, editor(work.path(), label), false),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    let file = read(&dir, "destinations.toml");
+    assert!(
+        file.contains("label = \"Edited\"") && file.contains("folder = \"shots\""),
+        "{file}"
+    );
+    // A value the edit adds or changes is still refused.
+    for body in [
+        format!("perl -pi -e 's|^folder = .*|folder = \"{t}\"|' \"$1\"\n"),
+        format!("printf 'note = \"{t}\"\\n' >> \"$1\"\n"),
+    ] {
+        let before = read(&dir, "destinations.toml");
+        let out = run(
+            &["dest", "edit", "api"],
+            dir.path(),
+            &terminal(&store, &input, editor(work.path(), &body), true),
+        );
+        assert_eq!(out.code, 11, "{body}: {}", out.err);
+        assert_eq!(read(&dir, "destinations.toml"), before);
+        assert!(!out.err.contains(&t));
+    }
+}
+
+#[test]
+fn m1_the_editor_copy_is_a_private_directory_under_the_runtime_dir_and_goes_away_whole() {
+    let work = tempfile::tempdir().unwrap();
+    let runtime = tempfile::tempdir().unwrap();
+    let dir = config(COMMENTED, "");
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let log = work.path().join("seen");
+    let body = format!(
+        "d=$(dirname \"$1\")\n{{ stat -c %a \"$d\" 2>/dev/null || stat -f %Lp \"$d\"; }} > {log}.dirmode\necho \"$d\" > {log}.dir\ntouch \"$d/.swap\"\nperl -pi -e 's|^# the main one|# edited|' \"$1\"\n",
+        log = log.display()
+    );
+    let out = run(
+        &["dest", "edit", "zipline"],
+        dir.path(),
+        &Setup {
+            runtime: Some(runtime.path().to_owned()),
+            ..terminal(&store, &input, editor(work.path(), &body), false)
+        },
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert_eq!(
+        std::fs::read_to_string(work.path().join("seen.dirmode"))
+            .unwrap()
+            .trim(),
+        "700"
+    );
+    let seen = std::fs::read_to_string(work.path().join("seen.dir")).unwrap();
+    let seen = Path::new(seen.trim());
+    assert_eq!(seen.parent().unwrap(), runtime.path().join("kropa"));
+    assert!(
+        seen.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(".edit-"),
+        "{seen:?}"
+    );
+    // The directory, with the swap file the editor left in it, is gone.
+    assert!(!seen.exists());
+    assert_eq!(
+        std::fs::read_dir(runtime.path().join("kropa"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert!(read(&dir, "destinations.toml").contains("# edited"));
+    no_temporary_left(&dir);
+}
+
+/// The scenario of `a_signal_while_the_editor_runs...`, run in a process of its own by that test: a
+/// signal sent to the test process must not reach the other tests.
+#[test]
+#[ignore = "run by a_signal_while_the_editor_runs_cancels_and_removes_the_private_copy"]
+fn signal_child_scenario() {
+    let work = tempfile::tempdir().unwrap();
+    let runtime = tempfile::tempdir().unwrap();
+    let dir = config(COMMENTED, "");
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    // The editor is hit by Ctrl-C (SIGINT goes to the process group: here, to us), then ends well.
+    let body = "perl -pi -e 's|^# the main one|# edited|' \"$1\"\nkill -INT $PPID\nsleep 1\nkill -HUP $PPID\nsleep 1\nexit 0\n";
+    let out = run(
+        &["dest", "edit", "zipline"],
+        dir.path(),
+        &Setup {
+            runtime: Some(runtime.path().to_owned()),
+            ..terminal(&store, &input, editor(work.path(), body), true)
+        },
+    );
+    assert_eq!(out.code, 3, "{}", out.err);
+    assert_eq!(read(&dir, "destinations.toml"), COMMENTED);
+    assert_eq!(
+        std::fs::read_dir(runtime.path().join("kropa"))
+            .unwrap()
+            .count(),
+        0
+    );
+    no_temporary_left(&dir);
+}
+
+#[test]
+fn a_signal_while_the_editor_runs_cancels_and_removes_the_private_copy() {
+    let exe = std::env::current_exe().unwrap();
+    let out = std::process::Command::new(exe)
+        .args([
+            "--exact",
+            "signal_child_scenario",
+            "--ignored",
+            "--nocapture",
+        ])
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("1 passed"), "{text}");
+}
+
+#[cfg(unix)]
+#[test]
+fn m2_an_edit_keeps_the_mode_of_the_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = config(COMMENTED, "");
+    let path = dir.path().join("destinations.toml");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+    let store = MemorySecretSource::new();
+    let input = ScriptedInput::default();
+    let out = run(
+        &["dest", "edit", "zipline", "--set", "label=Mine"],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
+    assert_eq!(
+        std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o640
+    );
+}

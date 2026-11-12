@@ -40,11 +40,13 @@ pub fn mixed_literal(template: &Template) -> bool {
     });
     let without_scheme = known
         .or_else(|| {
-            lower.split_once(char::is_whitespace).and_then(|(word, rest)| {
-                (word.len() <= MAX_SCHEME_WORD
-                    && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
-                .then_some(rest)
-            })
+            lower
+                .split_once(char::is_whitespace)
+                .and_then(|(word, rest)| {
+                    (word.len() <= MAX_SCHEME_WORD
+                        && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                    .then_some(rest)
+                })
         })
         .unwrap_or(&lower);
     without_scheme
@@ -137,7 +139,11 @@ pub fn presumed_values(destination: &Destination, old: Option<&Destination>) -> 
     let old_request = old.and_then(|o| o.request.as_ref());
     let mut found = Vec::new();
     let maps = [
-        (&request.headers, old_request.map(|r| &r.headers), Slot::Header as fn(String) -> Slot),
+        (
+            &request.headers,
+            old_request.map(|r| &r.headers),
+            Slot::Header as fn(String) -> Slot,
+        ),
         (&request.query, old_request.map(|r| &r.query), Slot::Query),
         (&request.fields, old_request.map(|r| &r.fields), Slot::Form),
     ];
@@ -179,13 +185,19 @@ mod tests {
         for (slot, value) in [
             (header("X-Api-Key"), "{secret:key}".to_owned()),
             (header("Authorization"), "Bearer {secret:t}".to_owned()),
-            (header("Authorization"), "Basic {base64:{secret:u}:{secret:p}}".to_owned()),
+            (
+                header("Authorization"),
+                "Basic {base64:{secret:u}:{secret:p}}".to_owned(),
+            ),
             (header("Authorization"), "{secret:a}:{secret:b}".to_owned()),
             (header("X-Name"), "{filename}".to_owned()),
             (Slot::Form("name".into()), "{var:name}".to_owned()),
             (Slot::Query("a".into()), String::new()),
             (header("Accept"), "application/json".to_owned()),
-            (header("Authorization"), "Client-ID {secret:client_id}".to_owned()),
+            (
+                header("Authorization"),
+                "Client-ID {secret:client_id}".to_owned(),
+            ),
             (Slot::Query("n".into()), "abc".to_owned()),
             (Slot::Query("n".into()), "{secret:k}-v2".to_owned()),
             (Slot::Query("n".into()), "{inputbox:Title}".to_owned()),
@@ -199,7 +211,10 @@ mod tests {
         let t = token();
         for (slot, value) in [
             (header("X-Neutral"), t.clone()),
-            (header("X-Neutral"), "0123456789abcdef0123456789abcdef0123".to_owned()),
+            (
+                header("X-Neutral"),
+                "0123456789abcdef0123456789abcdef0123".to_owned(),
+            ),
             (Slot::Query("folder".into()), "shots".to_owned()),
             (Slot::Form("folder".into()), "shots".to_owned()),
             (header("Authorization"), format!("{{secret:key}}:{t}")),
@@ -215,11 +230,20 @@ mod tests {
     #[test]
     fn a_json_body_is_read_a_string_at_a_time() {
         let t = token();
-        assert!(!presumed_value(&Slot::Body, r#"{"token":"{secret:key}","n":1}"#));
+        assert!(!presumed_value(
+            &Slot::Body,
+            r#"{"token":"{secret:key}","n":1}"#
+        ));
         assert!(!presumed_value(&Slot::Body, r#"{"file":"{filename}"}"#));
-        assert!(presumed_value(&Slot::Body, &format!(r#"{{"token":"{{secret:key}}","x":"{t}"}}"#)));
+        assert!(presumed_value(
+            &Slot::Body,
+            &format!(r#"{{"token":"{{secret:key}}","x":"{t}"}}"#)
+        ));
         assert!(presumed_value(&Slot::Body, &format!(r#"{{"a":["{t}"]}}"#)));
-        assert!(presumed_value(&Slot::Body, &format!(r#"{{"x":"{{secret:key}}:{t}"}}"#)));
+        assert!(presumed_value(
+            &Slot::Body,
+            &format!(r#"{{"x":"{{secret:key}}:{t}"}}"#)
+        ));
         // Not JSON, with a reference: the structure is not known.
         assert!(!presumed_value(&Slot::Body, "<k>{secret:key}</k>"));
         assert!(presumed_value(&Slot::Body, &format!("<k>{t}</k>")));
@@ -244,7 +268,11 @@ mod tests {
             "Client-ID {secret:key}".to_owned(),
             format!("{{secret:key}}:{t}"),
         ];
-        for (kind, table) in [("header", "headers"), ("query", "query"), ("field", "fields")] {
+        for (kind, table) in [
+            ("header", "headers"),
+            ("query", "query"),
+            ("field", "fields"),
+        ] {
             for value in &values {
                 let name = if kind == "header" { "X-Neutral" } else { "p" };
                 let text = format!(

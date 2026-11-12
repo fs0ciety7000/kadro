@@ -539,7 +539,12 @@ mod tests {
         let link = dir.path().join("destinations.toml");
         std::os::unix::fs::symlink(&target, &link).unwrap();
         write_atomic(&link, "a = 1\n").unwrap();
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "a = 1\n");
         assert_eq!(std::fs::read_dir(&real).unwrap().count(), 1);
         // A link to nothing: an error, and nothing is created behind it.

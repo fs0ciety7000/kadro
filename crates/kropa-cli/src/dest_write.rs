@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 use kropa_core::{Config, ExitCode, set_default_destination};
 use kropa_i18n::Localizer;
 use kropa_upload::UploadError;
-use kropa_upload::literals::presumed_values;
 use kropa_upload::destination::{Destination, DestinationFile, DestinationType, MediaKind};
 use kropa_upload::import::{ImportFormat, MAX_IMPORT_SIZE, import};
+use kropa_upload::literals::presumed_values;
 use kropa_upload::profiles::{
     append_destination, destination_toml, load_destinations, remove_destination,
     replace_destination, replace_destination_text,
@@ -458,8 +458,7 @@ fn show_plans(plans: &[Plan], loc: &Localizer, session: &mut Session<'_, '_>) {
 /// Adds what the plan says to the entry, then takes out what it says.
 fn apply_plan(ctx: &Context<'_>, id: &str, plan: &Plan) -> Result<(), SecretError> {
     if let Some(origin) = &plan.add_origin {
-        ctx.secrets
-            .authorize(id, &plan.name, Some(origin), None)?;
+        ctx.secrets.authorize(id, &plan.name, Some(origin), None)?;
     }
     for place in &plan.add_places {
         ctx.secrets
@@ -776,7 +775,10 @@ impl EditorSignals {
         use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT};
         use std::sync::Arc;
         use std::sync::atomic::AtomicBool;
-        let (raised, armed) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let (raised, armed) = (
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(AtomicBool::new(false)),
+        );
         for signal in [SIGINT, SIGQUIT, SIGHUP] {
             // Once `armed`, the default action runs again; before, the signal is only noted.
             signal_hook::flag::register_conditional_default(signal, Arc::clone(&armed))?;
@@ -818,11 +820,7 @@ impl EditorSignals {
 /// Checks the text a user made of the profile, with the rules of an import. Returns the profile it
 /// describes. A value that an import would presume secret is refused (11) only where the edit added
 /// or changed it with respect to `old`: what was in the file before is not the edit's doing.
-fn check_edited(
-    bytes: &[u8],
-    old: &Destination,
-    loc: &Localizer,
-) -> Result<Destination, CliError> {
+fn check_edited(bytes: &[u8], old: &Destination, loc: &Localizer) -> Result<Destination, CliError> {
     let id = old.id.as_str();
     let invalid = |detail: &str| {
         CliError::new(
