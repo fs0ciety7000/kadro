@@ -18,7 +18,7 @@ use tokio::time::timeout;
 
 use crate::dir::{check_socket_len, current_uid, verify_dir};
 use crate::error::IpcError;
-use crate::proto::{HelloParams, HelloReply, Line, PROTOCOL, WireError, encode, read_line};
+use crate::proto::{HelloParams, HelloReply, Line, PROTOCOL, WireError, encode, read_line, strip_control};
 
 /// How long the connection and the `hello` may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -47,16 +47,34 @@ impl Client {
         Self::connect_as(socket, current_uid()).await
     }
 
-    /// [`Client::connect`] with the UID that the server must have (injected by the tests, which cannot
-    /// be another user). The directory must always belong to this process's user.
+    /// [`Client::connect`] with the UID that the server must have: a hook for the tests, which cannot
+    /// be another user without `sudo` (not part of the API). The directory must always belong to this
+    /// process's user.
     ///
     /// # Errors
     /// See [`Client::connect`].
+    #[doc(hidden)]
     pub async fn connect_as(socket: &Path, peer_uid: u32) -> Result<Self, IpcError> {
         check_socket_len(socket)?;
         if let Some(dir) = socket.parent() {
             verify_dir(dir, current_uid())?;
         }
+        Self::connect_checked(socket, peer_uid).await
+    }
+
+    /// [`Client::connect_as`] without the check of the directory: a hook for the tests with two real
+    /// users (lot 2.1d), where the server's directory belongs to the other one. Never used by the
+    /// command line.
+    ///
+    /// # Errors
+    /// See [`Client::connect`], except the directory errors.
+    #[doc(hidden)]
+    pub async fn connect_as_unchecked_dir(socket: &Path, peer_uid: u32) -> Result<Self, IpcError> {
+        check_socket_len(socket)?;
+        Self::connect_checked(socket, peer_uid).await
+    }
+
+    async fn connect_checked(socket: &Path, peer_uid: u32) -> Result<Self, IpcError> {
         let stream = match timeout(CONNECT_TIMEOUT, UnixStream::connect(socket)).await {
             Err(_) => return Err(IpcError::Protocol("the connection timed out".to_owned())),
             Ok(Ok(stream)) => stream,
@@ -108,7 +126,14 @@ impl Client {
                 client: PROTOCOL,
             });
         }
-        client.hello = reply;
+        // What the peer says about itself is shown to the user: no control characters.
+        client.hello = HelloReply {
+            server: strip_control(&reply.server),
+            version: strip_control(&reply.version),
+            methods: reply.methods.iter().map(|m| strip_control(m)).collect(),
+            features: reply.features.iter().map(|f| strip_control(f)).collect(),
+            ..reply
+        };
         client.call_timeout = CALL_TIMEOUT;
         Ok(client)
     }

@@ -13,7 +13,8 @@ use crate::error::IpcError;
 /// Application ID (D-Bus name, `.desktop` and `.service` file names).
 pub const APP_ID: &str = "io.github.fs0ciety7000.Kropa";
 
-/// How long [`ensure_running`] waits for the socket after the launch.
+/// The usual budget of [`ensure_running`]: the whole call, from the first connection to the answer to
+/// `hello` of an application that was started, takes at most this long (review 2.1a m12).
 pub const START_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Pause between two attempts to connect.
@@ -22,11 +23,11 @@ const POLL: Duration = Duration::from_millis(50);
 /// Something that starts the application. It returns when the launch is done, not when the socket
 /// answers: [`ensure_running`] waits for that.
 pub trait Launcher {
-    /// Starts the application.
+    /// Starts the application, taking at most `budget` (what is left of the call's total budget).
     ///
     /// # Errors
     /// `daemon_start_failed`.
-    fn launch(&self) -> Result<(), IpcError>;
+    fn launch(&self, budget: Duration) -> Result<(), IpcError>;
 }
 
 /// Launch through the session bus (`StartServiceByName`, decision D1): the application starts in the
@@ -71,7 +72,7 @@ impl Default for DbusActivation {
 
 #[cfg(target_os = "linux")]
 impl Launcher for DbusActivation {
-    fn launch(&self) -> Result<(), IpcError> {
+    fn launch(&self, budget: Duration) -> Result<(), IpcError> {
         use zbus::connection::Builder;
         use zbus::fdo::DBusProxy;
         use zbus::names::WellKnownName;
@@ -85,7 +86,7 @@ impl Launcher for DbusActivation {
                 None => Builder::session(),
             };
             let connection = builder
-                .method_timeout(self.timeout)
+                .method_timeout(self.timeout.min(budget))
                 .build()
                 .await
                 .map_err(|e| failed("connection", &e))?;
@@ -124,7 +125,7 @@ impl Spawn {
 }
 
 impl Launcher for Spawn {
-    fn launch(&self) -> Result<(), IpcError> {
+    fn launch(&self, _budget: Duration) -> Result<(), IpcError> {
         use std::os::unix::process::CommandExt;
         let child = Command::new(&self.program)
             .args(&self.args)
@@ -142,12 +143,18 @@ impl Launcher for Spawn {
     }
 }
 
-/// Connects to the application of this user, launching it first if nobody listens, and waiting
-/// [`START_TIMEOUT`]-ish at most.
+/// Connects to the application of this user, launching it first if nobody listens.
+///
+/// `wait` is the budget of the whole call, not of one step: the first connection, the launch (which
+/// is given what is left), the pauses and each new connection (`hello` included) all count against
+/// one deadline. When it passes, the error is `daemon_start_timeout`; a graphical application that
+/// needs more than `wait` to start therefore ends in that error even if it is up a moment later, and
+/// the next command finds it running. The call never takes noticeably longer than `wait`
+/// (`docs/cli.md`, "Delays").
 ///
 /// # Errors
 /// Everything [`Client::connect`] can refuse (nothing is launched for those), `daemon_start_failed`
-/// when the launch fails, `daemon_start_timeout` when the socket stays silent.
+/// when the launch fails, `daemon_start_timeout` when the deadline passes.
 pub async fn ensure_running(launcher: &dyn Launcher, wait: Duration) -> Result<Client, IpcError> {
     ensure_running_in(&runtime_dir()?, launcher, wait).await
 }
@@ -161,28 +168,43 @@ pub async fn ensure_running_in(
     launcher: &dyn Launcher,
     wait: Duration,
 ) -> Result<Client, IpcError> {
+    let deadline = Instant::now() + wait;
     let socket = socket_path(dir);
     if crate::dir::dir_exists(dir) {
         // An unsafe directory is refused before anything is launched into it.
         crate::dir::verify_dir(dir, crate::dir::current_uid())?;
     }
     // The directory may not exist yet: a missing socket is "not running", not a refusal.
-    match connect_if_present(&socket).await {
+    match connect_before(&socket, deadline, wait).await {
         Err(IpcError::NotRunning(_)) => {}
         other => return other,
     }
-    launcher.launch()?;
-    let deadline = Instant::now() + wait;
+    let left = deadline.saturating_duration_since(Instant::now());
+    if left.is_zero() {
+        return Err(IpcError::StartTimeout(wait));
+    }
+    launcher.launch(left)?;
     loop {
-        match connect_if_present(&socket).await {
+        match connect_before(&socket, deadline, wait).await {
             Err(IpcError::NotRunning(_)) => {}
             other => return other,
         }
         if Instant::now() >= deadline {
             return Err(IpcError::StartTimeout(wait));
         }
-        tokio::time::sleep(POLL).await;
+        tokio::time::sleep(POLL.min(deadline.saturating_duration_since(Instant::now()))).await;
     }
+}
+
+/// [`connect_if_present`], cut at `deadline`.
+async fn connect_before(
+    socket: &Path,
+    deadline: Instant,
+    wait: Duration,
+) -> Result<Client, IpcError> {
+    tokio::time::timeout_at(deadline.into(), connect_if_present(socket))
+        .await
+        .unwrap_or(Err(IpcError::StartTimeout(wait)))
 }
 
 async fn connect_if_present(socket: &Path) -> Result<Client, IpcError> {

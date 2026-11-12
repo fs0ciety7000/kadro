@@ -28,5 +28,5 @@ pub use error::IpcError;
 pub use launcher::DbusActivation;
 pub use launcher::{APP_ID, Launcher, Spawn, ensure_running, ensure_running_in};
 pub use probe::{Probe, ProbeState, probe, probe_in, service_file_present};
-pub use proto::{HelloParams, HelloReply, MAX_LINE, PROTOCOL, RpcError, loggable_params};
+pub use proto::{HelloParams, HelloReply, MAX_LINE, PROTOCOL, RpcError, loggable_params, strip_control};
 pub use server::{BoxFuture, Handler, Server, ServerConfig, ServerThread, Shutdown, serve};

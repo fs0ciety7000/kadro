@@ -91,11 +91,11 @@ impl WireError {
         match self.data {
             Some(d) => RpcError {
                 exit_code: d.exit_code,
-                code: d.code,
-                reason: d.reason,
-                message: self.message,
+                code: strip_control(&d.code),
+                reason: d.reason.map(|r| strip_control(&r)),
+                message: strip_control(&self.message),
             },
-            None => RpcError::daemon("ipc_protocol_error", &self.message),
+            None => RpcError::daemon("ipc_protocol_error", &strip_control(&self.message)),
         }
     }
 }
@@ -127,15 +127,30 @@ pub struct HelloReply {
     pub features: Vec<String>,
 }
 
-/// Parameters of a method for logs: the content of `secrets.*` is never shown, whatever the
-/// verbosity (`docs/security/secrets.md` section 1.2).
+/// Parameters of a method for logs, by allow-list: only `hello`, `app.*` and `capture.*` are shown.
+/// Everything else (`secrets.*`, and any method added later, a typo included) is masked, whatever the
+/// verbosity (`docs/security/secrets.md` section 1.2, review 2.1a m9). A new family of methods that
+/// may be logged is added here on purpose.
 #[must_use]
 pub fn loggable_params(method: &str, params: &Value) -> Value {
-    if method.starts_with("secrets.") {
-        Value::String("<redacted>".to_owned())
-    } else {
+    let shown = method == "hello"
+        || method
+            .strip_prefix("app.")
+            .or_else(|| method.strip_prefix("capture."))
+            .is_some_and(|rest| !rest.is_empty());
+    if shown {
         params.clone()
+    } else {
+        Value::String("<redacted>".to_owned())
     }
+}
+
+/// Text of the peer without control characters (escape sequences, line feeds, NUL...), for what is
+/// printed on a terminal or put in a message: a server that is not the real one must not be able to
+/// write on the user's screen (review 2.1a m11).
+#[must_use]
+pub fn strip_control(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
 }
 
 /// What reading one line produced.
@@ -238,10 +253,44 @@ mod tests {
     }
 
     #[test]
-    fn secrets_parameters_are_never_loggable() {
+    fn only_the_listed_methods_are_loggable() {
         let params = serde_json::json!({"value": "hunter2"});
-        assert_eq!(loggable_params("secrets.set", &params), "<redacted>");
-        assert_eq!(loggable_params("app.status", &params), params);
+        for shown in ["hello", "app.status", "app.quit", "capture.region"] {
+            assert_eq!(loggable_params(shown, &params), params, "{shown}");
+        }
+        for masked in [
+            "secrets.set",
+            "secrets.unlock",
+            "secret.set", // a typo is masked too
+            "future.method",
+            "helloo",
+            "application.x",
+            "app.",
+            "capture.",
+            "",
+        ] {
+            assert_eq!(loggable_params(masked, &params), "<redacted>", "{masked}");
+        }
+    }
+
+    #[test]
+    fn control_characters_are_removed_from_the_text_of_the_peer() {
+        assert_eq!(strip_control("a\x1b[2Jb\nc\0d\u{9b}e"), "a[2Jbcde");
+        assert_eq!(strip_control("naïve — ok"), "naïve — ok");
+        let wire = WireError {
+            code: 1,
+            message: "bad\x1b]0;title\x07".into(),
+            data: Some(WireData {
+                exit_code: 1,
+                code: "in\nternal".into(),
+                reason: Some("re\x1bason".into()),
+            }),
+        };
+        let e = wire.into_rpc();
+        assert_eq!(
+            (e.message.as_str(), e.code.as_str(), e.reason.as_deref()),
+            ("bad]0;title", "internal", Some("reason"))
+        );
     }
 
     #[test]
