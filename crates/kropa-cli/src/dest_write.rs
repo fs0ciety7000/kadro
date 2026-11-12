@@ -21,8 +21,8 @@ use kropa_upload::profiles::{
     append_destination, destination_toml, load_destinations, remove_destination,
     replace_destination, replace_destination_text,
 };
-use kropa_upload::secret::{Authorization, Placement, SecretError};
-use serde_json::{Value, json};
+use kropa_upload::secret::{Placement, SecretError};
+use serde_json::json;
 
 use crate::args::{DestAddArgs, DestKind};
 use crate::errors::CliError;
@@ -111,14 +111,22 @@ pub fn add(
         DestKind::Zipline => {}
         DestKind::Http => return Err(usage(loc, "error-dest-add-http", &[])),
         DestKind::S3 | DestKind::Sftp => {
-            let lot = if args.kind == DestKind::S3 { "2.7" } else { "4.9" };
+            let lot = if args.kind == DestKind::S3 {
+                "2.7"
+            } else {
+                "4.9"
+            };
             let mut error = CliError::new(
                 ExitCode::Unsupported,
                 loc,
                 "error-unsupported-one",
                 &[("lots", lot)],
             );
-            error.lots = vec![if args.kind == DestKind::S3 { "2.7" } else { "4.9" }];
+            error.lots = vec![if args.kind == DestKind::S3 {
+                "2.7"
+            } else {
+                "4.9"
+            }];
             return Err(error);
         }
     }
@@ -379,7 +387,7 @@ fn apply_change(
     }
     write().map_err(|e| dest_write_error(&e, loc))?;
     let mut secrets: Vec<(String, &'static str)> = Vec::new();
-    let mut failures: Vec<(String, SecretError)> = Vec::new();
+    let mut failures: Vec<(String, UploadError)> = Vec::new();
     for (name, places) in &after.places {
         let mut action = "unchanged";
         if follows {
@@ -388,14 +396,14 @@ fn apply_change(
                 Ok(false) => {}
                 Err(e) => {
                     action = "failed";
-                    failures.push((name.clone(), e));
+                    failures.push((name.clone(), UploadError::from(e)));
                 }
             }
         }
         secrets.push((name.clone(), action));
     }
     if let Some((_, first)) = failures.first() {
-        let mut error = dest_write_error(&UploadError::from(first.clone_reason()), loc);
+        let mut error = dest_write_error(first, loc);
         for (name, e) in &failures {
             let text = loc.message_args(
                 "note-dest-edit-authorize-failed",
@@ -427,30 +435,9 @@ fn follow(
         ctx.secrets.authorize(id, name, Some(origin), None)?;
     }
     for place in places {
-        ctx.secrets
-            .authorize(id, name, None, Some(place.clone()))?;
+        ctx.secrets.authorize(id, name, None, Some(place.clone()))?;
     }
     Ok(true)
-}
-
-/// A store error cannot be cloned; what the caller needs is its reason and text.
-trait CloneReason {
-    fn clone_reason(&self) -> SecretError;
-}
-
-impl CloneReason for SecretError {
-    fn clone_reason(&self) -> SecretError {
-        match self {
-            Self::NotDelivered => Self::NotDelivered,
-            Self::Unavailable(detail) => Self::Unavailable(detail.clone()),
-            Self::Store { reason, detail } => Self::Store {
-                reason,
-                detail: detail.clone(),
-            },
-            #[allow(unreachable_patterns)]
-            other => Self::Unavailable(other.to_string()),
-        }
-    }
 }
 
 /// `kropa dest edit <ID> [--url URL] [--set KEY=VALUE]...`; without option, the profile opens in
@@ -475,7 +462,13 @@ pub fn edit(
             Some(secrets) => secrets,
             None => {
                 session.note(&loc.message_args("note-dest-edit-unchanged", &[("id", id)]));
-                report(session, "edit", Some(id), default_of(config_dir).as_deref(), &[]);
+                report(
+                    session,
+                    "edit",
+                    Some(id),
+                    default_of(config_dir).as_deref(),
+                    &[],
+                );
                 return Ok(ExitCode::Ok);
             }
         }
@@ -497,7 +490,13 @@ pub fn edit(
         require_https(&new, loc)?;
         if new == old {
             session.note(&loc.message_args("note-dest-edit-unchanged", &[("id", id)]));
-            report(session, "edit", Some(id), default_of(config_dir).as_deref(), &[]);
+            report(
+                session,
+                "edit",
+                Some(id),
+                default_of(config_dir).as_deref(),
+                &[],
+            );
             return Ok(ExitCode::Ok);
         }
         apply_change(&old, &new, ctx, session, || {
@@ -505,7 +504,13 @@ pub fn edit(
         })?
     };
     session.note(&loc.message_args("note-dest-edited", &[("id", id)]));
-    report(session, "edit", Some(id), default_of(config_dir).as_deref(), &secrets);
+    report(
+        session,
+        "edit",
+        Some(id),
+        default_of(config_dir).as_deref(),
+        &secrets,
+    );
     Ok(ExitCode::Ok)
 }
 
@@ -585,8 +590,8 @@ fn check_edited(bytes: &[u8], id: &str, loc: &Localizer) -> Result<Destination, 
         return Err(invalid("larger than 64 KiB"));
     }
     let text = std::str::from_utf8(bytes).map_err(|_| invalid("not UTF-8 text"))?;
-    let mut file = DestinationFile::parse(text, "the edited profile")
-        .map_err(|e| invalid(&e.to_string()))?;
+    let mut file =
+        DestinationFile::parse(text, "the edited profile").map_err(|e| invalid(&e.to_string()))?;
     if file.destination.len() != 1 || file.destination[0].id != id {
         return Err(invalid(
             "exactly one destination, with the same id (its secrets are filed under it)",
@@ -869,6 +874,3 @@ pub fn export(
     }
     Ok(ExitCode::Ok)
 }
-
-#[allow(dead_code)]
-fn _types(_: &Authorization, _: &Value) {}
