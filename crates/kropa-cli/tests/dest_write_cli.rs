@@ -1447,7 +1447,13 @@ fn b1_what_the_store_allows_already_is_not_asked_again() {
     assert!(out.prompts.is_empty());
     assert_entry_untouched(&store);
     let out = run(
-        &["dest", "edit", "api", "--url", "https://api.example.org/up"],
+        &[
+            "dest",
+            "edit",
+            "api",
+            "--url",
+            "https://api3.example.org/up",
+        ],
         dir.path(),
         &plain(&store, &input),
     );
