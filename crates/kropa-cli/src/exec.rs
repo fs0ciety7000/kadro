@@ -311,8 +311,8 @@ fn run_command(
                 DestCommand::Edit { id, url, sets, .. } => {
                     return dest_write::edit(id, url.as_deref(), sets, &dir, ctx, session);
                 }
-                DestCommand::Remove { id, .. } => {
-                    return dest_write::remove(id, &config, &dir, ctx, session);
+                DestCommand::Remove { id, yes } => {
+                    return dest_write::remove(id, *yes, &config, &dir, ctx, session);
                 }
                 DestCommand::SetDefault { id, .. } => {
                     return dest_write::set_default(id.as_deref(), &dir, ctx, session);
