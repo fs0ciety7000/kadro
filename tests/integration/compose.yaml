@@ -7,7 +7,7 @@
 # ports, and exports them. Compose refuses to start when one is missing.
 #
 # - default profile: Zipline 4 + PostgreSQL behind Caddy (TLS). Lot 1.11.
-# - profile `s3`: Garage (S3). Declared here, exercised from lot 2.7.
+# - profile `s3`: Garage (S3), reached over TLS through the same Caddy (port 18444). Lot 2.7a.
 # - profile `sftp`: OpenSSH (SFTP). Declared here, exercised from lot 4.9.
 #
 # Every published port is bound to 127.0.0.1. PostgreSQL and Zipline are not published at all and keep
@@ -63,6 +63,8 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${KROPA_IT_HTTPS_PORT:-18443}:443"
+      # The S3 API of Garage over TLS (profile `s3`); answers 502 when Garage is not started.
+      - "127.0.0.1:${KROPA_IT_S3_HTTPS_PORT:-18444}:8443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${KROPA_IT_CERT_DIR:?run tests/integration/run.sh}:/certs:ro
@@ -76,13 +78,17 @@ services:
     secrets:
       - garage_rpc
       - garage_admin
-    ports:
-      - "127.0.0.1:${KROPA_IT_S3_PORT:-13900}:3900"
-      - "127.0.0.1:${KROPA_IT_GARAGE_ADMIN_PORT:-13903}:3903"
+    # Not published: the S3 API is reached through Caddy (TLS), and run.sh drives the `garage` command
+    # line of the container. The image has no shell, so the check runs the binary itself.
     volumes:
       - ./garage.toml:/etc/garage.toml:ro
     tmpfs:
       - /var/lib/garage
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   openssh:
     profiles: ["sftp"]

@@ -81,6 +81,17 @@ pub enum FailureKind {
     BrokerRefused,
     /// The broker cannot be used at all: absent, not signed by the project (`keychain_broker_unavailable`).
     BrokerUnavailable,
+    /// The `age` vault needs its passphrase and nobody can give it: no terminal, no `--password-fd`
+    /// (`vault_locked`, exit 7).
+    VaultLocked,
+    /// The passphrase does not open the vault, or the file was altered: one single message for both
+    /// (`vault_wrong_passphrase`, exit 7).
+    VaultWrongPassphrase,
+    /// The vault file or its folder is a link, belongs to someone else or is open to others
+    /// (`vault_unsafe_file`, exit 7).
+    VaultUnsafeFile,
+    /// The vault asks for more scrypt work than allowed (`vault_work_factor`, exit 7).
+    VaultWorkFactor,
 }
 
 impl FailureKind {
@@ -96,6 +107,10 @@ impl FailureKind {
             Self::Missing => "secret_missing",
             Self::BrokerRefused => "keychain_broker_refused",
             Self::BrokerUnavailable => "keychain_broker_unavailable",
+            Self::VaultLocked => "vault_locked",
+            Self::VaultWrongPassphrase => "vault_wrong_passphrase",
+            Self::VaultUnsafeFile => "vault_unsafe_file",
+            Self::VaultWorkFactor => "vault_work_factor",
             Self::Exists | Self::StoreError => "secret_store_error",
         }
     }
@@ -113,6 +128,10 @@ impl FailureKind {
             Self::StoreError => "store_error",
             Self::BrokerRefused => "broker_refused",
             Self::BrokerUnavailable => "broker_unavailable",
+            Self::VaultLocked => "vault_locked",
+            Self::VaultWrongPassphrase => "vault_wrong_passphrase",
+            Self::VaultUnsafeFile => "vault_unsafe_file",
+            Self::VaultWorkFactor => "vault_work_factor",
         }
     }
 
@@ -128,6 +147,10 @@ impl FailureKind {
             "store_error" => Self::StoreError,
             "broker_refused" => Self::BrokerRefused,
             "broker_unavailable" => Self::BrokerUnavailable,
+            "vault_locked" => Self::VaultLocked,
+            "vault_wrong_passphrase" => Self::VaultWrongPassphrase,
+            "vault_unsafe_file" => Self::VaultUnsafeFile,
+            "vault_work_factor" => Self::VaultWorkFactor,
             _ => return None,
         })
     }
@@ -321,6 +344,10 @@ mod tests {
             FailureKind::StoreError,
             FailureKind::BrokerRefused,
             FailureKind::BrokerUnavailable,
+            FailureKind::VaultLocked,
+            FailureKind::VaultWrongPassphrase,
+            FailureKind::VaultUnsafeFile,
+            FailureKind::VaultWorkFactor,
         ];
         for kind in kinds {
             assert_eq!(FailureKind::from_wire_name(kind.wire_name()), Some(kind));

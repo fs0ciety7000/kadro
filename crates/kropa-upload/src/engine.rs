@@ -10,7 +10,9 @@
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
+use bytes::Bytes;
 use regex::RegexBuilder;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, LOCATION};
 use reqwest::multipart::{Form, Part};
@@ -28,6 +30,7 @@ use crate::error::{Retry, UploadError};
 use crate::http::{HttpClient, network_error};
 use crate::masked::{CheckedOutput, MASK, MaskedText, SecretSet, register_secret};
 use crate::origin::{canonical_origin, origin_of};
+use crate::s3::{ObjectStoreBackend, S3Backend, S3Settings, SECRET_NAME};
 use crate::secret::{Placement, SHORT_SECRET_LEN, SecretSource, SecretValue};
 use crate::sensitive::is_sensitive_name;
 use crate::template::{Env, Function, Group, Template};
@@ -193,6 +196,8 @@ pub struct Uploader<'a> {
     secrets: &'a dyn SecretSource,
     http: HttpClient,
     log: DebugLog,
+    /// Replaces the S3 side (tests); without it `object_store` is built once the key is loaded.
+    s3: Option<Arc<dyn S3Backend>>,
 }
 
 struct Resolved {
@@ -334,7 +339,16 @@ impl<'a> Uploader<'a> {
             secrets,
             http: HttpClient::new()?,
             log: DebugLog::new(0),
+            s3: None,
         })
+    }
+
+    /// Uses `backend` for `s3` destinations instead of `object_store` (tests). The secret is still
+    /// resolved and checked first.
+    #[must_use]
+    pub fn with_s3_backend(mut self, backend: Arc<dyn S3Backend>) -> Self {
+        self.s3 = Some(backend);
+        self
     }
 
     /// Keeps a redacted journal of the exchange, up to `level` (1: `-v`, 2: `-vv`).
@@ -357,6 +371,7 @@ impl<'a> Uploader<'a> {
             secrets,
             http,
             log: DebugLog::new(0),
+            s3: None,
         }
     }
 
@@ -391,6 +406,9 @@ impl<'a> Uploader<'a> {
         vars: &[(String, String)],
     ) -> Result<UploadOutcome, UploadError> {
         let compiled = destination.compile()?;
+        if let Some(s3) = &compiled.s3 {
+            return self.upload_s3(&compiled, s3, input).await;
+        }
         self.log.record(
             1,
             &format!(
@@ -440,6 +458,81 @@ impl<'a> Uploader<'a> {
         )
     }
 
+    /// `PutObject` of the file, then the link: `public_base_url` and the key, or a presigned `GET`.
+    async fn upload_s3(
+        &self,
+        compiled: &Compiled,
+        s3: &S3Settings,
+        input: &UploadInput,
+    ) -> Result<UploadOutcome, UploadError> {
+        self.log.record(
+            1,
+            &format!(
+                "upload: S3 to {} ({} bytes, {})",
+                s3.origin(),
+                input.bytes.len(),
+                input.mime,
+            ),
+        );
+        if input.bytes.len() as u64 > compiled.max_size {
+            return Err(UploadError::failed(
+                "file_too_large",
+                "the file is larger than max_size",
+            ));
+        }
+        let accepted = compiled.kinds.contains(&MediaKind::File)
+            || (input.is_image() && compiled.kinds.contains(&MediaKind::Image));
+        if !accepted {
+            return Err(UploadError::config(
+                "this destination does not accept this kind of file",
+            ));
+        }
+        let key = s3.object_key(&input.name)?;
+        // The transport and the origin first, then the key: nothing is built before it is loaded.
+        let mut resolved = self.resolve_secrets(compiled)?;
+        let secret =
+            resolved
+                .values
+                .remove(SECRET_NAME)
+                .ok_or_else(|| UploadError::SecretMissing {
+                    name: SECRET_NAME.to_owned(),
+                })?;
+        let mut known = SecretSet::loaded();
+        known.add(secret.expose());
+        let backend: Arc<dyn S3Backend> = match &self.s3 {
+            Some(backend) => Arc::clone(backend),
+            None => Arc::new(ObjectStoreBackend::new(s3, &secret, &self.http)?),
+        };
+        let timeout_error = || UploadError::Network {
+            reason: "timeout",
+            detail: "the server did not answer in time".to_owned(),
+        };
+        tokio::time::timeout(
+            compiled.timeout,
+            backend.put(&key, Bytes::from(input.bytes.clone()), &input.mime),
+        )
+        .await
+        .map_err(|_| timeout_error())??;
+        let url = match s3.presign {
+            Some(ttl) => tokio::time::timeout(compiled.timeout, backend.presign_get(&key, ttl))
+                .await
+                .map_err(|_| timeout_error())??,
+            None => s3.public_url(&key)?,
+        };
+        // The presigned URL holds the access key id and a signature: neither is the secret key, which is
+        // what the check looks for.
+        let url_text = validate_extracted_url(url.as_str())?;
+        let url = check_output(url.as_str(), &url_text, &known)?;
+        Ok(UploadOutcome {
+            status: 200,
+            url,
+            thumbnail_url: None,
+            deletion_url: None,
+            warnings: resolved.warnings,
+            headers: Vec::new(),
+        })
+    }
+
     fn resolve_secrets(&self, compiled: &Compiled) -> Result<Resolved, UploadError> {
         let slots = compiled.secret_slots();
         let mut resolved = Resolved {
@@ -475,7 +568,7 @@ impl<'a> Uploader<'a> {
             if !entry
                 .origins
                 .iter()
-                .any(|o| canonical_origin(o).as_deref() == Some(origin.as_str()))
+                .any(|o| o == &origin || canonical_origin(o).as_deref() == Some(origin.as_str()))
             {
                 return Err(UploadError::security(
                     "origin_not_allowed",
@@ -958,7 +1051,7 @@ fn masked_answer(answer: &Answer, known: &SecretSet) -> (Answer, bool) {
     )
 }
 
-fn retry_of(status: u16) -> Retry {
+pub(crate) fn retry_of(status: u16) -> Retry {
     if matches!(status, 408 | 429) || (500..=599).contains(&status) {
         Retry::Transient
     } else {

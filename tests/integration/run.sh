@@ -4,7 +4,7 @@
 # Starts the integration servers of compose.yaml, prepares them, runs the integration tests, stops
 # everything. See docs/testing/integration.md.
 #
-#   tests/integration/run.sh test [--trust system|bundle]   up, tests, down (down even on failure)
+#   tests/integration/run.sh test [--trust system|bundle] [--profile s3]   up, tests, down (down even on failure)
 #   tests/integration/run.sh up   [--trust system|bundle] [--profile s3|sftp]...
 #   tests/integration/run.sh down
 #
@@ -12,7 +12,9 @@
 # (PostgreSQL, Zipline, Garage, SSH) and the TLS key are generated here, kept in a private folder
 # (mode 0700, outside the repository) and removed by `down`. The Zipline user is created through the
 # API of Zipline, and its token is written to a 0600 file that the Rust test pipes to
-# `kropa secrets set --secret-stdin`.
+# `kropa secrets set --secret-stdin`. With `--profile s3`, Garage is set up too (layout, a key made by
+# Garage itself, a bucket, the rights): the secret key is read from the output of `garage key create`,
+# never typed in an argument, and written to a 0600 file that the S3 test pipes the same way.
 #
 # TLS: Kropa refuses a secret over plain HTTP and has no option to trust a certificate. Zipline is
 # therefore behind Caddy with a certificate from a throwaway CA (name constraint: `localhost`
@@ -30,6 +32,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)
 state="${XDG_RUNTIME_DIR:-/tmp}/kropa-it-$(id -u)"
 port="${KROPA_IT_HTTPS_PORT:-18443}"
+s3_port="${KROPA_IT_S3_HTTPS_PORT:-18444}"
+s3_bucket=kropa-test
 anchor=/usr/local/share/ca-certificates/kropa-it-ca.crt
 
 die() { echo "run.sh: $*" >&2; exit 1; }
@@ -58,7 +62,7 @@ gen_secret() { # name bytes: creates the secret file once per run
 # Runs docker compose with the secrets of the run in ITS environment only (the others are files).
 compose() {
   (
-    export KROPA_IT_ZIPLINE_SECRET KROPA_IT_DATABASE_URL KROPA_IT_STATE_DIR KROPA_IT_CERT_DIR KROPA_IT_HTTPS_PORT
+    export KROPA_IT_ZIPLINE_SECRET KROPA_IT_DATABASE_URL KROPA_IT_STATE_DIR KROPA_IT_CERT_DIR KROPA_IT_HTTPS_PORT KROPA_IT_S3_HTTPS_PORT
     KROPA_IT_ZIPLINE_SECRET=$(cat "$state/zipline-secret")
     # The address of the database, put together from parts so that no literal user:value@host appears here.
     local scheme=postgres at=@ colon=:
@@ -66,6 +70,7 @@ compose() {
     KROPA_IT_STATE_DIR="$state"
     KROPA_IT_CERT_DIR="$state/certs"
     KROPA_IT_HTTPS_PORT="$port"
+    KROPA_IT_S3_HTTPS_PORT="$s3_port"
     exec docker compose --file "$here/compose.yaml" "$@"
   )
 }
@@ -156,12 +161,48 @@ bootstrap_zipline() {
   rm -f "$jar"
 }
 
+# Garage, set up through its own command line (the image has no shell: `docker compose exec` runs the
+# binary directly). Its logs go to stderr, its answers to stdout. The key is made by Garage: the secret
+# is read from the answer and goes to a 0600 file, nothing is printed.
+garage() { compose --profile s3 exec -T garage /garage "$@" 2>/dev/null; }
+
+bootstrap_garage() {
+  local i node="" created=""
+  for i in $(seq 1 60); do
+    node=$(garage node id -q | cut -d@ -f1) && [ -n "$node" ] && break
+    sleep 1
+  done
+  [ -n "$node" ] || { compose logs --tail 40 garage >&2 || true; die "Garage does not answer"; }
+  garage layout assign --zone dc1 --capacity 1G "$node" >/dev/null || die "the Garage layout could not be staged"
+  garage layout apply --version 1 >/dev/null || die "the Garage layout could not be applied"
+  for i in $(seq 1 30); do
+    created=$(garage key create kropa-it) && break
+    sleep 1
+  done
+  [ -n "$created" ] || die "the Garage key could not be created"
+  # The public identifier, then the secret key, each in its own 0600 file.
+  (umask 077
+   printf '%s\n' "$created" | awk '/^Key ID:/ { print $3 }' > "$state/garage-key-id"
+   printf '%s\n' "$created" | awk '/^Secret key:/ { print $3 }' > "$state/garage-secret-key")
+  created=""
+  [ -s "$state/garage-key-id" ] && [ -s "$state/garage-secret-key" ] || die "the Garage key could not be read"
+  mask "$(cat "$state/garage-secret-key")"
+  garage bucket create "$s3_bucket" >/dev/null || die "the Garage bucket could not be created"
+  garage bucket allow --read --write --owner "$s3_bucket" --key kropa-it >/dev/null \
+    || die "the Garage rights could not be set"
+  echo "Garage: https://localhost:$s3_port, bucket $s3_bucket, region garage"
+}
+
 cmd_up() {
+  local with_s3=""
   local trust="" profiles=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --trust) trust="${2:?--trust needs system or bundle}"; shift 2 ;;
-      --profile) profiles+=(--profile "${2:?--profile needs s3 or sftp}"); shift 2 ;;
+      --profile)
+        profiles+=(--profile "${2:?--profile needs s3 or sftp}")
+        if [ "$2" = s3 ]; then with_s3=yes; fi
+        shift 2 ;;
       *) die "up: unknown argument $1" ;;
     esac
   done
@@ -182,6 +223,10 @@ cmd_up() {
   wait_for_zipline
   bootstrap_zipline
   echo "Zipline: https://localhost:$port (trust: $trust)"
+  if [ -n "$with_s3" ]; then
+    bootstrap_garage
+    echo yes > "$state/with-s3"
+  fi
 }
 
 cmd_down() {
@@ -201,10 +246,17 @@ cmd_test() {
   local ssl_file=""
   if [ "$(cat "$state/trust")" = bundle ]; then ssl_file="$state/ca-bundle.crt"; fi
   cd "$root"
+  # The S3 test runs when Garage was started (`--profile s3`), beside the Zipline one.
+  local tests=(--test zipline_integration)
+  if [ -s "$state/with-s3" ]; then tests+=(--test s3_integration); fi
   KROPA_IT_ZIPLINE_URL="https://localhost:$port" \
   KROPA_IT_ZIPLINE_TOKEN_FILE="$state/zipline-token" \
+  KROPA_IT_S3_URL="https://localhost:$s3_port" \
+  KROPA_IT_S3_BUCKET="$s3_bucket" \
+  KROPA_IT_S3_KEY_ID_FILE="$state/garage-key-id" \
+  KROPA_IT_S3_SECRET_FILE="$state/garage-secret-key" \
   KROPA_IT_SSL_CERT_FILE="$ssl_file" \
-    cargo nextest run --profile it --locked -p kropa --test zipline_integration --run-ignored only
+    cargo nextest run --profile it --locked -p kropa "${tests[@]}" --run-ignored only
 }
 
 case "${1:-}" in

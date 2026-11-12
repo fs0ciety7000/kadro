@@ -177,7 +177,9 @@ impl<B: ItemStore> SecretStore for KeychainStore<B> {
             }
             Err(failure) => {
                 let state = match failure.kind {
-                    FailureKind::Locked => StoreState::Locked,
+                    FailureKind::Locked
+                    | FailureKind::VaultLocked
+                    | FailureKind::VaultWrongPassphrase => StoreState::Locked,
                     FailureKind::Denied => StoreState::Denied,
                     FailureKind::Ambiguous => StoreState::Ambiguous,
                     _ => StoreState::Unavailable,

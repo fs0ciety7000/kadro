@@ -13,6 +13,8 @@
 //!   entry (so that an update costs one Keychain prompt, not one per secret). `kropa-app` reaches it
 //!   through the broker, see [`broker`].
 //!
+//! - Everywhere, by choice of the user: the `age` vault ([`vault`]), one encrypted file.
+//!
 //! There is never a silent switch from a store to another: the one that is chosen answers, or
 //! fails with a reason.
 
@@ -23,12 +25,16 @@ pub mod document;
 pub mod keychain_store;
 #[cfg(target_os = "linux")]
 pub mod secret_service;
+pub mod vault;
 
 pub use broker::{KeychainBroker, open_broker_store};
 pub use keychain_store::KeychainStore;
 pub use kropa_keychain::BROKER_ARGUMENT;
 #[cfg(target_os = "linux")]
 pub use secret_service::{SERVICE, SecretServiceStore, Timeouts};
+pub use vault::{
+    PassphraseSource, Purpose, VaultItems, VaultOptions, VaultWarning, open_vault_store,
+};
 
 #[cfg(target_os = "macos")]
 pub use broker::run_broker;

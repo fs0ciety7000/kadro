@@ -89,6 +89,8 @@ jobs:
           # Linux: the IPC tests with two real users run `sudo -n -u nobody` (passwordless sudo on the
           # runners); they fail if it is missing instead of skipping (lot 2.1d, review 2.1a I1).
           KROPA_REQUIRE_IPC_UID_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: the vault tests with a real second user (`sudo -n -u nobody`, lot 2.8a).
+          KROPA_REQUIRE_VAULT_UID_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
         run: cargo nextest run --profile ci --workspace --locked
       - name: Doctests
         run: cargo test --doc --workspace --locked

@@ -86,6 +86,9 @@ pub enum Placement {
     /// The body template, bound to the SHA-256 (hexadecimal) of the template text: changing the
     /// template changes the placement.
     Body(String),
+    /// The signature of an S3 request (SigV4): the secret key never leaves the process, it only
+    /// signs. Written `sigv4:s3`.
+    Sigv4,
 }
 
 impl Placement {
@@ -117,6 +120,7 @@ impl fmt::Display for Placement {
             Self::Query(n) => write!(f, "query:{n}"),
             Self::Form(n) => write!(f, "form:{n}"),
             Self::Body(h) => write!(f, "body:{h}"),
+            Self::Sigv4 => f.write_str("sigv4:s3"),
         }
     }
 }
@@ -134,6 +138,7 @@ impl FromStr for Placement {
             "query" => Ok(Self::Query(rest.to_owned())),
             "form" => Ok(Self::Form(rest.to_owned())),
             "body" => Ok(Self::Body(rest.to_owned())),
+            "sigv4" if rest == "s3" => Ok(Self::Sigv4),
             _ => Err(()),
         }
     }

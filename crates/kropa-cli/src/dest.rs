@@ -14,7 +14,7 @@ use std::path::Path;
 use kropa_core::{Config, ExitCode};
 use kropa_i18n::Localizer;
 use kropa_upload::UploadError;
-use kropa_upload::destination::Destination;
+use kropa_upload::destination::{Destination, DestinationType};
 use kropa_upload::engine::{UploadInput, Uploader};
 use kropa_upload::http::block_on;
 use kropa_upload::import::{ImportFormat, ImportPlan, MAX_IMPORT_SIZE, Slot, import};
@@ -118,7 +118,16 @@ pub fn show(
     let loc = ctx.loc;
     let destination = load_one(config_dir, id, loc)?;
     let default = config.default_destination.as_deref();
-    let (request, response) = destination.expand().map_err(|e| cli_error(&e, loc))?;
+    // An S3 profile has no request: it is shown by its bucket (nothing is read from the network).
+    let s3 = (destination.kind == DestinationType::S3)
+        .then(|| destination.s3_settings())
+        .transpose()
+        .map_err(|e| cli_error(&e, loc))?;
+    let spec = if s3.is_some() {
+        None
+    } else {
+        Some(destination.expand().map_err(|e| cli_error(&e, loc))?)
+    };
     let secrets: Vec<(String, &'static str)> = destination
         .secrets
         .keys()
@@ -126,15 +135,26 @@ pub fn show(
         .collect();
     if session.json {
         let mut doc = summary(&destination, default);
-        doc["request"] = json!({
-            "method": request.method, "url": request.url, "headers": request.headers,
-            "query": request.query, "fields": request.fields, "body": format!("{:?}", request.body).to_lowercase(),
-        });
-        doc["response"] = json!({
-            "url": response.url, "thumbnail_url": response.thumbnail_url,
-            "deletion_url": response.deletion_url, "error": response.error,
-            "success_status": response.success_status,
-        });
+        if let Some((request, response)) = &spec {
+            doc["request"] = json!({
+                "method": request.method, "url": request.url, "headers": request.headers,
+                "query": request.query, "fields": request.fields, "body": format!("{:?}", request.body).to_lowercase(),
+            });
+            doc["response"] = json!({
+                "url": response.url, "thumbnail_url": response.thumbnail_url,
+                "deletion_url": response.deletion_url, "error": response.error,
+                "success_status": response.success_status,
+            });
+        }
+        if let Some(s3) = &s3 {
+            doc["s3"] = json!({
+                "endpoint": s3.endpoint.as_ref().map(ToString::to_string),
+                "region": s3.region, "bucket": s3.bucket, "path_style": s3.path_style,
+                "prefix": s3.prefix, "public_base_url": s3.public_base_url.as_ref().map(ToString::to_string),
+                "presign_seconds": s3.presign.map(|d| d.as_secs()),
+                "access_key_id": s3.access_key_id,
+            });
+        }
         doc["secrets"] = json!(
             secrets
                 .iter()
@@ -176,31 +196,49 @@ pub fn show(
     if default == Some(id) {
         say(session, "out-show-default", &[]);
     }
-    say(
-        session,
-        "out-show-request",
-        &[("method", &request.method), ("url", &request.url)],
-    );
-    for (name, value) in &request.headers {
+    if let Some((request, _)) = &spec {
         say(
             session,
-            "out-show-header",
-            &[("name", name), ("value", value)],
+            "out-show-request",
+            &[("method", &request.method), ("url", &request.url)],
         );
+        for (name, value) in &request.headers {
+            say(
+                session,
+                "out-show-header",
+                &[("name", name), ("value", value)],
+            );
+        }
+        for (name, value) in &request.query {
+            say(
+                session,
+                "out-show-query",
+                &[("name", name), ("value", value)],
+            );
+        }
+        for (name, value) in &request.fields {
+            say(
+                session,
+                "out-show-field",
+                &[("name", name), ("value", value)],
+            );
+        }
     }
-    for (name, value) in &request.query {
+    if let Some(s3) = &s3 {
         say(
             session,
-            "out-show-query",
-            &[("name", name), ("value", value)],
+            "out-show-s3",
+            &[
+                ("bucket", &s3.bucket),
+                ("region", &s3.region),
+                ("key_id", &s3.access_key_id),
+            ],
         );
-    }
-    for (name, value) in &request.fields {
-        say(
-            session,
-            "out-show-field",
-            &[("name", name), ("value", value)],
+        let link = s3.public_base_url.as_ref().map_or_else(
+            || format!("presign {}s", s3.presign.map_or(0, |d| d.as_secs())),
+            ToString::to_string,
         );
+        say(session, "out-show-s3-link", &[("link", &link)]);
     }
     for name in destination.vars.keys() {
         say(session, "out-show-var", &[("name", name)]);

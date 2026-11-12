@@ -755,6 +755,14 @@ fn sxcu_destination(
             error: convert("ErrorMessage")?,
             success_status: vec![200, 201],
         }),
+        endpoint: None,
+        region: None,
+        bucket: None,
+        path_style: false,
+        prefix: None,
+        public_base_url: None,
+        presign: None,
+        access_key_id: None,
     };
     destination.vars.clone_from(&builder.vars);
     Ok((destination, builder, notes))
@@ -843,6 +851,14 @@ fn import_toml(text: &str, id: Option<&str>) -> Result<ImportPlan, UploadError> 
     if let Some(id) = id {
         id.clone_into(&mut destination.id);
     }
+    if destination.kind == DestinationType::S3 {
+        // A received file would point the profile at someone else's bucket: an s3 profile is made
+        // by `dest add --type s3`, with the user's own bucket (lot 2.7b).
+        return Err(UploadError::import(
+            "import_unsupported",
+            "an s3 destination cannot be imported: describe your own bucket with dest add --type s3",
+        ));
+    }
     let compiled = destination.compile()?;
     let origin = compiled
         .origin()
@@ -879,6 +895,8 @@ fn import_toml(text: &str, id: Option<&str>) -> Result<ImportPlan, UploadError> 
                     Placement::Query(n) => Slot::Query(n.clone()),
                     Placement::Form(n) => Slot::Form(n.clone()),
                     Placement::Body(_) => Slot::Body,
+                    // Only an s3 destination has it, and an s3 file is refused above.
+                    Placement::Sigv4 => continue,
                 },
                 None,
             )?;

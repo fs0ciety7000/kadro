@@ -19,6 +19,7 @@ use url::Url;
 
 use crate::error::UploadError;
 use crate::origin::origin_of;
+use crate::s3::{MAX_PRESIGN, S3Settings, SECRET_NAME};
 use crate::secret::Placement;
 use crate::template::{Side, Template};
 
@@ -66,6 +67,8 @@ pub enum DestinationType {
     Http,
     /// A Zipline v4 server, described by its address.
     Zipline,
+    /// An S3 bucket (or a compatible service).
+    S3,
 }
 
 impl DestinationType {
@@ -75,6 +78,7 @@ impl DestinationType {
         match self {
             Self::Http => "http",
             Self::Zipline => "zipline",
+            Self::S3 => "s3",
         }
     }
 }
@@ -269,6 +273,31 @@ pub struct Destination {
     /// Response of an `http` destination.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<ResponseSpec>,
+    /// `s3`: address of the service (AWS when absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// `s3`: region of the signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    /// `s3`: bucket.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bucket: Option<String>,
+    /// `s3`: `https://host/bucket/key` instead of `https://bucket.host/key`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub path_style: bool,
+    /// `s3`: prefix of the keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// `s3`: address the objects are public at; the link is this and the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_base_url: Option<String>,
+    /// `s3`: validity of a presigned link (`1h`, `7d`), instead of `public_base_url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presign: Option<String>,
+    /// `s3`: identifier of the key. Not a secret: it is in every signed request and in presigned
+    /// URLs (decision D9). The secret key is `[secrets] secret_access_key`, in the store.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_key_id: Option<String>,
 }
 
 /// The content of `destinations.toml` (or of a file to import).
@@ -450,6 +479,9 @@ pub struct Compiled {
     pub secrets: BTreeSet<String>,
     /// Declared variables.
     pub vars: BTreeMap<String, VarDecl>,
+    /// The settings of an `s3` destination. The request fields above (`url` is the service address)
+    /// only carry neutral values then: the engine reads this first.
+    pub s3: Option<S3Settings>,
 }
 
 /// Parsed response templates.
@@ -471,7 +503,10 @@ impl Compiled {
     /// Canonical origin of the request.
     #[must_use]
     pub fn origin(&self) -> Option<String> {
-        origin_of(&self.url)
+        match &self.s3 {
+            Some(s3) => Some(s3.origin()),
+            None => origin_of(&self.url),
+        }
     }
 
     /// Every use of a secret in the request, in a stable order.
@@ -497,6 +532,12 @@ impl Compiled {
         }
         if let Some(t) = &self.body_template {
             add(Placement::body(t.source()), t);
+        }
+        if self.s3.is_some() {
+            slots.push(SecretSlot {
+                name: SECRET_NAME.to_owned(),
+                placement: Placement::Sigv4,
+            });
         }
         slots
     }
@@ -577,6 +618,14 @@ impl Destination {
             secrets: BTreeMap::from([("token".to_owned(), SecretDecl::default())]),
             vars: BTreeMap::new(),
             response: None,
+            endpoint: None,
+            region: None,
+            bucket: None,
+            path_style: false,
+            prefix: None,
+            public_base_url: None,
+            presign: None,
+            access_key_id: None,
         }
     }
 
@@ -586,12 +635,16 @@ impl Destination {
         match self.kind {
             DestinationType::Zipline => self.url.as_deref(),
             DestinationType::Http => self.request.as_ref().map(|r| r.url.as_str()),
+            DestinationType::S3 => self.endpoint.as_deref(),
         }
     }
 
     /// Canonical origin of the destination, `None` when the address is not valid.
     #[must_use]
     pub fn origin(&self) -> Option<String> {
+        if self.kind == DestinationType::S3 {
+            return self.s3_settings().ok().map(|s| s.origin());
+        }
         origin_of(&Url::parse(self.address()?).ok()?)
     }
 
@@ -617,6 +670,9 @@ impl Destination {
                     self.options.as_ref().unwrap_or(&ZiplineOptions::default()),
                 )?)
             }
+            DestinationType::S3 => Err(UploadError::config(
+                "an s3 destination has no [request] or [response]: it is described by its bucket",
+            )),
             DestinationType::Http => {
                 if self.url.is_some() || self.options.is_some() {
                     return Err(UploadError::config(
@@ -663,6 +719,9 @@ impl Destination {
                     "secrets and vars: names use 1 to 64 letters, digits, '-' or '_'",
                 ));
             }
+        }
+        if self.kind == DestinationType::S3 {
+            return self.compile_s3();
         }
         let (request, response) = self.expand()?;
         let url = check_http_url(&request.url)?;
@@ -746,6 +805,7 @@ impl Destination {
             response,
             secrets: self.secrets.keys().cloned().collect(),
             vars: self.vars.clone(),
+            s3: None,
         };
         for slot in compiled.secret_slots() {
             if !is_identifier(&slot.name) {
@@ -763,6 +823,129 @@ impl Destination {
         Ok(compiled)
     }
 
+    /// The settings of an `s3` destination, checked.
+    ///
+    /// # Errors
+    /// [`UploadError::Config`] naming what is wrong (never a secret value), and for a destination that
+    /// is not `s3` or that mixes in the fields of another type.
+    pub fn s3_settings(&self) -> Result<S3Settings, UploadError> {
+        let bad = |what: &str| UploadError::config(what.to_owned());
+        if self.kind != DestinationType::S3 {
+            return Err(bad("not an s3 destination"));
+        }
+        if self.url.is_some()
+            || self.options.is_some()
+            || self.request.is_some()
+            || self.response.is_some()
+            || !self.vars.is_empty()
+        {
+            return Err(bad(
+                "an s3 destination has no url, [options], [request], [response] or [vars]",
+            ));
+        }
+        let region = required(self.region.as_deref(), "region")?;
+        if region.len() > 64
+            || !region
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        {
+            return Err(bad("region: letters, digits, '-' or '_', 64 at most"));
+        }
+        let bucket = required(self.bucket.as_deref(), "bucket")?;
+        if !(3..=63).contains(&bucket.len())
+            || !bucket
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.')
+            || bucket.starts_with(['-', '.'])
+            || bucket.ends_with(['-', '.'])
+        {
+            return Err(bad(
+                "bucket: 3 to 63 lower-case letters, digits, '-' or '.', not at the ends",
+            ));
+        }
+        let access_key_id = required(self.access_key_id.as_deref(), "access_key_id")?;
+        if access_key_id.len() > 128 || !access_key_id.bytes().all(|b| b.is_ascii_graphic()) {
+            return Err(bad("access_key_id: printable characters, 128 at most"));
+        }
+        let endpoint = self
+            .endpoint
+            .as_deref()
+            .map(|e| check_s3_url(e, "endpoint", false))
+            .transpose()?;
+        let public_base_url = self
+            .public_base_url
+            .as_deref()
+            .map(|u| check_s3_url(u, "public_base_url", true))
+            .transpose()?;
+        let presign = self.presign.as_deref().map(parse_presign).transpose()?;
+        match (&public_base_url, &presign) {
+            (None, None) => {
+                return Err(bad("an s3 destination needs public_base_url or presign"));
+            }
+            (Some(_), Some(_)) => {
+                return Err(bad("public_base_url and presign are exclusive"));
+            }
+            _ => {}
+        }
+        let prefix = self.prefix.as_deref().unwrap_or_default().trim_matches('/');
+        if prefix.len() > 512
+            || (!prefix.is_empty()
+                && prefix.split('/').any(|p| {
+                    p.is_empty() || p == "." || p == ".." || p.chars().any(char::is_control)
+                }))
+        {
+            return Err(bad(
+                "prefix: folders separated by '/', no '.', '..' or empty one",
+            ));
+        }
+        Ok(S3Settings {
+            endpoint,
+            region: region.to_owned(),
+            bucket: bucket.to_owned(),
+            path_style: self.path_style,
+            prefix: prefix.to_owned(),
+            public_base_url,
+            presign,
+            access_key_id: access_key_id.to_owned(),
+        })
+    }
+
+    fn compile_s3(&self) -> Result<Compiled, UploadError> {
+        let settings = self.s3_settings()?;
+        if self.secrets.keys().map(String::as_str).ne([SECRET_NAME]) {
+            return Err(UploadError::config(format!(
+                "an s3 destination declares one secret: [secrets] {SECRET_NAME} = {{}}"
+            )));
+        }
+        let neutral = || Template::parse("-", Side::Response);
+        let template = neutral().map_err(|e| UploadError::config(e.to_string()))?;
+        Ok(Compiled {
+            id: self.id.clone(),
+            kinds: self.kinds.clone(),
+            method: "PUT".to_owned(),
+            url: settings.endpoint_url(),
+            query: Vec::new(),
+            headers: Vec::new(),
+            body: BodyKind::Binary,
+            file_field: String::new(),
+            fields: Vec::new(),
+            body_template: None,
+            max_size: DEFAULT_MAX_SIZE,
+            timeout: DEFAULT_TIMEOUT,
+            redirects: Redirects::None,
+            response: CompiledResponse {
+                url: template,
+                thumbnail_url: None,
+                deletion_url: None,
+                error: None,
+                success_status: vec![200],
+            },
+            secrets: self.secrets.keys().cloned().collect(),
+            vars: BTreeMap::new(),
+            s3: Some(settings),
+        })
+    }
+
     /// The destination as TOML, for `dest export` and for the import. Holds names of secrets only.
     ///
     /// # Errors
@@ -773,6 +956,62 @@ impl Destination {
         })
         .map_err(|e| UploadError::config(format!("cannot write the destination: {e}")))
     }
+}
+
+fn required<'a>(value: Option<&'a str>, name: &str) -> Result<&'a str, UploadError> {
+    value
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| UploadError::config(format!("an s3 destination needs {name}")))
+}
+
+/// An address of an S3 destination: `http(s)`, a host, no user info, query or fragment; the endpoint has
+/// no path either (`path_ok` for the public address).
+fn check_s3_url(raw: &str, name: &str, path_ok: bool) -> Result<Url, UploadError> {
+    let bad = |what: &str| UploadError::config(format!("{name}: {what}"));
+    if raw.contains('{') {
+        return Err(bad("templates and secrets are not allowed"));
+    }
+    let url = Url::parse(raw).map_err(|_| bad("not a valid address"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(bad("the scheme must be http or https"));
+    }
+    if url.host_str().is_none_or(str::is_empty) {
+        return Err(bad("no host"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(bad("user:password@ is refused"));
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err(bad("no query or fragment"));
+    }
+    if !path_ok && url.path() != "/" {
+        return Err(bad("no path (the bucket is its own setting)"));
+    }
+    Ok(url)
+}
+
+/// Parses `90s`, `15m`, `12h`, `7d`; between one second and seven days.
+pub(crate) fn parse_presign(text: &str) -> Result<Duration, UploadError> {
+    let bad = || {
+        UploadError::config(format!(
+            "presign: {text:?} is not a duration (expected for example 1h or 7d, 7d at most)"
+        ))
+    };
+    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+    let (number, unit) = text.split_at(digits);
+    let number: u64 = number.parse().map_err(|_| bad())?;
+    let factor: u64 = match unit {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3_600,
+        "d" => 86_400,
+        _ => return Err(bad()),
+    };
+    let duration = Duration::from_secs(number.checked_mul(factor).ok_or_else(bad)?);
+    if duration.is_zero() || duration > MAX_PRESIGN {
+        return Err(UploadError::config("presign: between 1 second and 7 days"));
+    }
+    Ok(duration)
 }
 
 fn compile_response(

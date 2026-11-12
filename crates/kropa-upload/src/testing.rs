@@ -78,6 +78,11 @@ impl Front {
         format!("https://127.0.0.1:{}", self.port)
     }
 
+    /// The CA of this server, for a client built by hand.
+    pub(crate) fn ca_for_tests(&self) -> CertificateDer<'static> {
+        self.ca.clone()
+    }
+
     /// The engine, on a client that trusts the CA of this server.
     pub(crate) fn uploader<'a>(&self, secrets: &'a dyn SecretSource) -> Uploader<'a> {
         let http = HttpClient::with_extra_root(self.ca.clone()).expect("test client");

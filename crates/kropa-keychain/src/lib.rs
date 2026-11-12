@@ -17,6 +17,9 @@
 //! - [`system`], [`spawn`], [`apple`]: the facts of the process, starting the broker, and what only
 //!   macOS can say (audit token, code signature). The only places with `unsafe`.
 //!
+//! The portable modules ([`store_doc`], [`lockfile`], [`item`]) also serve the `age` vault of
+//! `kropa-store` (lot 2.8a): same document, same lock file `store.lock`, same reasons.
+//!
 //! `kropa-store` turns an [`item::ItemStore`] into the `SecretStore` of the commands.
 
 #![cfg_attr(test, allow(clippy::assert_is_empty, clippy::naive_bytecount))]

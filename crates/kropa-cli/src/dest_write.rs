@@ -665,6 +665,7 @@ pub fn edit(
         if let Some(url) = url {
             match new.kind {
                 DestinationType::Zipline => new.url = Some(url.to_owned()),
+                DestinationType::S3 => new.endpoint = Some(url.to_owned()),
                 DestinationType::Http => {
                     if let Some(request) = &mut new.request {
                         url.clone_into(&mut request.url);

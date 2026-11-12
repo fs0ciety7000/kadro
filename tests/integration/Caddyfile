@@ -9,3 +9,10 @@ https://localhost {
 	tls /certs/server.crt /certs/server.key
 	reverse_proxy zipline:3000
 }
+
+# Garage (profile `s3`): the S3 API over TLS, because Kropa refuses a secret over plain HTTP. Caddy keeps the
+# `Host` header (`localhost:<published port>`), which SigV4 signs and Garage checks.
+https://localhost:8443 {
+	tls /certs/server.crt /certs/server.key
+	reverse_proxy garage:3900
+}

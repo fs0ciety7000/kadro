@@ -56,6 +56,14 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names 4 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    # RUSTSEC-2026-0387 (crypto-bigint 0.5.5, timing) and RUSTSEC-2026-0374 (basic-toml, unmaintained) come only
+    # from `age` 0.12.1 (latest), the vault of `kropa-store` (lot 2.8): crypto-bigint through p256/hpke, which the
+    # vault never uses (scrypt recipient only, no P-256 operation on a secret); basic-toml through the
+    # i18n-embed-fl proc-macro, at build time only. Exception accepted by the user on 2026-11-12, to be confirmed by
+    # security-reviewer (docs/reviews/2026-11-12-security-2.8a.md). Removal: as soon as `age` ships without them;
+    # review at the latest on 2027-02-28; immediate removal if the advisory reaches the scrypt path.
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint timing via age -> p256/hpke; vault uses the scrypt recipient only; no fix in age 0.12.1" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml unmaintained; build-time proc-macro dependency of age (i18n-embed-fl) only" },
 ]
 
 [bans]

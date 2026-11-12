@@ -25,6 +25,7 @@ pub mod literals;
 pub mod masked;
 pub mod origin;
 pub mod profiles;
+pub mod s3;
 pub mod secret;
 pub mod sensitive;
 pub mod template;
@@ -36,5 +37,7 @@ pub use error::UploadError;
 mod engine_tests;
 #[cfg(test)]
 mod log_tests;
+#[cfg(test)]
+mod s3_tests;
 #[cfg(test)]
 mod testing;
