@@ -83,6 +83,8 @@ struct Setup<'a> {
     tty: bool,
     answer: bool,
     editor: Option<String>,
+    /// `XDG_RUNTIME_DIR`.
+    runtime: Option<std::path::PathBuf>,
 }
 
 fn run(args: &[&str], dir: &Path, setup: &Setup<'_>) -> Out {
@@ -92,6 +94,7 @@ fn run(args: &[&str], dir: &Path, setup: &Setup<'_>) -> Out {
     let clock = FixedClock::new("2026-11-11T14:03:22+01:00[+01:00]".parse().unwrap());
     let prompts = Mutex::new(Vec::new());
     let editor = setup.editor.clone();
+    let runtime = setup.runtime.clone();
     let code = {
         let mut io = Io {
             out: &mut out,
@@ -109,7 +112,11 @@ fn run(args: &[&str], dir: &Path, setup: &Setup<'_>) -> Out {
         };
         run_with_services(
             &full,
-            &move |name| (name == "EDITOR").then(|| editor.clone()).flatten(),
+            &move |name| match name {
+                "EDITOR" => editor.clone(),
+                "XDG_RUNTIME_DIR" => runtime.as_ref().map(|p| p.display().to_string()),
+                _ => None,
+            },
             &mut io,
             &clock,
             Some("laptop".into()),
@@ -133,6 +140,7 @@ fn plain<'a>(store: &'a MemorySecretSource, input: &'a ScriptedInput) -> Setup<'
         tty: false,
         answer: false,
         editor: None,
+        runtime: None,
     }
 }
 
@@ -573,7 +581,8 @@ fn moving_the_address_of_a_profile_with_a_secret_needs_a_terminal_and_a_yes_that
         },
     );
     assert_eq!(out.code, 12);
-    // A terminal, answer yes: the profile moves and the secret follows (its old origin stays).
+    // A terminal, answer yes: the profile moves and the secret follows (the old origin, which the
+    // profile no longer uses, is withdrawn in the same answer).
     let out = run(
         &["--json", "dest", "edit", "zipline", "--url", new_url[1]],
         dir.path(),
@@ -591,13 +600,7 @@ fn moving_the_address_of_a_profile_with_a_secret_needs_a_terminal_and_a_yes_that
         "{file}"
     );
     let info = store.inspect("zipline", "token").unwrap().unwrap();
-    assert_eq!(
-        info.origins,
-        [
-            "https://zipline.example.org:443",
-            "https://other.example.org:443"
-        ]
-    );
+    assert_eq!(info.origins, ["https://other.example.org:443"]);
     assert_eq!(
         store
             .load("zipline", "token")
@@ -856,13 +859,7 @@ fn moving_a_secret_place_in_the_editor_asks_like_a_new_address() {
     );
     assert_eq!(out.code, 0, "{}", out.err);
     let info = store.inspect("api", "key").unwrap().unwrap();
-    assert_eq!(
-        info.placements,
-        [
-            Placement::header("x-api-key"),
-            Placement::header("other-header")
-        ]
-    );
+    assert_eq!(info.placements, [Placement::header("other-header")]);
     assert!(read(&dir, "destinations.toml").contains("Other-Header"));
 }
 
