@@ -173,23 +173,33 @@ pub(crate) fn fresh_authorization(
     })
 }
 
+/// Shows what an entry allows. With `must_see` the lines survive `--quiet` (they are part of what a
+/// confirmation is about).
 fn show_authorization(
     origins: &[String],
     placements: &[Placement],
     loc: &Localizer,
     session: &mut Session<'_, '_>,
+    must_see: bool,
 ) {
+    let mut say = |line: &str| {
+        if must_see {
+            session.warn(line);
+        } else {
+            session.note(line);
+        }
+    };
     let places: Vec<String> = placements.iter().map(ToString::to_string).collect();
-    session.note(&loc.message_args(
+    say(&loc.message_args(
         "out-secrets-origins",
         &[("origins", &list_text(origins, loc))],
     ));
-    session.note(&loc.message_args(
+    say(&loc.message_args(
         "out-secrets-placements",
         &[("placements", &list_text(&places, loc))],
     ));
     if placements.iter().any(|p| matches!(p, Placement::Query(_))) {
-        session.note(&loc.message("out-secrets-query-warning"));
+        say(&loc.message("out-secrets-query-warning"));
     }
 }
 
@@ -299,7 +309,7 @@ pub fn set(
             "out-secrets-new-entry",
             &[("profile", profile), ("name", name)],
         ));
-        show_authorization(&origins, &placements, loc, session);
+        show_authorization(&origins, &placements, loc, session, false);
         if !yes {
             if !session.interactive {
                 return Err(CliError::new(
@@ -459,21 +469,22 @@ pub fn allow(
         .inspect(profile, name)
         .map_err(|e| store_error(e, loc))?
         .ok_or_else(|| store_error(missing(name), loc))?;
-    session.note(&loc.message_args(
+    // `--quiet` must not hide what the question is about: these lines are warnings.
+    session.warn(&loc.message_args(
         "out-secrets-current",
         &[("profile", profile), ("name", name)],
     ));
-    show_authorization(&info.origins, &info.placements, loc, session);
+    show_authorization(&info.origins, &info.placements, loc, session, true);
     if let Some(origin) = &new_origin {
-        session.note(&loc.message_args("out-secrets-add-origin", &[("origin", origin)]));
+        session.warn(&loc.message_args("out-secrets-add-origin", &[("origin", origin)]));
     }
     if let Some(placement) = &new_placement {
-        session.note(&loc.message_args(
+        session.warn(&loc.message_args(
             "out-secrets-add-placement",
             &[("placement", &placement.to_string())],
         ));
         if matches!(placement, Placement::Query(_)) {
-            session.note(&loc.message("out-secrets-query-warning"));
+            session.warn(&loc.message("out-secrets-query-warning"));
         }
     }
     let prompt = loc.message_args(

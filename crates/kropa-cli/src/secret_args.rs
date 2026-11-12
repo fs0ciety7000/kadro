@@ -6,6 +6,8 @@
 //! The detection is a safety net, not a proof: it looks at the name of what is set (a query
 //! parameter, a `--set` key) and at the shape of the value (a credential header, a well-known token
 //! prefix). A value made only of `{secret:NAME}` references carries no secret and is always accepted.
+//! The shape of a credential value and the percent-decoding live in `kropa-upload::sensitive`, shared
+//! with the detector of the profiles.
 
 /// Words that make a name sensitive wherever they appear in it, ignoring case and separators
 /// (`X-Api-Key`, `access_token`, `AWSAccessKeyId`, `X-Amz-Signature`).
@@ -29,57 +31,7 @@ const SENSITIVE_SUBSTRINGS: [&str; 13] = [
 /// or `design` are left alone.
 const SENSITIVE_WORDS: [&str; 7] = ["key", "sig", "auth", "pass", "pwd", "sid", "jwt"];
 
-/// Schemes of an `Authorization` value.
-const CREDENTIAL_SCHEMES: [&str; 5] = ["bearer", "basic", "token", "digest", "negotiate"];
-
-/// Prefixes of the tokens of well-known services.
-const TOKEN_PREFIXES: [&str; 14] = [
-    "ghp_",
-    "gho_",
-    "ghu_",
-    "ghs_",
-    "ghr_",
-    "github_pat_",
-    "glpat-",
-    "xoxb-",
-    "xoxp-",
-    "xoxa-",
-    "sk-",
-    "sk_live_",
-    "rk_live_",
-    "npm_",
-];
-
-/// Shortest value taken for a token on its prefix alone: `sk-learn` is not a key.
-const MIN_TOKEN_LEN: usize = 16;
-
-/// Percent-decoding, applied up to twice (`%2574oken` is `%74oken` is `token`) and lossy on invalid
-/// UTF-8. `+` is left alone: it only means a space in a form, which no check here depends on.
-fn percent_decode(text: &str) -> String {
-    fn once(text: &str) -> String {
-        let bytes = text.as_bytes();
-        let mut out = Vec::with_capacity(bytes.len());
-        let mut i = 0;
-        while i < bytes.len() {
-            let hex = |b: u8| char::from(b).to_digit(16);
-            if bytes[i] == b'%'
-                && let (Some(hi), Some(lo)) = (
-                    bytes.get(i + 1).copied().and_then(hex),
-                    bytes.get(i + 2).copied().and_then(hex),
-                )
-            {
-                out.push(u8::try_from(hi * 16 + lo).unwrap_or(b'?'));
-                i += 3;
-            } else {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-        String::from_utf8_lossy(&out).into_owned()
-    }
-    let first = once(text);
-    if first == text { first } else { once(&first) }
-}
+use kropa_upload::sensitive::{CREDENTIAL_SCHEMES, looks_like_credential_value, percent_decode};
 
 /// The lower-case words of a name, split on anything that is not a letter or a digit and on
 /// `camelCase` boundaries (also after an acronym): `AWSAccessKeyId` gives `aws`, `access`, `key`, `id`.
@@ -161,35 +113,6 @@ pub fn only_secret_references(value: &str) -> bool {
     without_scheme
         .chars()
         .all(|c| c.is_whitespace() || c == ':')
-}
-
-/// Whether a value has the shape of a credential: an `Authorization` header value, the prefix of a
-/// well-known token (`ghp_`, `sk-`, `xoxb-`...), an AWS access key id (`AKIA...`) or a JWT (`eyJ...`).
-#[must_use]
-pub fn looks_like_credential_value(value: &str) -> bool {
-    let value = percent_decode(value);
-    let value = value.trim();
-    let lower = value.to_lowercase();
-    let scheme = CREDENTIAL_SCHEMES.iter().any(|s| {
-        lower
-            .strip_prefix(s)
-            .is_some_and(|rest| rest.starts_with(char::is_whitespace))
-    });
-    if scheme {
-        return true;
-    }
-    if value.len() < MIN_TOKEN_LEN || value.chars().any(char::is_whitespace) {
-        return false;
-    }
-    let aws = value.len() == 20
-        && ["AKIA", "ASIA", "AGPA", "AIDA", "AROA"]
-            .iter()
-            .any(|p| value.starts_with(p))
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
-    let jwt = value.starts_with("eyJ") && value.matches('.').count() >= 2;
-    aws || jwt || value.starts_with("AIza") || TOKEN_PREFIXES.iter().any(|p| value.starts_with(p))
 }
 
 /// `NAME=VALUE` pairs of a query, a fragment or a matrix parameter list: separators `&` and `;`.

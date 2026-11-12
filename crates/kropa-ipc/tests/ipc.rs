@@ -506,14 +506,11 @@ async fn a_request_without_an_id_is_refused_not_executed() {
 fn a_fifo_in_place_of_the_lock_is_refused_without_blocking() {
     let (_tmp, dir) = runtime();
     ensure_dir(&dir, current_uid()).unwrap();
-    rustix::fs::mknodat(
-        rustix::fs::CWD,
-        dir.join("app.lock"),
-        rustix::fs::FileType::Fifo,
-        rustix::fs::Mode::from_raw_mode(0o600),
-        0,
-    )
-    .unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(dir.join("app.lock"))
+        .status()
+        .unwrap();
+    assert!(made.success(), "mkfifo failed");
     let (tx, rx) = std::sync::mpsc::channel();
     let dir2 = dir.clone();
     std::thread::spawn(move || {
@@ -617,7 +614,7 @@ async fn an_accept_that_fails_for_lack_of_descriptors_does_not_stop_the_server()
         filler.push(file);
     }
     filler.pop(); // one is free again: the client's socket will use it
-    let queued = StdStream::connect(&socket).unwrap();
+    let queued = std::os::unix::net::UnixStream::connect(&socket).unwrap();
     // The server's accept now fails with EMFILE. Give it time to notice.
     tokio::time::sleep(Duration::from_millis(400)).await;
     drop(filler);
@@ -628,5 +625,3 @@ async fn an_accept_that_fails_for_lack_of_descriptors_does_not_stop_the_server()
     let back: Value = client.call("echo", 1).await.unwrap();
     assert_eq!(back, json!(1));
 }
-
-use std::os::unix::net::UnixStream as StdStream;
