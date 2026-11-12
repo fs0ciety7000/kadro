@@ -7,13 +7,15 @@
 //! Layout: [`proto`] is the wire format and the `hello` messages, [`dir`] the place of the socket
 //! and the checks on it, [`client`] the connection (UID of the peer checked before anything is
 //! sent), [`server`] the listener (lock, orphan socket, UID of each client), [`launcher`] how the
-//! application is started on demand, and [`probe`] what `kropa doctor` reports.
+//! application is started on demand, [`probe`] what `kropa doctor` reports, and [`fdguard`] the
+//! close-on-exec marking of inherited descriptors that `kropa` and `kropa-gtk` do first thing.
 //!
 //! Every failure to reach the application is exit code 14; see [`IpcError::reason`].
 
 pub mod client;
 pub mod dir;
 pub mod error;
+pub mod fdguard;
 pub mod launcher;
 pub mod probe;
 pub mod proto;
