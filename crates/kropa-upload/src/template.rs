@@ -273,6 +273,30 @@ impl Template {
             .then(|| arg.source.clone())
     }
 
+    /// The literal text of the template: what is written outside any function, and inside
+    /// `{base64:}`. `{secret:}`, `{var:}` and `{filename}` contribute nothing (their argument is a
+    /// name, not a value).
+    #[must_use]
+    pub fn literal_text(&self) -> String {
+        let mut out = String::new();
+        self.collect_literal_text(&mut out);
+        out
+    }
+
+    fn collect_literal_text(&self, out: &mut String) {
+        for node in &self.nodes {
+            match node {
+                Node::Text(t) => out.push_str(t),
+                Node::Call(call) if call.function == Function::Base64 => {
+                    for arg in &call.args {
+                        arg.collect_literal_text(out);
+                    }
+                }
+                Node::Call(_) => {}
+            }
+        }
+    }
+
     /// Whether some `{base64:}` of the template holds literal text (a value to hide).
     #[must_use]
     pub fn has_base64_text(&self) -> bool {

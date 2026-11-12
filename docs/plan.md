@@ -96,7 +96,7 @@ Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
 ## Lot 2 — v0.2 Sélection, profils, S3, coffre
 Dépend de : 1 et D2.
 - [ ] 2.1 (2.1a fait : `kropa-ipc`, client, activation D-Bus, `fdguard` ; restent 2.1b serveur `kropa-gtk`, 2.1c `kropa-app`) IPC socket JSON-RPC (`hello` versionné, 0600) ; la CLI lance `kropa-app` à la demande. Agent : `backend-dev`.
-- [ ] 2.1d Suites de la revue sécurité 2.1a (`docs/reviews/2026-11-12-security-2.1a.md`) : test réel entre deux UID (I1), cas « faux serveur du même UID » écrit au § 7 de `secrets.md` (I2), `fdguard` déplacé dans `kropa-ipc` pour `kropa-gtk` (m4), mineurs m1-m13. Agent : `backend-dev`.
+- [x] 2.1d Suites de la revue sécurité 2.1a (`docs/reviews/2026-11-12-security-2.1a.md`) : test réel entre deux UID (I1), cas « faux serveur du même UID » écrit au § 7 de `secrets.md` (I2), `fdguard` déplacé dans `kropa-ipc` pour `kropa-gtk` (m4), mineurs m1-m13. Agent : `backend-dev`.
 - [x] 2.2 Modèle de sélection commun (souris, flèches, Maj+flèches, `R` dernière zone, Échap, délai) et loupe. Agent : `backend-dev`. Fin : tests sans écran.
 - [ ] 2.3 Overlay GTK (image figée par écran, layer-shell KDE/wlroots, plein écran GNOME, échelles mixtes, copie d'image sous focus). Agent : `linux-desktop-dev`. Fin : check-list GNOME et KDE à 100 % et 200 %.
 - [ ] 2.4 Overlay AppKit (sans bord, au-dessus, un par écran, Retina, exclus de la capture). Agent : `macos-desktop-dev`.

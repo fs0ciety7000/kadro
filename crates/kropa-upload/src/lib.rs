@@ -21,6 +21,7 @@ pub mod error;
 pub mod http;
 pub mod import;
 pub mod links;
+pub mod literals;
 pub mod masked;
 pub mod origin;
 pub mod profiles;

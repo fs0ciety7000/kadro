@@ -28,6 +28,7 @@ use crate::destination::{
     ResponseSpec, SecretDecl, VarDecl, is_identifier,
 };
 use crate::error::UploadError;
+use crate::literals::presumed_value;
 use crate::origin::origin_of;
 use crate::secret::{MIN_SECRET_LEN, Placement, SecretValue};
 use crate::sensitive::{
@@ -371,6 +372,13 @@ impl Builder {
         // Already a reference: an empty entry to fill.
         let references = template.secrets();
         if !references.is_empty() {
+            // A reference does not excuse the text next to it (`{secret:key}:abcdef`): the shared
+            // detector of `literals` decides, as it does for `dest edit` and `dest export`.
+            if presumed_value(slot, value) {
+                return Err(refuse(format!(
+                    "{name}: a value that mixes a {{secret:}} reference with literal text is not supported; put the whole value in the secret"
+                )));
+            }
             for reference in references {
                 if !is_identifier(&reference) {
                     return Err(invalid("a secret name uses letters, digits, '-' and '_'"));
