@@ -744,10 +744,16 @@ fn check_edited(
         .with_reason("secret_in_profile")
         .at_step("dest"));
     }
-    import(bytes, ImportFormat::Toml, Some(id)).map_err(|e| match e {
-        UploadError::Config { .. } => invalid(&e.to_string()),
-        other => dest_error(&other, loc),
-    })?;
+    match import(bytes, ImportFormat::Toml, Some(id)) {
+        Ok(_) => {}
+        // Only a profile with a real secret needs https, and `require_https` checks that.
+        Err(UploadError::Security {
+            reason: "https_required",
+            ..
+        }) => {}
+        Err(e @ UploadError::Config { .. }) => return Err(invalid(&e.to_string())),
+        Err(other) => return Err(dest_error(&other, loc)),
+    }
     Ok(edited)
 }
 
