@@ -1,0 +1,7 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--config", ".", "--json", "dest", "set-default", "--none"]
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
+fs.cwd = "ctx/default-dest"
+fs.sandbox = true

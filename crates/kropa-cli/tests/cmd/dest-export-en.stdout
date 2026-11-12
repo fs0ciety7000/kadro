@@ -1,0 +1,7 @@
+[[destination]]
+id = "zipline"
+type = "zipline"
+kinds = ["image", "file"]
+url = "https://zipline.example.org"
+
+[destination.secrets.token]

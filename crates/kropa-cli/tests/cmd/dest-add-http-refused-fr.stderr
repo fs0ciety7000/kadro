@@ -1,0 +1,1 @@
+kropa: 'dest add --type http' n'existe pas : une API HTTP se décrit dans un fichier TOML. Importez-la avec 'kropa dest import FICHIER.toml' (un modèle pour Imgur est dans docs/examples/imgur.toml) ou depuis un fichier ShareX .sxcu.
