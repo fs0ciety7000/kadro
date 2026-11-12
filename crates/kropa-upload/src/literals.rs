@@ -213,4 +213,48 @@ mod tests {
         assert!(!presumed_value(&Slot::Body, "<k>{secret:key}</k>"));
         assert!(presumed_value(&Slot::Body, &format!("<k>{t}</k>")));
     }
+
+    /// The import and the detector agree on every value of a header, query parameter or field.
+    #[test]
+    fn the_detector_agrees_with_the_import() {
+        use crate::import::{ImportFormat, import};
+        let t = token();
+        let values = [
+            "{secret:key}".to_owned(),
+            "Bearer {secret:key}".to_owned(),
+            "{filename}".to_owned(),
+            "{var:v}".to_owned(),
+            "abc".to_owned(),
+            "shots".to_owned(),
+            t.clone(),
+            format!("Bearer {t}"),
+            format!("Basic {{base64:{t}}}"),
+            "Basic {base64:{secret:a}:{secret:b}}".to_owned(),
+            "{inputbox:Title}".to_owned(),
+            format!("{{secret:key}}:{t}"),
+        ];
+        for (kind, table) in [("header", "headers"), ("query", "query"), ("field", "fields")] {
+            for value in &values {
+                let name = if kind == "header" { "X-Neutral" } else { "p" };
+                let text = format!(
+                    "[[destination]]\nid = \"a\"\ntype = \"http\"\n[destination.request]\nurl = \"https://api.example.org/up\"\nbody = \"multipart\"\n[destination.request.{table}]\n{name} = {value:?}\n[destination.response]\nurl = \"{{response}}\"\n[destination.vars.v]\n"
+                );
+                let slot = match kind {
+                    "header" => Slot::Header(name.to_owned()),
+                    "query" => Slot::Query(name.to_owned()),
+                    _ => Slot::Form(name.to_owned()),
+                };
+                let detected = presumed_value(&slot, value);
+                match import(text.as_bytes(), ImportFormat::Toml, None) {
+                    Ok(plan) => assert_eq!(
+                        plan.secrets.iter().any(|s| s.value.is_some()),
+                        detected,
+                        "{kind} {value}"
+                    ),
+                    // Refused outright: the detector must not call it clean.
+                    Err(e) => assert!(detected, "{kind} {value}: {e}"),
+                }
+            }
+        }
+    }
 }
