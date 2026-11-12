@@ -9,7 +9,7 @@
 use std::fs::{File, OpenOptions};
 use std::future::Future;
 use std::io;
-use std::os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -60,7 +60,9 @@ pub struct ServerConfig {
     pub methods: Vec<String>,
     /// Optional features (`layer-shell`).
     pub features: Vec<String>,
-    /// UID that every client must have. The process UID, except in tests.
+    /// UID that every client must have. The process UID, except in tests (a hook for them, not part of
+    /// the API: setting it to anything else makes the server refuse its own user).
+    #[doc(hidden)]
     pub peer_uid: u32,
     /// A connection that sends nothing for this long is closed.
     pub idle_timeout: Duration,
@@ -80,6 +82,9 @@ impl ServerConfig {
         }
     }
 }
+
+/// Pause after an `accept` that failed (no descriptor left, no memory).
+const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
 
 /// More connections than this at once are closed on arrival.
 const MAX_CONNECTIONS: usize = 8;
@@ -163,6 +168,9 @@ impl Server {
 
     /// Answers connections until [`Shutdown::trigger`]. Removes the socket on the way out.
     ///
+    /// A failed `accept` does not stop it (a pause, then again); only the registration of the listener
+    /// with the runtime can fail.
+    ///
     /// # Errors
     /// [`IpcError::Io`] when the listener cannot be used.
     pub async fn run(self) -> Result<(), IpcError> {
@@ -177,7 +185,7 @@ impl Server {
         let listener = UnixListener::from_std(listener).map_err(|e| IpcError::io("listener", e))?;
         let mut stopped = stop.subscribe();
         let permits = Arc::new(Semaphore::new(MAX_CONNECTIONS));
-        let result = loop {
+        let result: Result<(), IpcError> = loop {
             tokio::select! {
                 _ = stopped.wait_for(|s| *s) => break Ok(()),
                 accepted = listener.accept() => {
@@ -185,7 +193,13 @@ impl Server {
                         Ok((stream, _)) => stream,
                         // A connection that fell before accept(): not the end of the server.
                         Err(e) if e.kind() == io::ErrorKind::ConnectionAborted => continue,
-                        Err(e) => break Err(IpcError::io("accept", e)),
+                        // `EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`: the machine is short of something
+                        // for a moment. The server stays up, and tries again after a pause so that
+                        // it does not spin.
+                        Err(_) => {
+                            tokio::time::sleep(ACCEPT_PAUSE).await;
+                            continue;
+                        }
                     };
                     let Ok(permit) = Arc::clone(&permits).try_acquire_owned() else {
                         continue; // too many clients: closed on arrival
@@ -206,14 +220,25 @@ impl Server {
 }
 
 fn take_lock(path: &Path) -> Result<File, IpcError> {
+    // `NONBLOCK`: opening a FIFO that someone left at this name would otherwise wait for a reader
+    // forever; `NOFOLLOW`: a link is not followed. Whatever opened is then checked with `fstat`.
     let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .mode(0o600)
-        .custom_flags(OFlags::NOFOLLOW.bits().cast_signed())
+        .custom_flags((OFlags::NOFOLLOW | OFlags::NONBLOCK).bits().cast_signed())
         .open(path)
         .map_err(|e| IpcError::io("open the lock", e))?;
+    let meta = file
+        .metadata()
+        .map_err(|e| IpcError::io("inspect the lock", e))?;
+    if !meta.is_file() || meta.uid() != current_uid() {
+        return Err(IpcError::UnsafeRuntimeDir {
+            path: path.to_owned(),
+            why: "the lock is not a regular file of this user".to_owned(),
+        });
+    }
     match flock(&file, FlockOperation::NonBlockingLockExclusive) {
         Ok(()) => Ok(file),
         Err(rustix::io::Errno::WOULDBLOCK) => Err(IpcError::StartFailed(
@@ -405,6 +430,12 @@ async fn answer(
             code::INVALID_REQUEST,
         ));
     };
+    // A request without `id` is a notification: nothing answers it, so its outcome could not be seen
+    // and a method could run unseen. Only `hello` is accepted that way (review 2.1a m13).
+    if id.is_none() && method != "hello" {
+        let e = RpcError::daemon("ipc_protocol_error", "an id is required");
+        return no_close(error_message(&Value::Null, &e, code::INVALID_REQUEST));
+    }
     let params = request.get("params").cloned().unwrap_or(Value::Null);
     let outcome = if method == "hello" {
         hello(params, config, greeted)
