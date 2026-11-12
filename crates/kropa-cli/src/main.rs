@@ -14,7 +14,12 @@ fn refuse(step: &str, source: &std::io::Error) -> ExitCode {
     let detail = source.to_string();
     let text = kropa_i18n::Localizer::new(lang).map_or_else(
         |_| format!("cannot set {step}: {detail}; refusing to run in this state"),
-        |loc| loc.message_args("error-hardening-failed", &[("step", step), ("detail", &detail)]),
+        |loc| {
+            loc.message_args(
+                "error-hardening-failed",
+                &[("step", step), ("detail", &detail)],
+            )
+        },
     );
     eprintln!("kropa: {text}");
     ExitCode::from(1)

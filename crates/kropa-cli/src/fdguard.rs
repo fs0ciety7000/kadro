@@ -119,7 +119,10 @@ mod tests {
         let kept = inheritable();
         let fd = kept.as_raw_fd();
         assert!(fd >= 3);
-        assert!(child_has(fd), "the test would prove nothing: the child must see it before");
+        assert!(
+            child_has(fd),
+            "the test would prove nothing: the child must see it before"
+        );
         mark_inherited_cloexec().unwrap();
         assert!(!child_has(fd), "the descriptor reached the child");
         // Still open and usable here.
@@ -134,7 +137,11 @@ mod tests {
         assert!(child_has(fd));
         walk_and_mark().unwrap();
         assert!(!child_has(fd));
-        assert!(rustix::io::fcntl_getfd(&kept).unwrap().contains(rustix::io::FdFlags::CLOEXEC));
+        assert!(
+            rustix::io::fcntl_getfd(&kept)
+                .unwrap()
+                .contains(rustix::io::FdFlags::CLOEXEC)
+        );
     }
 
     #[test]
@@ -144,7 +151,11 @@ mod tests {
         for fd in 0..3 {
             // SAFETY: borrowing a standard descriptor for one query; it is open for the whole test.
             let borrowed = unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) };
-            assert!(!rustix::io::fcntl_getfd(borrowed).unwrap().contains(rustix::io::FdFlags::CLOEXEC));
+            assert!(
+                !rustix::io::fcntl_getfd(borrowed)
+                    .unwrap()
+                    .contains(rustix::io::FdFlags::CLOEXEC)
+            );
         }
     }
 }

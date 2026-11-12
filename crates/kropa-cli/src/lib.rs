@@ -542,7 +542,7 @@ mod tests {
         assert_eq!(r.out.lines().count(), 1);
         assert_eq!(v["schema"], "kropa.version/1");
         assert_eq!(v["version"], env!("CARGO_PKG_VERSION"));
-        assert!(v["ipc_protocol"].is_null());
+        assert_eq!(v["ipc_protocol"], 1);
     }
 
     #[test]

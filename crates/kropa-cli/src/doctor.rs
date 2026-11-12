@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use kropa_capture::{CaptureBackend, Diagnosis, Fact, FactValue, ResetError};
 use kropa_core::{CONFIG_FILE, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
+use kropa_ipc::Probe;
 use kropa_upload::profiles::load_destinations;
 use kropa_upload::secret::{StoreState, StoreStatus};
 use serde_json::{Value, json};
@@ -27,10 +28,7 @@ pub const SCHEMA: &str = "kropa.doctor/1";
 pub const RESET_SCHEMA: &str = "kropa.doctor.reset/1";
 
 /// What `doctor` cannot report yet, the lot that adds it, and its Fluent message.
-const PENDING: [(&str, &str, &str); 2] = [
-    ("kropa_app", "2.1", "doctor-pending-app"),
-    ("outputs", "2.5", "doctor-pending-outputs"),
-];
+const PENDING: [(&str, &str, &str); 1] = [("outputs", "2.5", "doctor-pending-outputs")];
 
 /// What is still missing from the report: the screens are no longer pending once the backend lists
 /// them (macOS).
@@ -101,6 +99,37 @@ fn secrets_json(secrets: &Secrets) -> Value {
     })
 }
 
+/// The graphical application as the socket shows it, and the D-Bus service file that starts it.
+struct Ipc {
+    probe: Probe,
+    /// `None` where no service file is used (macOS).
+    service_file: Option<bool>,
+}
+
+impl Ipc {
+    /// Looks at the socket (nothing is launched) and at the service directories of the bus.
+    fn gather() -> Self {
+        Self {
+            probe: kropa_ipc::probe(),
+            service_file: kropa_ipc::service_file_present(&|name| std::env::var(name).ok()),
+        }
+    }
+}
+
+fn ipc_json(ipc: &Ipc) -> Value {
+    let server = ipc.probe.server.as_ref().map(|s| {
+        json!({"name": s.server, "version": s.version, "protocol": s.protocol, "features": s.features})
+    });
+    json!({
+        "socket": ipc.probe.socket.as_ref().map(|p| p.display().to_string()),
+        "state": ipc.probe.state.as_str(),
+        "reason": ipc.probe.reason,
+        "protocol": kropa_ipc::PROTOCOL,
+        "server": server,
+        "service_file": ipc.service_file,
+    })
+}
+
 /// Where things are, and whether the configuration reads.
 struct Paths {
     config_file: Option<PathBuf>,
@@ -149,7 +178,7 @@ fn fact_json(fact: &Fact) -> Value {
     json!({ "key": fact.key, "state": state, "value": value })
 }
 
-fn document(diagnosis: &Diagnosis, paths: &Paths, secrets: &Secrets) -> Value {
+fn document(diagnosis: &Diagnosis, paths: &Paths, secrets: &Secrets, ipc: &Ipc) -> Value {
     let capabilities: Vec<Value> = [
         &diagnosis.capabilities.screen,
         &diagnosis.capabilities.output,
@@ -186,6 +215,7 @@ fn document(diagnosis: &Diagnosis, paths: &Paths, secrets: &Secrets) -> Value {
             "captures_dir": paths.captures_dir.as_ref().map(|p| p.display().to_string()),
         },
         "secrets": secrets_json(secrets),
+        "ipc": ipc_json(ipc),
         "not_available_yet": pending,
     })
 }
@@ -214,6 +244,7 @@ fn render(
     diagnosis: &Diagnosis,
     paths: &Paths,
     secrets: &Secrets,
+    ipc: &Ipc,
     loc: &Localizer,
     session: &mut Session<'_, '_>,
 ) {
@@ -317,9 +348,65 @@ fn render(
         )),
     }
 
+    render_ipc(ipc, loc, session);
+
     section(session, "doctor-section-pending");
     for (_, _, id) in pending(diagnosis) {
         session.result(&format!("  {}", loc.message(id)));
+    }
+}
+
+fn render_ipc(ipc: &Ipc, loc: &Localizer, session: &mut Session<'_, '_>) {
+    session.result("");
+    session.result(&loc.message("doctor-section-ipc"));
+    let probe = &ipc.probe;
+    if let Some(socket) = &probe.socket {
+        let path = socket.display().to_string();
+        session.result(&format!(
+            "  {}",
+            loc.message_args("doctor-ipc-socket", &[("path", &path)])
+        ));
+    }
+    let state = loc.message(&format!("doctor-ipc-state-{}", probe.state.as_str()));
+    session.result(&format!(
+        "  {}",
+        loc.message_args("doctor-ipc-state", &[("state", &state)])
+    ));
+    if let Some(reason) = &probe.reason {
+        let text = loc.message(&fluent_id("doctor-ipc-reason", reason));
+        session.result(&format!(
+            "    {}",
+            loc.message_args("doctor-ipc-reason", &[("reason", &text)])
+        ));
+    }
+    if let Some(server) = &probe.server {
+        let protocol = server.protocol.to_string();
+        let line = loc.message_args(
+            "doctor-ipc-server",
+            &[
+                ("server", &server.server),
+                ("version", &server.version),
+                ("protocol", &protocol),
+            ],
+        );
+        session.result(&format!("  {line}"));
+    }
+    match ipc.service_file {
+        Some(present) => {
+            let value = loc.message(if present {
+                "doctor-value-yes"
+            } else {
+                "doctor-value-no"
+            });
+            session.result(&format!(
+                "  {}",
+                loc.message_args("doctor-ipc-service-file", &[("value", &value)])
+            ));
+        }
+        None => session.result(&format!(
+            "  {}",
+            loc.message("doctor-ipc-service-file-unused")
+        )),
     }
 }
 
@@ -352,10 +439,11 @@ pub fn run(
     let diagnosis = backend.diagnose();
     let paths = paths(config_dir_arg);
     let secrets = secrets(config_dir_arg, ctx);
+    let ipc = Ipc::gather();
     if session.json {
-        session.document(&document(&diagnosis, &paths, &secrets));
+        session.document(&document(&diagnosis, &paths, &secrets, &ipc));
     } else {
-        render(&diagnosis, &paths, &secrets, ctx.loc, session);
+        render(&diagnosis, &paths, &secrets, &ipc, ctx.loc, session);
     }
     ExitCode::Ok
 }
@@ -421,7 +509,7 @@ mod tests {
     use kropa_capture::ResetError;
 
     use super::{
-        PENDING, Paths, Secrets, document, fluent_id, pending, render, reset_error, secrets_of,
+        Ipc, PENDING, Paths, Secrets, document, fluent_id, pending, render, reset_error, secrets_of,
     };
     use crate::output::{Io, Session};
 
@@ -473,6 +561,24 @@ mod tests {
         }
     }
 
+    fn ipc() -> Ipc {
+        Ipc {
+            probe: kropa_ipc::Probe {
+                socket: Some("/run/user/1000/kropa/app.sock".into()),
+                state: kropa_ipc::ProbeState::Listening,
+                reason: None,
+                server: Some(kropa_ipc::HelloReply {
+                    protocol: 1,
+                    server: "kropa-gtk".into(),
+                    version: "9.9.9".into(),
+                    methods: vec![],
+                    features: vec![],
+                }),
+            },
+            service_file: Some(false),
+        }
+    }
+
     fn paths() -> Paths {
         Paths {
             config_file: Some("/c/config.toml".into()),
@@ -487,6 +593,7 @@ mod tests {
             &diagnosis(),
             &paths(),
             &secrets(StoreState::Ambiguous, Some(&["old"])),
+            &ipc(),
         );
         let states: Vec<_> = doc["facts"]
             .as_array()
@@ -513,6 +620,10 @@ mod tests {
         assert_eq!(doc["secrets"]["duplicates"], true);
         assert_eq!(doc["secrets"]["orphans"][0], "old");
         assert_eq!(doc["secrets"]["profiles"][0]["entries"], 2);
+        assert_eq!(doc["ipc"]["state"], "listening");
+        assert_eq!(doc["ipc"]["server"]["name"], "kropa-gtk");
+        assert_eq!(doc["ipc"]["protocol"], 1);
+        assert_eq!(doc["ipc"]["service_file"], false);
         assert_eq!(
             doc["not_available_yet"].as_array().unwrap().len(),
             PENDING.len()
@@ -548,6 +659,7 @@ mod tests {
                     &diagnosis(),
                     &paths(),
                     &secrets(StoreState::Locked, Some(&["old"])),
+                    &ipc(),
                     &loc,
                     &mut session,
                 );
@@ -560,6 +672,8 @@ mod tests {
             assert!(text.contains("bad"), "{text}");
             assert!(text.contains("keyring"), "{text}");
             assert!(text.contains("old"), "{text}");
+            assert!(text.contains("kropa-gtk 9.9.9"), "{text}");
+            assert!(text.contains("app.sock"), "{text}");
             assert_eq!(err.len(), 0);
             // A message id on screen would mean a missing translation.
             assert!(!text.contains("doctor-"), "{text}");
@@ -598,7 +712,7 @@ mod tests {
                         stdin_is_tty: false,
                     };
                     let mut session = Session::new(&mut io, false, false, 0, false);
-                    render(&diagnosis(), &paths(), secrets, &loc, &mut session);
+                    render(&diagnosis(), &paths(), secrets, &ipc(), &loc, &mut session);
                 }
                 String::from_utf8(out).unwrap()
             };
@@ -676,10 +790,28 @@ mod tests {
             )
             .chain(PENDING.iter().map(|(_, _, id)| (*id).to_owned()))
             .chain(
+                ["absent", "listening", "orphan", "unsafe", "incompatible"]
+                    .iter()
+                    .map(|k| format!("doctor-ipc-state-{k}")),
+            )
+            .chain(
+                [
+                    "no_runtime_dir",
+                    "unsafe_runtime_dir",
+                    "peer_uid_mismatch",
+                    "ipc_version_mismatch",
+                    "ipc_protocol_error",
+                ]
+                .iter()
+                .map(|k| fluent_id("doctor-ipc-reason", k)),
+            )
+            .chain(
                 [
                     "doctor-section-secrets",
                     "doctor-secrets-duplicates",
                     "doctor-secrets-orphans-unknown",
+                    "doctor-section-ipc",
+                    "doctor-ipc-service-file-unused",
                     "doctor-reset-removed",
                     "doctor-reset-absent",
                     "error-reset-unsupported",

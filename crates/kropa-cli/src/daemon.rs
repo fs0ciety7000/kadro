@@ -51,7 +51,10 @@ fn message_id(error: &IpcError) -> String {
         IpcError::Rpc(_) => "error-ipc-rpc".to_owned(),
         other => format!(
             "error-ipc-{}",
-            other.reason().unwrap_or("ipc_protocol_error").replace('_', "-")
+            other
+                .reason()
+                .unwrap_or("ipc_protocol_error")
+                .replace('_', "-")
         ),
     }
 }
@@ -114,10 +117,21 @@ mod tests {
             IpcError::NotRunning(PathBuf::from("/s")),
             IpcError::StartFailed("x".into()),
             IpcError::StartTimeout(Duration::from_secs(5)),
-            IpcError::PeerUidMismatch { peer: 1, expected: 2 },
-            IpcError::VersionMismatch { server: 2, client: 1 },
+            IpcError::PeerUidMismatch {
+                peer: 1,
+                expected: 2,
+            },
+            IpcError::VersionMismatch {
+                server: 2,
+                client: 1,
+            },
             IpcError::Protocol("bad".into()),
-            IpcError::Rpc(RpcError::new(3, "cancelled", Some("overlay_escape"), "Escape")),
+            IpcError::Rpc(RpcError::new(
+                3,
+                "cancelled",
+                Some("overlay_escape"),
+                "Escape",
+            )),
         ]
     }
 
