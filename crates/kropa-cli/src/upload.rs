@@ -174,6 +174,19 @@ pub struct Delivery {
     pub result: Result<UploadOutcome, UploadError>,
     /// The redacted journal of the exchange as `(level, line)`, empty without `-v`.
     pub log: Vec<(u8, String)>,
+    /// Whether the file sent is a capture that Kropa has just written, from an image that its
+    /// backend already stripped of metadata. Then there is nothing left to warn about; for any other
+    /// file the warning stays until the stripping of lot 4.8.
+    pub metadata_stripped: bool,
+}
+
+impl Delivery {
+    /// The same delivery, for a file whose metadata Kropa itself removed when it wrote it.
+    #[must_use]
+    pub fn with_stripped_metadata(mut self) -> Self {
+        self.metadata_stripped = true;
+        self
+    }
 }
 
 /// Prints the journal of an upload on stderr, from `-v` (level 1) or `-vv` (level 2). The lines
@@ -229,6 +242,7 @@ pub fn deliver(
             .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned()),
         result,
         log,
+        metadata_stripped: false,
     }
 }
 
@@ -304,7 +318,9 @@ pub fn report(
         for w in &outcome.warnings {
             warnings.push(warning(w.code, loc, &w.detail));
         }
-        warnings.push(warning("metadata_not_stripped", loc, ""));
+        if !delivery.metadata_stripped {
+            warnings.push(warning("metadata_not_stripped", loc, ""));
+        }
     }
     let content = match requested {
         CopyChoice::None => Content::Nothing,

@@ -255,8 +255,11 @@ fn send_and_copy(
             .map(str::to_owned)
             .or_else(|| config.default_destination.clone())
             .unwrap_or_default();
+        // The file is the capture just written from `image.data`, which the backend delivers
+        // without metadata: nothing to warn about, unlike `kropa upload <any file>`.
         let delivery =
-            upload::deliver(ctx, config_dir, &profile, path, &opts.vars, session.verbose);
+            upload::deliver(ctx, config_dir, &profile, path, &opts.vars, session.verbose)
+                .with_stripped_metadata();
         upload::report(&delivery, copy, png, ctx.clipboard, loc, session)
     });
     // Without an upload the clipboard step is ours: a link format has no link to copy, the image can

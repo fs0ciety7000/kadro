@@ -8,18 +8,23 @@
 
 use std::path::{Path, PathBuf};
 
-use kropa_capture::{CaptureBackend, Diagnosis, Fact, FactValue};
+use kropa_capture::{CaptureBackend, Diagnosis, Fact, FactValue, ResetError};
 use kropa_core::{CONFIG_FILE, Config, ExitCode, config_dir};
 use kropa_i18n::Localizer;
 use kropa_upload::profiles::load_destinations;
 use kropa_upload::secret::{StoreState, StoreStatus};
 use serde_json::{Value, json};
 
+use crate::args::DoctorArgs;
+use crate::errors::CliError;
 use crate::exec::Context;
 use crate::output::Session;
 
 /// JSON schema of the report.
 pub const SCHEMA: &str = "kropa.doctor/1";
+
+/// JSON schema of `doctor --reset-screenshot-permission`.
+pub const RESET_SCHEMA: &str = "kropa.doctor.reset/1";
 
 /// What `doctor` cannot report yet, the lot that adds it, and its Fluent message.
 const PENDING: [(&str, &str, &str); 2] = [
@@ -318,6 +323,25 @@ fn render(
     }
 }
 
+/// `kropa doctor`: the report, or with `--reset-screenshot-permission` the reset of the stored
+/// permission.
+///
+/// # Errors
+/// Only the reset can fail, see [`reset_screenshot_permission`].
+pub fn command(
+    args: &DoctorArgs,
+    backend: &dyn CaptureBackend,
+    config_dir_arg: Option<&Path>,
+    ctx: &Context<'_>,
+    session: &mut Session<'_, '_>,
+) -> Result<ExitCode, CliError> {
+    if args.reset_screenshot_permission {
+        return reset_screenshot_permission(backend, ctx, session);
+    }
+    // A report: a broken configuration is shown in it, not a reason to fail.
+    Ok(run(backend, config_dir_arg, ctx, session))
+}
+
 /// Prints the report. Always succeeds: what is missing is part of the report.
 pub fn run(
     backend: &dyn CaptureBackend,
@@ -336,6 +360,52 @@ pub fn run(
     ExitCode::Ok
 }
 
+/// The error of a reset that could not be done, with its Fluent message and its machine reason.
+fn reset_error(error: &ResetError, loc: &Localizer) -> CliError {
+    let id = match error {
+        ResetError::Unsupported => "error-reset-unsupported",
+        ResetError::StoreUnreachable(_) => "error-reset-store-unreachable",
+        // `StoreError`, and any case added later: the generic message carries the detail.
+        _ => "error-reset-store-error",
+    };
+    let detail = error.detail().unwrap_or_default();
+    CliError::new(error.exit_code(), loc, id, &[("detail", detail)])
+        .with_reason(error.reason())
+        .at_step("reset")
+}
+
+/// `doctor --reset-screenshot-permission`: makes the system forget the stored answer to the
+/// screenshot request, and says what really happened (entry removed, none stored, or why nothing
+/// could be done). Nothing is captured and no dialog is shown; the next capture asks again.
+///
+/// # Errors
+/// A [`CliError`]: code 5 when the platform keeps the permission out of reach (macOS) or the
+/// permission store cannot be reached, code 1 for an answer nobody planned for.
+fn reset_screenshot_permission(
+    backend: &dyn CaptureBackend,
+    ctx: &Context<'_>,
+    session: &mut Session<'_, '_>,
+) -> Result<ExitCode, CliError> {
+    let outcome = backend
+        .reset_permission()
+        .map_err(|e| reset_error(&e, ctx.loc))?;
+    if session.json {
+        session.document(&json!({
+            "schema": RESET_SCHEMA,
+            "status": "ok",
+            "exit_code": 0,
+            "permission": "screenshot",
+            "result": outcome.as_str(),
+        }));
+    } else {
+        session.result(
+            &ctx.loc
+                .message(&format!("doctor-reset-{}", outcome.as_str())),
+        );
+    }
+    Ok(ExitCode::Ok)
+}
+
 #[cfg(test)]
 mod tests {
     use kropa_capture::{
@@ -348,7 +418,11 @@ mod tests {
 
     use kropa_upload::secret::{ProfileCount, StoreState, StoreStatus};
 
-    use super::{PENDING, Paths, Secrets, document, fluent_id, pending, render, secrets_of};
+    use kropa_capture::ResetError;
+
+    use super::{
+        PENDING, Paths, Secrets, document, fluent_id, pending, render, reset_error, secrets_of,
+    };
     use crate::output::{Io, Session};
 
     fn diagnosis() -> Diagnosis {
@@ -548,6 +622,42 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_reset_has_its_code_reason_and_text_in_both_languages() {
+        for lang in Lang::ALL {
+            let loc = Localizer::new(lang).unwrap();
+            for (error, code, reason, mentions) in [
+                (
+                    ResetError::Unsupported,
+                    5,
+                    "permission_reset_unsupported",
+                    None,
+                ),
+                (
+                    ResetError::StoreUnreachable("no owner".into()),
+                    5,
+                    "permission_store_unreachable",
+                    Some("no owner"),
+                ),
+                (
+                    ResetError::StoreError("boom".into()),
+                    1,
+                    "permission_store_error",
+                    Some("boom"),
+                ),
+            ] {
+                let e = reset_error(&error, &loc);
+                assert_eq!(e.code.code(), code);
+                assert_eq!(e.reason.as_deref(), Some(reason));
+                assert_eq!(e.step, Some("reset"));
+                assert!(!e.message.starts_with("error-reset"), "{}", e.message);
+                if let Some(detail) = mentions {
+                    assert!(e.message.contains(detail), "{}", e.message);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn every_code_the_backend_can_emit_has_a_message_in_both_languages() {
         let ids: Vec<String> = ALL_FACT_KEYS
             .iter()
@@ -570,6 +680,9 @@ mod tests {
                     "doctor-section-secrets",
                     "doctor-secrets-duplicates",
                     "doctor-secrets-orphans-unknown",
+                    "doctor-reset-removed",
+                    "doctor-reset-absent",
+                    "error-reset-unsupported",
                 ]
                 .map(str::to_owned),
             )

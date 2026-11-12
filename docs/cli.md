@@ -105,7 +105,9 @@ kropa capture output DP-1 --no-upload --json | jq -r .file.path
 
 Envoie un fichier existant vers `--to` ou le profil par défaut (`--var` : mêmes règles que `capture`). Les
 métadonnées sont retirées de la copie envoyée
-(lot 4.8), le fichier d'origine n'est jamais modifié. stdout : l'URL. `--yes` saute la confirmation d'un format
+(lot 4.8), le fichier d'origine n'est jamais modifié ; d'ici là, l'envoi d'un fichier quelconque porte
+l'avertissement `metadata_not_stripped`. `capture --upload` ne l'émet pas : le fichier envoyé est la capture que Kropa
+vient d'écrire, dont les métadonnées sont déjà retirées (lot 1.12c). stdout : l'URL. `--yes` saute la confirmation d'un format
 inconnu envoyé tel quel (`uploads.md` § 6). Exemple : `kropa upload ./diagram.png --to zipline --copy markdown`.
 
 ### 2.3 `dest` : destinations (lot 1.7 : `list`, `show`, `test`, `import` et `--expect-host` ; lot 2.6 : le reste)
@@ -211,16 +213,38 @@ Ouvre l'éditeur sur une image (PNG, JPEG) ; un `.kropa` à partir du lot 5.5 si
 commande attend la fermeture de l'éditeur ; stdout : chemin exporté (ou URL si envoyé). Fermeture sans export :
 code 3.
 
-### 2.8 `doctor` (lot 1.4 Linux, 1.5 macOS)
+### 2.8 `doctor` (lot 1.4 Linux, 1.5 macOS ; `--reset-screenshot-permission` au lot 1.12b)
 
-`kropa doctor [--json]` : système et bureau, capacités détectées (portails et versions, ScreenShot2, layer-shell,
+`kropa doctor [--json] [--reset-screenshot-permission]` : système et bureau, capacités détectées (portails et versions, ScreenShot2, layer-shell,
 data-control, GlobalShortcuts, TCC « Enregistrement de l'écran »), replis actifs, écrans et leurs noms, magasin de
 secrets, socket et version de `kropa-app`, chemins de config, de données et de captures. Aucune requête réseau.
-Code 0 même si des capacités manquent (c'est un rapport) ; code 1 seulement si le diagnostic lui-même échoue.
+Code 0 même si des capacités manquent (c'est un rapport) ; code 1 seulement si le diagnostic lui-même échoue
+(ou, avec `--reset-screenshot-permission`, si le magasin de permissions répond par une erreur inattendue).
 La section « Magasin de secrets » **interroge le trousseau** (jamais de lecture de valeur) : sous Linux, cela peut activer
 le service Secret Service par D-Bus, dans le délai maximal d'un appel du magasin (5 s) ; trousseau verrouillé, `doctor`
 ne demande jamais le déverrouillage. Le `detail` de l'état (texte de `secrets.status.detail` dans le JSON) vient du
 magasin, en anglais : en mode texte il est précédé de « Détail technique (non traduit) ».
+
+**`--reset-screenshot-permission`** (lot 1.12b) : au lieu du rapport, fait oublier au système la réponse enregistrée
+à la demande de capture, pour que la prochaine capture redemande la permission. C'est la seule action qui écrit
+dans `doctor` ; elle ne capture rien, n'ouvre aucune boîte et ne touche qu'à l'entrée de Kropa. Forme retenue : un
+drapeau de `doctor` plutôt qu'un groupe `permissions` (une commande, un verbe, de plus, pour une seule permission) ;
+le groupe reste possible si d'autres permissions apparaissent (GlobalShortcuts, ScreenCast).
+
+- Linux : appel D-Bus `DeletePermission(screenshot, screenshot, <identifiant d'application>)` sur le
+  `org.freedesktop.impl.portal.PermissionStore` du bus de session (ce que fait `flatpak permission-reset`, sans
+  Flatpak ; aucun sous-processus). Un refus de portail (`portal_declined`, `portal_not_allowed`) renvoie vers cette
+  option.
+- macOS : rien n'est fait, code 5 `unsupported`, `error.reason` = `permission_reset_unsupported`, le message renvoie
+  aux Réglages Système > Confidentialité et sécurité > Enregistrement de l'écran et de l'audio système.
+- Sortie, schéma `kropa.doctor.reset/1` :
+  `{ "schema": "kropa.doctor.reset/1", "status": "ok", "exit_code": 0, "permission": "screenshot", "result": "removed" }`.
+  `result` : `removed` (l'entrée existait et a été supprimée) ou `absent` (le magasin n'avait aucune réponse
+  enregistrée pour Kropa : rien n'a changé). Les deux donnent le code 0 ; en mode texte, une ligne sur stdout.
+- Échecs (enveloppe d'erreur, `error.step` = `reset`) : code 5 et `error.reason` = `permission_store_unreachable`
+  (pas de bus de session, ou pas de magasin de permissions sur le bus : bureau sans `xdg-desktop-portal`, sandbox
+  sans accès) ; code 1 et `permission_store_error` pour une autre réponse d'erreur du magasin (détail en anglais
+  dans le message). Jamais de succès simulé : sans réponse du magasin, rien n'est annoncé comme oublié.
 
 ### 2.9 `version` (lot 1.3 ; `--check` au lot 5)
 
@@ -285,14 +309,14 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `upload.status` | `done`, `queued` (lot 4, `job_id` renseigné), `failed`, `skipped` (pas d'envoi demandé). `upload` vaut `null` avec `--no-upload`. |
 | `clipboard.status` | `copied`, `pending` (notification « Lien prêt, Copier » en attente d'un clic), `unavailable`, `failed`, `skipped`. |
 | `error` | `null` ou `{ "code": "security_refused", "reason": "origin_not_allowed", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
-| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `keychain_broker_unavailable`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). La clé `reason` est toujours présente (`null` sans sous-cause). |
+| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `keychain_broker_unavailable`, `unsafe_runtime_dir`. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). `doctor --reset-screenshot-permission` (lot 1.12b) : `permission_reset_unsupported` et `permission_store_unreachable` (code 5), `permission_store_error` (code 1). La clé `reason` est toujours présente (`null` sans sous-cause). |
 | `error.warnings` | Absent sauf avertissement lié à l'échec (ajout sans changement de version) : liste de textes localisés, que `--quiet` ne masque pas. Aujourd'hui `dest import` : entrée du magasin qui a pu être créée malgré un délai dépassé (`keyring_timeout`) et entrées restées après un retour arrière raté (noms seulement). |
 | `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
 `deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
 `error.message` et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
 Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.dest.show/1`, `kropa.dest.test/1`, `kropa.dest.import/1`, `kropa.queue.list/1`,
-`kropa.history.list/1`, `kropa.doctor/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
+`kropa.history.list/1`, `kropa.doctor/1`, `kropa.doctor.reset/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
 `trycmd` du lot 1.3. Les erreurs d'une commande sans schéma propre (`dest add`, `edit`, erreurs d'usage...) portent
 `kropa.error/1`. Aucune erreur, de clap ou de Kropa, ne reprend une valeur saisie (elle peut être un secret) : seul le
 nom de l'option est cité, ou « argument en trop » pour une valeur positionnelle et dans la référence CLI du lot 5.6.

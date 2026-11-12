@@ -106,6 +106,7 @@ arg-search = Texte à chercher dans le nom, le chemin, l'URL et le profil
 arg-limit = Nombre maximal de lignes
 arg-since = Seulement les entrées depuis cette date (AAAA-MM-JJ ou RFC 3339)
 arg-check = Demander à GitHub Releases s'il existe une version plus récente
+arg-reset-screenshot-permission = Faire oublier au système la permission de capture enregistrée (la prochaine capture la redemandera), au lieu de décrire
 
 val-delay = SEC
 val-output = CHEMIN
@@ -210,9 +211,9 @@ note-app-id-registration-unavailable = Le portail n'a pas de registre d'applicat
 
 error-capture-no-session-bus = Pas de session graphique à capturer : le bus de session D-Bus est injoignable. Lancez kropa depuis un terminal de votre session de bureau.
 error-capture-portal-unavailable = Le portail de capture d'écran n'est pas disponible. Installez xdg-desktop-portal et le module de portail de votre bureau (xdg-desktop-portal-gnome, -kde ou -wlr), puis rouvrez votre session.
-error-capture-portal-declined = Le portail de capture d'écran a refusé la demande. Si vous avez refusé la permission, autorisez-la de nouveau dans les réglages de confidentialité de votre bureau ou réinitialisez-la (flatpak permission-reset) ; sinon, vérifiez que le module de portail de votre bureau fonctionne.
+error-capture-portal-declined = Le portail de capture d'écran a refusé la demande. Si vous avez refusé la permission, autorisez-la de nouveau dans les réglages de confidentialité de votre bureau, ou faites oublier le refus au système avec « kropa doctor --reset-screenshot-permission » puis relancez la commande ; sinon, vérifiez que le module de portail de votre bureau fonctionne.
 error-capture-portal-dismissed = La demande de capture a été fermée avant la prise de vue. Relancez la commande et autorisez la capture.
-error-capture-portal-not-allowed = Le portail n'autorise pas Kropa à faire des captures d'écran. Autorisez-le dans les réglages de confidentialité de votre bureau ou réinitialisez la permission, puis réessayez.
+error-capture-portal-not-allowed = Le portail n'autorise pas Kropa à faire des captures d'écran. Autorisez-le dans les réglages de confidentialité de votre bureau, ou faites oublier le refus au système avec « kropa doctor --reset-screenshot-permission », puis réessayez.
 error-capture-output-not-isolable = Le portail de capture d'écran rend tous les écrans en une seule image et ne peut pas en isoler un. Utilisez plutôt 'kropa capture screen'.
 error-capture-image-format-unsupported = Les captures ne sont fournies qu'en images PNG : le format { $detail } n'est pas encore pris en charge. Utilisez png dans la configuration, ou un nom de fichier en .png.
 error-capture-portal-error = Le portail de capture d'écran a échoué : { $detail }
@@ -296,6 +297,14 @@ doctor-secrets-orphans-unknown = Restes non vérifiés : le fichier des destinat
 doctor-section-pending = Pas encore disponible
 doctor-pending-app = Socket et version de kropa-app : lot 2.1
 doctor-pending-outputs = Écrans et leurs noms : lot 2.5
+
+## Réinitialisation de la permission de capture (« kropa doctor --reset-screenshot-permission »)
+
+doctor-reset-removed = Permission de capture oubliée : la prochaine capture la redemandera.
+doctor-reset-absent = Rien à réinitialiser : le système ne garde aucune réponse enregistrée à la demande de capture de Kropa.
+error-reset-unsupported = Kropa ne peut pas réinitialiser la permission de capture sur ce système. Sous macOS, ouvrez Réglages Système > Confidentialité et sécurité > Enregistrement de l'écran et de l'audio système, désactivez puis réactivez Kropa (ou retirez-le avec « - » et ajoutez-le de nouveau avec « + »).
+error-reset-store-unreachable = Le magasin de permissions des portails du bureau est injoignable ({ $detail }). Lancez kropa depuis un terminal de votre session de bureau et vérifiez que xdg-desktop-portal est installé et démarré ; sinon, réinitialisez la permission dans les réglages de confidentialité de votre bureau.
+error-reset-store-error = Le magasin de permissions des portails du bureau a refusé la réinitialisation : { $detail }
 
 ## Envoi et destinations (lot 1.7)
 

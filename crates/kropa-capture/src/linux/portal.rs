@@ -15,7 +15,7 @@ use super::probe;
 use super::uri::{UriError, file_uri_to_path};
 use crate::{
     BackendId, CaptureBackend, CaptureError, CaptureMode, CaptureRequest, CapturedImage, Denial,
-    Diagnosis, Failure, Note, Unsupported, sanitize_png,
+    Diagnosis, Failure, Note, ResetError, ResetOutcome, Unsupported, sanitize_png,
 };
 
 /// The portal never hands over more than this: a bigger file is not a screenshot.
@@ -102,6 +102,12 @@ impl CaptureBackend for PortalScreenshot {
             CaptureMode::Output => Err(CaptureError::Unsupported(Unsupported::OutputNotIsolable)),
             CaptureMode::Screen => Ok(()),
         }
+    }
+
+    fn reset_permission(&self) -> Result<ResetOutcome, ResetError> {
+        zbus::block_on(super::permission::reset_screenshot(
+            self.connection.as_ref(),
+        ))
     }
 
     fn capture(&self, request: &CaptureRequest<'_>) -> Result<CapturedImage, CaptureError> {
@@ -205,7 +211,7 @@ pub(crate) enum Dismissal {
     Other,
 }
 
-fn classify_zbus(error: &zbus::Error) -> PortalFailure {
+pub(super) fn classify_zbus(error: &zbus::Error) -> PortalFailure {
     match error {
         zbus::Error::MethodError(name, description, _) => PortalFailure::DbusError {
             name: name.to_string(),
@@ -239,7 +245,7 @@ pub(crate) fn classify(error: &AshpdError) -> PortalFailure {
 }
 
 /// D-Bus error names that mean "nobody to talk to" rather than "talked and failed".
-fn is_service_missing(name: &str) -> bool {
+pub(super) fn is_service_missing(name: &str) -> bool {
     matches!(
         name,
         "org.freedesktop.DBus.Error.ServiceUnknown"

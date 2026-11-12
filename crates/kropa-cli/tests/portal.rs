@@ -119,6 +119,7 @@ enum PortalError {
     ZBus(zbus::Error),
     Failed(String),
     NotAllowed(String),
+    NotFound(String),
 }
 
 struct Screenshot(Arc<State>);
@@ -244,6 +245,72 @@ impl Portal {
     }
 }
 
+/// What the fake permission store holds, and what it was asked.
+struct StoreState {
+    /// `(table, id, app)` of the stored answers.
+    entries: Mutex<Vec<(String, String, String)>>,
+    /// When set, every call fails with the D-Bus error `org.freedesktop.portal.Error.Failed`.
+    broken: bool,
+    /// Arguments of each `DeletePermission` call.
+    calls: Mutex<Vec<(String, String, String)>>,
+}
+
+struct PermissionStore(Arc<StoreState>);
+
+#[interface(name = "org.freedesktop.impl.portal.PermissionStore")]
+impl PermissionStore {
+    fn delete_permission(&self, table: &str, id: &str, app: &str) -> Result<(), PortalError> {
+        let key = (table.to_owned(), id.to_owned(), app.to_owned());
+        self.0.calls.lock().unwrap().push(key.clone());
+        if self.0.broken {
+            return Err(PortalError::Failed("the store is broken".into()));
+        }
+        let mut entries = self.0.entries.lock().unwrap();
+        match entries.iter().position(|e| *e == key) {
+            Some(i) => {
+                entries.remove(i);
+                Ok(())
+            }
+            None => Err(PortalError::NotFound(format!("No entry for {id}"))),
+        }
+    }
+}
+
+/// The fake permission store on the bus, alive while this value is.
+struct Store {
+    state: Arc<StoreState>,
+    _connection: Connection,
+}
+
+impl Store {
+    fn serve(bus: &Bus, entries: &[(&str, &str, &str)], broken: bool) -> Self {
+        let state = Arc::new(StoreState {
+            entries: Mutex::new(
+                entries
+                    .iter()
+                    .map(|(t, i, a)| ((*t).to_owned(), (*i).to_owned(), (*a).to_owned()))
+                    .collect(),
+            ),
+            broken,
+            calls: Mutex::default(),
+        });
+        let connection = zbus::block_on(
+            connection::Builder::address(bus.address.as_str())
+                .name("org.freedesktop.impl.portal.PermissionStore")
+                .serve_at(
+                    "/org/freedesktop/impl/portal/PermissionStore",
+                    PermissionStore(state.clone()),
+                )
+                .build(),
+        )
+        .expect("the fake permission store starts");
+        Self {
+            state,
+            _connection: connection,
+        }
+    }
+}
+
 struct Run {
     code: i32,
     stdout: String,
@@ -263,6 +330,11 @@ impl Run {
 
 /// Runs `kropa` against `bus` in an otherwise empty environment.
 fn kropa(bus: &Bus, home: &Path, args: &[&str]) -> Run {
+    kropa_at(&bus.address, home, args)
+}
+
+/// Like [`kropa`], on the session bus at `address`.
+fn kropa_at(address: &str, home: &Path, args: &[&str]) -> Run {
     let out = Command::new(env!("CARGO_BIN_EXE_kropa"))
         .env_clear()
         .env("HOME", home)
@@ -271,7 +343,7 @@ fn kropa(bus: &Bus, home: &Path, args: &[&str]) -> Run {
         // The fake portal writes its files under this process's temporary folder.
         .env("TMPDIR", std::env::temp_dir())
         .env("XDG_CURRENT_DESKTOP", "FakeDesktop")
-        .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
+        .env("DBUS_SESSION_BUS_ADDRESS", address)
         .args(if args.contains(&"--lang") {
             &[][..]
         } else {
@@ -608,5 +680,178 @@ fn doctor_in_french_is_translated() {
             .contains("Portail Screenshot, version de l'interface : 3"),
         "{}",
         run.stdout
+    );
+}
+
+const APP: &str = "io.github.fs0ciety7000.Kropa";
+const RESET: &str = "--reset-screenshot-permission";
+
+fn entry(app: &str) -> (String, String, String) {
+    (
+        "screenshot".to_owned(),
+        "screenshot".to_owned(),
+        app.to_owned(),
+    )
+}
+
+#[test]
+fn resetting_deletes_the_stored_answer_and_says_so() {
+    let bus = Bus::start();
+    let store = Store::serve(
+        &bus,
+        &[
+            ("screenshot", "screenshot", APP),
+            ("screenshot", "screenshot", "org.example.Other"),
+        ],
+        false,
+    );
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa(&bus, home.path(), &["--json", "doctor", RESET]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let doc = run.json();
+    assert_eq!(doc["schema"], "kropa.doctor.reset/1");
+    assert_eq!(doc["status"], "ok");
+    assert_eq!(doc["exit_code"], 0);
+    assert_eq!(doc["permission"], "screenshot");
+    assert_eq!(doc["result"], "removed");
+    assert_eq!(run.stdout.lines().count(), 1, "one JSON line");
+    // Exactly the call of the manual `busctl` command, and only Kropa's own entry goes.
+    assert_eq!(*store.state.calls.lock().unwrap(), [entry(APP)]);
+    assert_eq!(
+        *store.state.entries.lock().unwrap(),
+        [entry("org.example.Other")]
+    );
+}
+
+#[test]
+fn resetting_twice_says_there_was_nothing_the_second_time() {
+    let bus = Bus::start();
+    let _store = Store::serve(&bus, &[("screenshot", "screenshot", APP)], false);
+    let home = tempfile::tempdir().unwrap();
+    let first = kropa(&bus, home.path(), &["doctor", RESET]);
+    assert_eq!(first.code, 0, "{}", first.stderr);
+    assert!(first.stdout.contains("forgotten"), "{}", first.stdout);
+    let second = kropa(&bus, home.path(), &["doctor", RESET]);
+    assert_eq!(second.code, 0, "{}", second.stderr);
+    assert!(
+        second.stdout.contains("Nothing to reset"),
+        "{}",
+        second.stdout
+    );
+    let json = kropa(&bus, home.path(), &["--json", "doctor", RESET]);
+    assert_eq!(json.json()["result"], "absent");
+}
+
+#[test]
+fn resetting_in_french_is_translated() {
+    let bus = Bus::start();
+    let _store = Store::serve(&bus, &[("screenshot", "screenshot", APP)], false);
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa(&bus, home.path(), &["--lang", "fr", "doctor", RESET]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains("Permission de capture oubliée"),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn a_missing_permission_store_is_unsupported_with_its_reason() {
+    let bus = Bus::start();
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa(&bus, home.path(), &["--json", "doctor", RESET]);
+    assert_eq!(run.code, 5, "{}", run.stderr);
+    let doc = run.json();
+    assert_eq!(doc["schema"], "kropa.doctor.reset/1");
+    assert_eq!(doc["status"], "error");
+    assert_eq!(doc["error"]["code"], "unsupported");
+    assert_eq!(doc["error"]["reason"], "permission_store_unreachable");
+    assert_eq!(doc["error"]["step"], "reset");
+    assert!(run.stderr.contains("permission store"), "{}", run.stderr);
+}
+
+#[test]
+fn no_session_bus_is_unsupported_with_the_same_reason() {
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa_at(
+        "unix:path=/nonexistent-kropa-dir/bus",
+        home.path(),
+        &["--json", "doctor", RESET],
+    );
+    assert_eq!(run.code, 5, "{}", run.stderr);
+    let doc = run.json();
+    assert_eq!(doc["error"]["reason"], "permission_store_unreachable");
+}
+
+#[test]
+fn a_store_that_fails_is_an_internal_error_with_the_detail() {
+    let bus = Bus::start();
+    let _store = Store::serve(&bus, &[("screenshot", "screenshot", APP)], true);
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa(&bus, home.path(), &["--json", "doctor", RESET]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    let doc = run.json();
+    assert_eq!(doc["error"]["code"], "internal");
+    assert_eq!(doc["error"]["reason"], "permission_store_error");
+    assert!(
+        doc["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("the store is broken"),
+        "{doc}"
+    );
+}
+
+#[test]
+fn the_refusal_message_points_to_the_reset_command_and_not_to_flatpak() {
+    for (answer, reason) in [
+        (Answer::Response(2), "portal_declined"),
+        (Answer::NotAllowed, "portal_not_allowed"),
+    ] {
+        for lang in ["en", "fr"] {
+            let bus = Bus::start();
+            let _portal = Portal::serve(&bus, answer.clone());
+            let home = tempfile::tempdir().unwrap();
+            let target = home.path().join("shot.png");
+            let run = kropa(
+                &bus,
+                home.path(),
+                &[
+                    "--lang",
+                    lang,
+                    "capture",
+                    "screen",
+                    "--output",
+                    target.to_str().unwrap(),
+                ],
+            );
+            assert_eq!(run.code, 4, "{reason}: {}", run.stderr);
+            assert!(
+                run.stderr
+                    .contains("kropa doctor --reset-screenshot-permission"),
+                "{reason}/{lang}: {}",
+                run.stderr
+            );
+            assert!(
+                !run.stderr.contains("flatpak"),
+                "{reason}/{lang}: {}",
+                run.stderr
+            );
+        }
+    }
+}
+
+#[test]
+fn doctor_without_the_option_is_still_the_report() {
+    let bus = Bus::start();
+    let store = Store::serve(&bus, &[("screenshot", "screenshot", APP)], false);
+    let home = tempfile::tempdir().unwrap();
+    let run = kropa(&bus, home.path(), &["--json", "doctor"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()["schema"], "kropa.doctor/1");
+    assert!(
+        store.state.calls.lock().unwrap().is_empty(),
+        "the report must not reset anything"
     );
 }

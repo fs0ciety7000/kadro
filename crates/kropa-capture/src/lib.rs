@@ -23,6 +23,7 @@ pub mod apple;
 pub mod clipboard;
 mod diagnosis;
 mod error;
+mod permission;
 mod png;
 pub mod screens;
 
@@ -41,6 +42,7 @@ pub use diagnosis::{
 };
 pub use error::{ALL_ERROR_REASONS, CaptureError, Denial, Failure, Unsupported};
 pub use kropa_core::ImageFormat;
+pub use permission::{ALL_RESET_REASONS, ResetError, ResetOutcome};
 pub use png::{CleanPng, PngError, sanitize as sanitize_png};
 
 #[cfg(feature = "test-support")]
@@ -152,6 +154,16 @@ pub trait CaptureBackend {
     /// [`CaptureError::PermissionDenied`] when the permission is not granted.
     fn authorize(&self, _request: &CaptureRequest<'_>) -> Result<(), CaptureError> {
         Ok(())
+    }
+
+    /// Makes the system forget the screenshot permission it stored for Kropa, so that the next
+    /// capture asks again. The default does nothing and says so: a platform whose permission is
+    /// out of Kropa's reach (macOS) answers [`ResetError::Unsupported`].
+    ///
+    /// # Errors
+    /// [`ResetError`]: unsupported here, store unreachable, or an unexpected answer.
+    fn reset_permission(&self) -> Result<ResetOutcome, ResetError> {
+        Err(ResetError::Unsupported)
     }
 
     /// Takes the screenshot. May wait for the user (permission dialog). Fails like

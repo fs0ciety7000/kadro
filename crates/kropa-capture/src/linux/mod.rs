@@ -7,6 +7,7 @@
 //! blocking [`crate::CaptureBackend`] interface and never sees a future. The runtime is the one
 //! zbus brings (`async-io`); there is no tokio in the tree.
 
+mod permission;
 mod portal;
 mod probe;
 mod uri;

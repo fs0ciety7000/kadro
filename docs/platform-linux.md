@@ -176,7 +176,9 @@ Règles pour Kropa :
   dialogue revient : prévoir ce cas.
 - **Écran d'accueil** : expliquer avant chaque dialogue système ce qu'il va demander et pourquoi, pour que
   l'utilisateur ne refuse pas par réflexe. Bouton « Réinitialiser les autorisations » qui donne la commande
-  (`flatpak permission-reset` ou suppression dans le permission store).
+  (`flatpak permission-reset` en Flatpak ; hors Flatpak, `kropa doctor --reset-screenshot-permission`, qui supprime
+  l'entrée du permission store par D-Bus, `DeletePermission` sur `org.freedesktop.impl.portal.PermissionStore` ;
+  vérifié sur KDE Plasma 6.8.2, lot 1.12b).
 - **App ID** : les portails exigent désormais un App ID valide (GlobalShortcuts, 1.21) [4]. En Flatpak, il est
   automatique. En natif, installer `<app-id>.desktop` et s'enregistrer via l'interface hôte `Registry` (qui sera
   dépréciée un jour : gérer son absence) [36].

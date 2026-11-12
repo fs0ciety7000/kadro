@@ -106,6 +106,7 @@ arg-search = Text to look for in name, path, URL and profile
 arg-limit = Maximum number of lines
 arg-since = Only entries from this date (YYYY-MM-DD or RFC 3339)
 arg-check = Ask GitHub Releases whether a newer version exists
+arg-reset-screenshot-permission = Make the system forget the stored screenshot permission (the next capture asks again), instead of reporting
 
 val-delay = SEC
 val-output = PATH
@@ -210,9 +211,9 @@ note-app-id-registration-unavailable = The portal has no application registry: p
 
 error-capture-no-session-bus = No graphical session to capture: the D-Bus session bus is not reachable. Run kropa from a terminal inside your desktop session.
 error-capture-portal-unavailable = The screenshot portal is not available. Install xdg-desktop-portal and the portal backend of your desktop (xdg-desktop-portal-gnome, -kde or -wlr), then log in again.
-error-capture-portal-declined = The screenshot portal declined the request. If you refused the permission, allow it again in the privacy settings of your desktop or reset it (flatpak permission-reset); otherwise check that the portal backend of your desktop works.
+error-capture-portal-declined = The screenshot portal declined the request. If you refused the permission, allow it again in the privacy settings of your desktop, or make the system forget the refusal with 'kropa doctor --reset-screenshot-permission' and run the command again; otherwise check that the portal backend of your desktop works.
 error-capture-portal-dismissed = The screenshot request was dismissed before the screenshot was taken. Run the command again and allow the screenshot.
-error-capture-portal-not-allowed = The portal does not allow Kropa to take screenshots. Allow it in the privacy settings of your desktop or reset the permission, then try again.
+error-capture-portal-not-allowed = The portal does not allow Kropa to take screenshots. Allow it in the privacy settings of your desktop, or make the system forget the refusal with 'kropa doctor --reset-screenshot-permission', then try again.
 error-capture-output-not-isolable = The screenshot portal returns all screens as one image and cannot isolate one screen. Use 'kropa capture screen' instead.
 error-capture-image-format-unsupported = Screenshots are delivered as PNG images only: the format { $detail } is not supported yet. Use png in the configuration, or a .png file name.
 error-capture-portal-error = The screenshot portal failed: { $detail }
@@ -296,6 +297,14 @@ doctor-secrets-orphans-unknown = Leftovers not checked: the destinations file ca
 doctor-section-pending = Not available yet
 doctor-pending-app = kropa-app socket and version: lot 2.1
 doctor-pending-outputs = Screens and their names: lot 2.5
+
+## Screenshot permission reset ('kropa doctor --reset-screenshot-permission')
+
+doctor-reset-removed = Screenshot permission forgotten: the next capture asks again.
+doctor-reset-absent = Nothing to reset: the system holds no stored answer to the screenshot request for Kropa.
+error-reset-unsupported = Kropa cannot reset the screenshot permission on this system. On macOS, open System Settings > Privacy & Security > Screen & System Audio Recording, switch Kropa off and on again (or remove it with "-" and add it again with "+").
+error-reset-store-unreachable = The permission store of the desktop portals could not be reached ({ $detail }). Run kropa from a terminal inside your desktop session and check that xdg-desktop-portal is installed and running; otherwise reset the permission in the privacy settings of your desktop.
+error-reset-store-error = The permission store of the desktop portals refused the reset: { $detail }
 
 ## Upload and destinations (lot 1.7)
 

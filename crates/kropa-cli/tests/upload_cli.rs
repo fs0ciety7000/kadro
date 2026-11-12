@@ -535,6 +535,124 @@ async fn capture_with_upload_and_a_link_format_copies_the_link() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_backend_that_cannot_reset_the_permission_says_so_and_points_to_the_settings() {
+    // The double does not override `reset_permission`: it answers like macOS does.
+    let dir = tempfile::tempdir().unwrap();
+    let c = cfg(dir.path());
+    let r = cli(
+        &[
+            "--lang",
+            "en",
+            "--json",
+            "--config",
+            &c,
+            "doctor",
+            "--reset-screenshot-permission",
+        ],
+        none(),
+        false,
+        false,
+        true,
+    )
+    .await;
+    assert_eq!(r.code, 5, "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["schema"], "kropa.doctor.reset/1");
+    assert_eq!(v["error"]["code"], "unsupported");
+    assert_eq!(v["error"]["reason"], "permission_reset_unsupported");
+    assert!(r.err.contains("System Settings"), "{}", r.err);
+    let r = cli(
+        &[
+            "--lang",
+            "fr",
+            "--config",
+            &c,
+            "doctor",
+            "--reset-screenshot-permission",
+        ],
+        none(),
+        false,
+        false,
+        true,
+    )
+    .await;
+    assert_eq!(r.code, 5, "{}", r.err);
+    assert!(r.err.contains("Réglages Système"), "{}", r.err);
+    assert_eq!(r.out, "");
+}
+
+/// Warning codes of a `--json` document.
+fn warning_codes(doc: &serde_json::Value) -> Vec<&str> {
+    doc["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["code"].as_str().unwrap())
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_metadata_warning_is_for_foreign_files_not_for_a_capture_kropa_wrote() {
+    let server = accepting_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    config_with(dir.path(), &open_destination(&server), Some("open"));
+    let c = cfg(dir.path());
+    let out = dir.path().join("shots");
+    std::fs::create_dir(&out).unwrap();
+    let out = out.display().to_string();
+
+    // A capture sent right after it was written: its metadata is already gone.
+    let capture_args = |json: bool| {
+        let mut args = vec!["--lang", "en", "--config", &c];
+        if json {
+            args.push("--json");
+        }
+        args.extend(["capture", "screen", "--output", &out, "--upload", "--force"]);
+        args.iter().map(ToString::to_string).collect::<Vec<_>>()
+    };
+    let run = |args: Vec<String>| async move {
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        cli(&refs, none(), false, false, true).await
+    };
+    let r = run(capture_args(false)).await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(r.err.contains("Uploaded to open"), "{}", r.err);
+    assert!(!r.err.contains("Metadata is not removed"), "{}", r.err);
+    let r = run(capture_args(true)).await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert_eq!(v["upload"]["status"], "done");
+    assert!(
+        !warning_codes(&v).contains(&"metadata_not_stripped"),
+        "{:?}",
+        warning_codes(&v)
+    );
+
+    // Any other file keeps the warning until the stripping of lot 4.8.
+    let file = shot(dir.path());
+    let r = cli(
+        &["--lang", "en", "--config", &c, "upload", &file],
+        none(),
+        false,
+        false,
+        false,
+    )
+    .await;
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(r.err.contains("Metadata is not removed"), "{}", r.err);
+    let r = cli(
+        &["--json", "--config", &c, "upload", &file],
+        none(),
+        false,
+        false,
+        false,
+    )
+    .await;
+    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert!(warning_codes(&v).contains(&"metadata_not_stripped"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn upload_errors_use_codes_8_9_and_the_reason() {
     let server = MockServer::start().await;
     Mock::given(any())

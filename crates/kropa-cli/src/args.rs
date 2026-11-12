@@ -190,7 +190,7 @@ pub enum Command {
     /// Open the editor on an image.
     Edit(EditArgs),
     /// Report the system and its capabilities.
-    Doctor,
+    Doctor(DoctorArgs),
     /// Print version information.
     Version(VersionArgs),
 }
@@ -296,6 +296,14 @@ pub struct EditArgs {
     /// Upload and copy options.
     #[command(flatten)]
     pub send: SendOpts,
+}
+
+/// `doctor`.
+#[derive(Debug, Args)]
+pub struct DoctorArgs {
+    /// Make the system forget the stored screenshot permission, instead of reporting.
+    #[arg(long)]
+    pub reset_screenshot_permission: bool,
 }
 
 /// `version`.

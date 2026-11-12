@@ -35,7 +35,7 @@ use crate::upload;
 pub const ERROR_SCHEMA: &str = "kropa.error/1";
 
 /// JSON schemas this binary speaks (`docs/cli.md` section 4).
-pub const SCHEMAS: [&str; 12] = [
+pub const SCHEMAS: [&str; 13] = [
     "kropa.capture/1",
     "kropa.upload/1",
     "kropa.dest.list/1",
@@ -45,6 +45,7 @@ pub const SCHEMAS: [&str; 12] = [
     "kropa.queue.list/1",
     "kropa.history.list/1",
     "kropa.doctor/1",
+    "kropa.doctor.reset/1",
     "kropa.secrets.status/1",
     "kropa.version/1",
     "kropa.error/1",
@@ -118,7 +119,8 @@ fn path(cmd: &Command) -> Vec<&'static str> {
             HistoryCommand::List { .. } => vec!["history", "list"],
         },
         Command::Edit(_) => vec!["edit"],
-        Command::Doctor => vec!["doctor"],
+        Command::Doctor(args) if args.reset_screenshot_permission => vec!["doctor", "reset"],
+        Command::Doctor(_) => vec!["doctor"],
         Command::Version(_) => vec!["version"],
     }
 }
@@ -179,7 +181,7 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
         Command::Queue { .. } => vec!["4.5"],
         Command::History { .. } => vec!["4.6"],
         Command::Edit(_) => vec!["3.7"],
-        Command::Doctor => platform_capture_lot().into_iter().collect(),
+        Command::Doctor(_) => platform_capture_lot().into_iter().collect(),
         Command::Version(_) => vec!["5"],
     }
 }
@@ -226,9 +228,8 @@ fn run_command(
         return Ok(ExitCode::Ok);
     }
     let config_dir_arg = cli.global.config.as_deref();
-    if let (Command::Doctor, Some(backend)) = (&cli.command, ctx.backend) {
-        // A report: a broken configuration is shown in it, not a reason to fail.
-        return Ok(doctor::run(backend, config_dir_arg, ctx, session));
+    if let (Command::Doctor(args), Some(backend)) = (&cli.command, ctx.backend) {
+        return doctor::command(args, backend, config_dir_arg, ctx, session);
     }
     refuse_secrets_in_arguments(&cli.command, loc)?;
     let config = Config::load_from(config_dir_arg).map_err(|e| CliError::from_core(&e, loc))?;
@@ -646,6 +647,7 @@ mod tests {
                 "kropa.queue.list/1",
                 "kropa.history.list/1",
                 "kropa.doctor/1",
+                "kropa.doctor.reset/1",
                 "kropa.secrets.status/1",
                 "kropa.version/1",
                 "kropa.error/1",

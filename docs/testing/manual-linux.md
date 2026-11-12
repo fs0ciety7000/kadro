@@ -40,11 +40,12 @@ Première capture :
 
 Refus :
 
-- [ ] Réinitialiser (`flatpak permission-remove screenshot screenshot io.github.fs0ciety7000.Kropa`, ou
-  `flatpak permission-reset io.github.fs0ciety7000.Kropa`), relancer, cliquer « Refuser » : **code 4**,
+- [ ] Réinitialiser (`kropa doctor --reset-screenshot-permission` : attendu `result` = `removed` après un refus,
+  `absent` si rien n'était mémorisé ; en Flatpak, `flatpak permission-reset` aussi), relancer, cliquer « Refuser » : **code 4**,
   `error.reason` = `portal_declined` ou `portal_dismissed` ou `portal_not_allowed` (noter lequel), aucun fichier.
 - [ ] Relancer sans réinitialiser : le refus est mémorisé, code 4 immédiat sans boîte (comportement connu de Flameshot).
-  Le message indique comment lever le refus.
+  Le message indique `kropa doctor --reset-screenshot-permission` (et non `flatpak`) ; l'exécuter (code 0,
+  `removed`), relancer : la boîte revient. Une seconde exécution dit `absent`.
 - [ ] Fermer la boîte avec Échap : noter le code et la raison.
 
 Multi-écran :
@@ -117,7 +118,7 @@ main, sur un vrai bureau, avec un serveur de test ou `kropa upload FICHIER --to 
 | Bureau | Version | Date | Testeur | Écarts avec le comportement attendu |
 |---|---|---|---|---|
 | GNOME | | | | |
-| KDE Plasma | 6.8.2, portail Screenshot v2 (pas de cibles) | 2026-11-12 | utilisateur | Aucun pour l'instant : simple boîte « Autoriser / Refuser » une seule fois puis mémorisée (pas d'interface façon Spectacle) ; deux écrans réunis (4480 × 1440) ; sans curseur ; PNG sans métadonnées (exiftool) ; `--delay 5` accepté ; `--copy image` → `copied`, collage vérifié (data-control). Refus : code 4, `portal_declined`, aucun fichier ; refus mémorisé (code 4 immédiat ensuite). Écart : le message propose `flatpak permission-reset`, absent de cette machine ; la réinitialisation passe par le PermissionStore (`busctl … DeletePermission sss screenshot screenshot io.github.fs0ciety7000.Kropa`). Envoi réel vers un Zipline auto-hébergé (HTTPS, jeton au trousseau KDE, limité à l'origine et à `header:authorization`) : `upload` et `capture screen --upload=… --copy markdown` → lien affiché, image servie, `copied`. Écart : avertissement `metadata_not_stripped` affiché aussi pour une capture de Kropa, déjà nettoyée. |
+| KDE Plasma | 6.8.2, portail Screenshot v2 (pas de cibles) | 2026-11-12 | utilisateur | Aucun pour l'instant : simple boîte « Autoriser / Refuser » une seule fois puis mémorisée (pas d'interface façon Spectacle) ; deux écrans réunis (4480 × 1440) ; sans curseur ; PNG sans métadonnées (exiftool) ; `--delay 5` accepté ; `--copy image` → `copied`, collage vérifié (data-control). Refus : code 4, `portal_declined`, aucun fichier ; refus mémorisé (code 4 immédiat ensuite). Écart : le message propose `flatpak permission-reset`, absent de cette machine ; la réinitialisation passe par le PermissionStore (`busctl … DeletePermission sss screenshot screenshot io.github.fs0ciety7000.Kropa`). Envoi réel vers un Zipline auto-hébergé (HTTPS, jeton au trousseau KDE, limité à l'origine et à `header:authorization`) : `upload` et `capture screen --upload=… --copy markdown` → lien affiché, image servie, `copied`. Écart : avertissement `metadata_not_stripped` affiché aussi pour une capture de Kropa, déjà nettoyée (corrigés par les lots 1.12b, commande `doctor --reset-screenshot-permission`, et 1.12c, avertissement réservé aux fichiers quelconques : à revérifier sur la machine). |
 | wlroots | | | | |
 
 Presse-papiers : noter aussi, par bureau, `copied` / `unavailable` / `failed` obtenu et le protocole utilisé.
