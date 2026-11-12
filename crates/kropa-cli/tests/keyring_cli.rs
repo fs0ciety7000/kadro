@@ -12,7 +12,8 @@
 
 use std::process::Command;
 
-const SCRIPT: &str = r#"
+/// Starts the keyring in a private home and defines `run`; what a test does follows it.
+const PREAMBLE: &str = r#"
 set -u
 home="$1"; kropa="$2"; cfg="$3"; secret="$4"
 export HOME="$home" XDG_DATA_HOME="$home/data" XDG_CONFIG_HOME="$home/config" XDG_CACHE_HOME="$home/cache" XDG_RUNTIME_DIR="$home/run"
@@ -40,6 +41,9 @@ until "$kropa" --json secrets status 2>/dev/null | grep -q '"state":"available"'
 done
 run() { echo "== $*"; "$kropa" --lang en --config "$cfg" "$@"; echo "-> exit $?"; }
 
+"#;
+
+const SET_REMOVE: &str = r#"
 echo "== status (empty)"
 "$kropa" --lang en --json --config "$cfg" secrets status; echo "-> exit $?"
 printf '%s\n' "$secret" | run secrets set zipline token --secret-stdin --yes
@@ -96,7 +100,7 @@ fn the_binary_stores_reads_and_removes_a_secret_in_a_real_keyring() {
         .env("XDG_RUNTIME_DIR", home.path().join("run"))
         .env_remove("GNOME_KEYRING_CONTROL")
         .env_remove("SSH_AUTH_SOCK")
-        .args(["--", "sh", "-c", SCRIPT, "sh"])
+        .args(["--", "sh", "-c", &[PREAMBLE, SET_REMOVE].concat(), "sh"])
         .arg(home.path())
         .arg(env!("CARGO_BIN_EXE_kropa"))
         .arg(cfg.path())
@@ -139,4 +143,116 @@ fn the_binary_stores_reads_and_removes_a_secret_in_a_real_keyring() {
         ],
         "{all}"
     );
+}
+
+const ADD_REMOVE: &str = r#"
+printf '%s\n' "$secret" | run dest add team --type zipline --url https://z.team.example --secret-stdin --default
+run dest show team
+"$kropa" --lang en --json --config "$cfg" secrets status; echo "-> exit $?"
+# The name is taken, by the profile now; the secret on stdin is not read.
+printf '%s\n' "$secret" | run dest add team --type zipline --url https://z.team.example --secret-stdin
+# Without --yes and without a terminal: nothing is removed.
+run dest remove team
+run dest set-default team
+run dest export team
+run dest edit team --set label=Home
+echo "== after edit"; cat "$cfg/destinations.toml"
+run dest remove team --yes
+"$kropa" --lang en --json --config "$cfg" secrets status; echo "-> exit $?"
+run dest remove team --yes
+# The name is free again, for the store too: the same id can be added once more, then taken away.
+printf '%s\n' "$secret" | run dest add team --type zipline --url https://z.team.example --secret-stdin
+run dest remove team --yes
+echo "== config"; cat "$cfg/config.toml"
+"#;
+
+#[test]
+fn the_binary_adds_and_removes_a_destination_with_its_secret_in_a_real_keyring() {
+    if !(have("dbus-run-session") && have("gnome-keyring-daemon") && have("dbus-send")) {
+        assert!(
+            !required(),
+            "dbus-run-session and gnome-keyring-daemon are required (KROPA_REQUIRE_KEYRING_TESTS is set)"
+        );
+        eprintln!("SKIPPED: dbus-run-session or gnome-keyring-daemon is not installed");
+        return;
+    }
+    let home = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    std::fs::write(cfg.path().join("config.toml"), "# mine\n").unwrap();
+    std::fs::write(cfg.path().join("destinations.toml"), "# my destinations\n").unwrap();
+    // Built at run time: nothing in the source looks like a token.
+    let secret = ["Rd5-", "Wp9Lm3", "Vx6Rw-kk"].concat();
+    let output = private_session(
+        home.path(),
+        &[PREAMBLE, ADD_REMOVE].concat(),
+        cfg.path(),
+        &secret,
+    );
+    let out = String::from_utf8_lossy(&output.stdout).into_owned();
+    let err = String::from_utf8_lossy(&output.stderr).into_owned();
+    let all = format!("{out}\n--- stderr\n{err}");
+    assert!(output.status.success(), "{all}");
+    assert!(!all.contains(&secret), "the value leaked:\n{all}");
+    // add 0, show 0, status 0, add (taken) 6, remove (no --yes) 12, set-default 0, export 0, edit 0,
+    // remove 0, status 0, remove (nothing) 6, add 0, remove 0.
+    let in_order: Vec<&str> = out
+        .lines()
+        .filter_map(|l| l.strip_prefix("-> exit "))
+        .collect();
+    assert_eq!(
+        in_order,
+        [
+            "0", "0", "0", "6", "12", "0", "0", "0", "0", "0", "6", "0", "0"
+        ],
+        "{all}"
+    );
+    // The token was stored with the profile, and is gone with it.
+    assert!(out.contains("Secret token: set"), "{all}");
+    assert!(
+        out.contains(r#""profiles":[{"profile":"team","entries":1,"empty":0}]"#),
+        "{all}"
+    );
+    assert!(
+        out.contains(r#""state":"available","detail":null,"profiles":[]"#),
+        "{all}"
+    );
+    assert!(err.contains("https://z.team.example:443"), "{all}");
+    assert!(out.contains("[destination.secrets.token]"), "{all}");
+    // The comments of both files survived the edit, and the default went with the profile.
+    let edited = out
+        .split("== after edit")
+        .nth(1)
+        .unwrap()
+        .split("-> exit")
+        .next()
+        .unwrap();
+    assert!(edited.contains("# my destinations"), "{all}");
+    assert!(edited.contains("label = \"Home\""), "{all}");
+    let config = out.split("== config").nth(1).unwrap();
+    assert!(config.contains("# mine"), "{all}");
+    assert!(!config.contains("default_destination"), "{all}");
+}
+
+/// Runs `script` under a private session bus, in a private home (see `PREAMBLE`).
+fn private_session(
+    home: &std::path::Path,
+    script: &str,
+    cfg: &std::path::Path,
+    secret: &str,
+) -> std::process::Output {
+    Command::new("dbus-run-session")
+        .env("HOME", home)
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_RUNTIME_DIR", home.join("run"))
+        .env_remove("GNOME_KEYRING_CONTROL")
+        .env_remove("SSH_AUTH_SOCK")
+        .args(["--", "sh", "-c", script, "sh"])
+        .arg(home)
+        .arg(env!("CARGO_BIN_EXE_kropa"))
+        .arg(cfg)
+        .arg(secret)
+        .output()
+        .unwrap()
 }

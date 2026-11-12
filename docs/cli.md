@@ -114,7 +114,7 @@ inconnu envoyé tel quel (`uploads.md` § 6). Exemple : `kropa upload ./diagram.
 
 ```
 kropa dest list | show <ID>
-kropa dest add <ID> --type zipline|s3|sftp|http [--url URL] [OPTIONS_DU_TYPE] [--secret-stdin|--secret-fd N] [--default]
+kropa dest add <ID> --type zipline|s3|sftp [--url URL] [OPTIONS_DU_TYPE] [--secret-stdin|--secret-fd N] [--default]
 kropa dest edit <ID> [--url URL] [--set CLÉ=VALEUR]…     # sans option : ouvre le TOML du profil dans $EDITOR
 kropa dest test <ID> [--yes]
 kropa dest remove <ID> [--yes]
@@ -127,14 +127,33 @@ kropa dest export [<ID>…]
   secret. `show` signale les secrets manquants.
 - `add` : options du type (S3 : `--bucket`, `--region`, `--endpoint`, `--path-style`, `--prefix`,
   `--public-base-url`, `--presign <DURÉE>` ≤ 7 j, lot 2.7 ; SFTP : `--host`, `--port`, `--user`, `--remote-dir`,
-  `--public-url`, lot 4.9). Le secret est demandé masqué sur le TTY ; sans TTY, `--secret-stdin` ou `--secret-fd`
-  sinon code 12. Il est stocké lié à l'origine de `--url`.
+  `--public-url`, lot 4.9 ; l'identifiant de clé S3 `--access-key-id` n'est pas un secret, lot 2.7b). Le secret est
+  demandé masqué sur le TTY ; sans TTY, `--secret-stdin` ou `--secret-fd` sinon code 12. Il est stocké lié à
+  l'origine de `--url` (entrée `<ID>/token`, emplacement `header:authorization` pour Zipline). Lot 2.6 : seul
+  `--type zipline` est créé (`--url` exigé, https exigé : code 11 sinon) ; `s3` répond 5 (lot 2.7), `sftp` 5 (lot 4.9).
+  **`--type http` n'existe plus** (décision D10) : une API HTTP se décrit en TOML, `dest import FICHIER.toml`
+  (modèle Imgur : `docs/examples/imgur.toml`) ; `dest add --type http` répond 2 avec ce renvoi. `id` pris (profil de
+  la config **ou** entrée du magasin, N2) : code 6, avant toute lecture du secret. Le profil et l'entrée vont
+  ensemble : si le fichier ne peut pas être écrit, l'entrée est retirée. `--default` écrit `default_destination`.
 - `edit` : changer l'URL d'un profil qui a un secret, ou déplacer un `{secret:}` vers un autre emplacement (en-tête,
   query, champ, corps), exige une confirmation interactive, **jamais** accordée par `--yes` ni sans TTY (code 12) ;
-  sans elle, l'autorisation ne suit pas (voir `secrets allow`).
+  sans elle, l'autorisation ne suit pas (voir `secrets allow`). Avec elle, le profil change **et** l'entrée du magasin
+  reçoit la nouvelle origine et les nouveaux emplacements (les anciens restent) ; refusée : code 3, rien n'est changé.
+  `--yes` (option cachée) est sans effet. Lot 2.6 : `--set` accepte `label` (texte, vide pour l'effacer) et `kinds`
+  (`image`, `file` ou `image,file`) ; les clés propres aux profils S3 (`prefix`, `public_base_url`, `presign`)
+  arrivent avec eux (2.7) et le profil n'a pas encore de clé de format de lien. Toute autre clé : code 2 ; une valeur
+  qui ressemble à un secret ou qui porte `{secret:…}` : code 11. Sans option, `$EDITOR` (variable standard, séparée
+  aux espaces, sans shell ; TTY exigé, sinon 12) s'ouvre sur une copie `0600` du bloc du profil, commentaires inclus ;
+  le résultat est relu avec les règles d'un import (une valeur de secret tapée dans le fichier : code 11, rien
+  d'écrit) et ne remplace le profil qu'en une fois ; invalide, l'ancien fichier reste (la réouverture de l'éditeur est
+  proposée) ; `id` modifié ou plusieurs profils : refusé ; éditeur en échec : 3 ; aucun changement : rien d'écrit.
 - `test` : envoie une image témoin de 1×1 **après confirmation** (`--yes` sans TTY) ; affiche statut, en-têtes
   filtrés, URL extraite et lien formaté.
-- `remove` : supprime le profil et ses secrets après confirmation (`--yes` sans TTY).
+- `remove` : supprime le profil et ses secrets (toutes les entrées `<ID>/*` du magasin) après confirmation (`--yes`
+  sans TTY), et retire `default_destination` s'il visait ce profil. Les entrées orphelines d'un profil déjà supprimé
+  (N2) se retirent de même ; ni profil ni entrée : code 6. Les entrées partent d'abord : un échec du magasin laisse
+  le profil, et la commande peut être relancée.
+- `set-default <ID>` : profil existant exigé (6) ; `--none` retire le défaut.
 - `import` : `.sxcu` et `.toml` suivent **les mêmes règles** (`security/secrets.md` § 5). Résumé (origine, HTTPS ou
   non, emplacements, secrets détectés et masqués, query signalée) puis confirmation ; les secrets vont au magasin en
   entrées **neuves** du profil importé, le TOML ne garde que `{secret:…}` ; refus explicite des champs non pris en
@@ -142,7 +161,12 @@ kropa dest export [<ID>…]
   l'hôte du fichier diffère). `id` déjà pris (config ou magasin) : refusé, sauf `--id` ou confirmation interactive de
   remplacement (les secrets du profil remplacé sont supprimés). Jeton dans le chemin de l'URL, ou import `http://`
   avec secret : refusé (code 11).
-- `export` : TOML des profils sur stdout, références de secrets seulement, jamais les valeurs.
+- `export` : TOML des profils sur stdout, références de secrets seulement, jamais les valeurs. Un profil du fichier
+  qui porterait une valeur écrite à la main (en-tête, paramètre ou champ nommé ou valué comme un identifiant) n'est
+  pas exporté : code 11, `error.reason` `secret_in_profile`.
+- `add`, `edit`, `remove`, `set-default` : schéma `kropa.dest.change/1` (§ 4) ; stdout (humain) : l'identifiant pour
+  `add` et `edit`, rien pour les autres ; messages sur stderr. Les fichiers sont réécrits avec `toml_edit` : les
+  commentaires et l'ordre sont conservés, le résultat est validé puis le fichier remplacé en une fois.
 
 ```sh
 kropa dest add zipline --type zipline --url https://zipline.example.org    # token prompted, hidden
@@ -309,15 +333,23 @@ RFC 3339 avec fuseau ; tailles en octets ; coordonnées en pixels physiques.
 | `upload.status` | `done`, `queued` (lot 4, `job_id` renseigné), `failed`, `skipped` (pas d'envoi demandé). `upload` vaut `null` avec `--no-upload`. |
 | `clipboard.status` | `copied`, `pending` (notification « Lien prêt, Copier » en attente d'un clic), `unavailable`, `failed`, `skipped`. |
 | `error` | `null` ou `{ "code": "security_refused", "reason": "origin_not_allowed", "message": "…", "step": "upload" }`, `code` = nom du § 3. |
-| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `keychain_broker_unavailable`, `unsafe_runtime_dir`. IPC (lot 2.1a, tous avec le code 14) : `no_runtime_dir`, `unsafe_runtime_dir`, `daemon_not_running` (rien n'écoute sur le socket ; la CLI ne l'émet que si elle ne lance rien), `daemon_start_failed` (le lanceur échoue, ou une autre instance tient `app.lock`), `daemon_start_timeout` (lancée, mais aucune réponse sous 5 s), `peer_uid_mismatch` (le serveur n'est pas à l'utilisateur ; rien n'a été envoyé), `ipc_version_mismatch` (`hello` en protocole différent), `ipc_protocol_error` (réponse invalide, trop longue ou absente). Une erreur renvoyée par une méthode de l'application garde son propre code et sa propre raison. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). `doctor --reset-screenshot-permission` (lot 1.12b) : `permission_reset_unsupported` et `permission_store_unreachable` (code 5), `permission_store_error` (code 1). La clé `reason` est toujours présente (`null` sans sous-cause). |
+| `error.reason` | Sous-cause machine, `null` si aucune ; liste ouverte (ajout sans changement de version) : `origin_not_allowed`, `placement_not_allowed`, `secret_in_output`, `https_required`, `cross_origin_redirect`, `secret_in_argument`, `weak_passphrase`, `import_host_mismatch`, `keyring_locked`, `keyring_timeout`, `keyring_ambiguous`, `keyring_unavailable`, `keychain_denied`, `keychain_broker_refused`, `keychain_broker_unavailable`, `unsafe_runtime_dir`, `secret_in_profile` (lot 2.6). IPC (lot 2.1a, tous avec le code 14) : `no_runtime_dir`, `unsafe_runtime_dir`, `daemon_not_running` (rien n'écoute sur le socket ; la CLI ne l'émet que si elle ne lance rien), `daemon_start_failed` (le lanceur échoue, ou une autre instance tient `app.lock`), `daemon_start_timeout` (lancée, mais aucune réponse sous 5 s), `peer_uid_mismatch` (le serveur n'est pas à l'utilisateur ; rien n'a été envoyé), `ipc_version_mismatch` (`hello` en protocole différent), `ipc_protocol_error` (réponse invalide, trop longue ou absente). Une erreur renvoyée par une méthode de l'application garde son propre code et sa propre raison. Premières valeurs au lot 1.7. Capture Linux (lot 1.4) : `no_session_bus`, `portal_unavailable`, `portal_declined`, `portal_dismissed`, `portal_not_allowed` (ces trois derniers avec le code 4), `portal_error`, `portal_no_response`, `portal_invalid_response`, `portal_file_unreadable`, `invalid_image`, `output_not_isolable`, `image_format_unsupported` (ces deux derniers avec le code 5). `doctor --reset-screenshot-permission` (lot 1.12b) : `permission_reset_unsupported` et `permission_store_unreachable` (code 5), `permission_store_error` (code 1). La clé `reason` est toujours présente (`null` sans sous-cause). |
 | `error.warnings` | Absent sauf avertissement lié à l'échec (ajout sans changement de version) : liste de textes localisés, que `--quiet` ne masque pas. Aujourd'hui `dest import` : entrée du magasin qui a pu être créée malgré un délai dépassé (`keyring_timeout`) et entrées restées après un retour arrière raté (noms seulement). |
 | `warnings[].code` | Dont `secret_echoed` (le serveur a renvoyé le secret dans l'erreur : texte masqué) et `uploaded_link_withheld` (fichier peut-être envoyé, lien retenu car il contenait le secret). |
 
+**`kropa.dest.change/1`** (`dest add|edit|remove|set-default`, lot 2.6) :
+`{ "schema": "kropa.dest.change/1", "status": "ok", "exit_code": 0, "action": "add|edit|remove|set-default",
+"id": "team"|null, "default": "team"|null, "secrets": [ { "name": "token", "action": "created|authorized|unchanged|removed|failed" } ],
+"error": null }`. `id` vaut `null` pour `set-default --none` ; `default` est le profil par défaut **après** le
+changement ; `secrets` ne porte que des noms, jamais une valeur. En erreur : l'enveloppe habituelle (`error`).
+**`kropa.dest.export/1`** (lot 2.6) : `{ "schema": "kropa.dest.export/1", "status": "ok", "exit_code": 0,
+"destinations": ["team"], "toml": "[[destination]]\n…", "error": null }`, le TOML ne portant que des `{secret:…}`.
+
 `deletion_url` est sensible : présente en JSON et dans l'historique, jamais dans stderr ni dans les journaux.
 `error.message` et `upload.error` ne portent que du texte masqué (`***`) quand il vient de la réponse du serveur.
-Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.dest.show/1`, `kropa.dest.test/1`, `kropa.dest.import/1`, `kropa.queue.list/1`,
+Les autres commandes ont leur propre schéma versionné (`kropa.dest.list/1`, `kropa.dest.show/1`, `kropa.dest.test/1`, `kropa.dest.import/1`, `kropa.dest.change/1`, `kropa.dest.export/1`, `kropa.queue.list/1`,
 `kropa.history.list/1`, `kropa.doctor/1`, `kropa.doctor.reset/1`, `kropa.secrets.status/1`, `kropa.version/1`), décrits dans les fixtures
-`trycmd` du lot 1.3. Les erreurs d'une commande sans schéma propre (`dest add`, `edit`, erreurs d'usage...) portent
+`trycmd` du lot 1.3. Les erreurs d'une commande sans schéma propre (erreurs d'usage...) portent
 `kropa.error/1`. Aucune erreur, de clap ou de Kropa, ne reprend une valeur saisie (elle peut être un secret) : seul le
 nom de l'option est cité, ou « argument en trop » pour une valeur positionnelle et dans la référence CLI du lot 5.6.
 

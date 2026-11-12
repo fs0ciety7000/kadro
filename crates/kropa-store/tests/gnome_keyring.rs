@@ -354,6 +354,9 @@ fn inner_unlocked() {
         .unwrap();
     assert!(store.profile_exists("zipline").unwrap());
     assert!(!store.profile_exists("zip").unwrap());
+    // Names only, of this profile only (`kropa dest remove`).
+    assert_eq!(store.names("zipline").unwrap(), ["token"]);
+    assert_eq!(store.names("zip").unwrap(), Vec::<String>::new());
     assert!(store.load("zipline", "token").unwrap().is_none());
     let info = store.inspect("zipline", "token").unwrap().unwrap();
     assert!(!info.has_value);
@@ -484,8 +487,10 @@ fn inner_unlocked() {
     assert!(!format!("{status:?}").contains(&secret));
 
     // Remove.
+    assert_eq!(store.names("other").unwrap(), ["apikey"]);
     assert!(store.remove("other", "apikey").unwrap());
     assert!(!store.remove("other", "apikey").unwrap());
+    assert_eq!(store.names("other").unwrap(), Vec::<String>::new());
     assert!(store.load("other", "apikey").unwrap().is_none());
     assert!(!store.profile_exists("other").unwrap());
     raw_delete_all();
