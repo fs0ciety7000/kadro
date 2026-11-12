@@ -1,0 +1,19 @@
+Take a screenshot
+
+Usage: kropa capture [OPTIONS] <COMMAND>
+
+Commands:
+  screen  Capture all screens
+  output  Capture one screen (the primary one by default)
+  area    Capture a selected area
+
+Options:
+      --json             Machine-readable output: one JSON object on stdout
+      --lang <LANG>      Language of messages (fr or en)
+  -q, --quiet            Fewer messages on stderr (errors are kept)
+  -v, --verbose...       More messages on stderr (-vv: debug log)
+      --no-input         Never prompt, even on a terminal
+      --color <COLOR>    Color of stderr output: auto (default), always or never
+      --config <DIR>     Configuration folder
+      --password-fd <N>  Read the vault passphrase on this file descriptor
+  -h, --help             Print help

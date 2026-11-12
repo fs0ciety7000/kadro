@@ -1,0 +1,6 @@
+bin.name = "kropa"
+args = ["--lang", "fr", "capture", "area", "--upload=s3", "--no-upload"]
+status.code = 2
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"

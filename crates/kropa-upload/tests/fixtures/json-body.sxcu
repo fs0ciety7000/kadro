@@ -1,0 +1,10 @@
+{
+  "Version": "16.0.1",
+  "Name": "JSON body",
+  "DestinationType": "FileUploader",
+  "RequestURL": "https://api.example.com/files",
+  "Headers": { "Content-Type": "application/json" },
+  "Body": "JSON",
+  "Data": "{\"key\": \"live-0123456789abcdef\", \"name\": \"{filename}\"}",
+  "URL": "{json:data.url}"
+}

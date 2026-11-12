@@ -1,0 +1,1 @@
+{"schema":"kropa.error/1","status":"error","exit_code":2,"error":{"code":"usage","reason":null,"message":"invalid value for '--lang <LANG>': unsupported language, available: fr, en","step":null}}

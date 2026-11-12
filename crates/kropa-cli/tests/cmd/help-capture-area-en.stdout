@@ -1,0 +1,24 @@
+Capture a selected area
+
+Usage: kropa capture area [OPTIONS]
+
+Options:
+      --last                Reuse the last area without the selection overlay
+      --delay <SEC>         Wait before capturing, 0 to 60 seconds (decimals accepted)
+      --output <PATH>       Destination folder, or file if the path ends in an image extension
+      --name <TEMPLATE>     File name template (variables: date, time, n, w, h, kind, mode, output, host)
+      --upload[=<PROFILE>]  Upload after saving, to the given profile or the default one
+      --no-upload           Do not upload, even if the configuration uploads by default
+      --copy <WHAT>         What goes to the clipboard: url, markdown, html, image or none
+      --edit                Open the editor before the final save and upload
+      --var <NAME=VALUE>    Value of an input variable of an imported profile
+      --force               Overwrite an existing file
+      --json                Machine-readable output: one JSON object on stdout
+      --lang <LANG>         Language of messages (fr or en)
+  -q, --quiet               Fewer messages on stderr (errors are kept)
+  -v, --verbose...          More messages on stderr (-vv: debug log)
+      --no-input            Never prompt, even on a terminal
+      --color <COLOR>       Color of stderr output: auto (default), always or never
+      --config <DIR>        Configuration folder
+      --password-fd <N>     Read the vault passphrase on this file descriptor
+  -h, --help                Print help

@@ -1,0 +1,1 @@
+{"schema":"kropa.dest.list/1","status":"error","exit_code":6,"error":{"code":"config","reason":null,"message":"Invalid configuration: name_template: invalid name template: unclosed '{' (write '{{' for a literal brace)","step":null}}

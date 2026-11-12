@@ -1,0 +1,1 @@
+kropa: This key cannot be set from the command line. Keys that can be: label, kinds. Anything else is changed in the editor ('kropa dest edit zipline' without options).

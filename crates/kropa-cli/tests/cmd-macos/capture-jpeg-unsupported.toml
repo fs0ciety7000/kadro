@@ -1,0 +1,8 @@
+bin.name = "kropa"
+args = ["--lang", "en", "capture", "screen", "--output", "shot.jpg"]
+status.code = 5
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
+fs.cwd = "../cmd/ctx/empty"
+fs.sandbox = true

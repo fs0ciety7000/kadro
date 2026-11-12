@@ -1,0 +1,5 @@
+error: the argument '--quiet' cannot be used with '--verbose...'
+
+Usage: kropa --lang <LANG> --quiet <COMMAND>
+
+For more information, try '--help'.

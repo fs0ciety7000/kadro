@@ -1,0 +1,31 @@
+[package]
+name = "kropa-store"
+description = "Kropa storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+age.workspace = true
+directories.workspace = true
+kropa-core.workspace = true
+kropa-keychain.workspace = true
+kropa-upload.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+# Linux: the Secret Service over D-Bus (GNOME Keyring, KWallet, KeePassXC), no C library.
+[target.'cfg(target_os = "linux")'.dependencies]
+secret-service.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

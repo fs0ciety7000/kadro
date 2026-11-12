@@ -1,0 +1,20 @@
+# A profile received by mail: one literal credential, one reference.
+[[destination]]
+id = "received"
+type = "http"
+label = "Received"
+
+[destination.request]
+url = "https://img.received.example/api/upload"
+headers = { Authorization = "Bearer FAKE-literal-credential-0001", Accept = "application/json", X-Signature = "{secret:sig}" }
+query = { visibility = "unlisted" }
+fields = { title = "{filename}", album = "{var:album}" }
+
+[destination.secrets]
+sig = {}
+
+[destination.vars.album]
+default = "inbox"
+
+[destination.response]
+url = "{json:$.data.url}"

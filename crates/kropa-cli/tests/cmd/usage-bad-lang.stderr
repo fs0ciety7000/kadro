@@ -1,0 +1,3 @@
+error: invalid value for '--lang <LANG>': unsupported language, available: fr, en
+
+For more information, try '--help'.

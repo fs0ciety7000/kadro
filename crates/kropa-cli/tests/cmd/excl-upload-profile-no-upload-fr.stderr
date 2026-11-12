@@ -1,0 +1,5 @@
+erreur : l'argument '--upload[=<PROFIL>]' ne peut pas être utilisé avec '--no-upload'
+
+Utilisation : kropa capture area --upload[=<PROFIL>]
+
+Pour plus d'informations, essayez '--help'.

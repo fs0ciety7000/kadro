@@ -1,0 +1,218 @@
+name: CI
+
+# Only pull requests and pushes to main: the repository is private for now and
+# the Actions minutes quota is exhausted, so other branches must not trigger runs.
+# `workflow_dispatch` runs everything by hand, the integration job included.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs of a pull request; never cancel a run on main
+# (it is the only one allowed to write the Cargo cache).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - name: Cache Cargo (saved from main only)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@0.9.151
+      - name: Cache Cargo (saved from main only)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install a keyring and headless compositors for the keyring and clipboard tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus gnome-keyring sway weston wl-clipboard strace
+      # The "zero request" test runs `kropa` in an empty network namespace (`unshare -rn`). Ubuntu 24.04
+      # refuses unprivileged user namespaces through AppArmor: allow them for the length of the job.
+      - name: Allow unprivileged user namespaces (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Tests
+        env:
+          # Linux: the real gnome-keyring tests must run (they fail if a tool is missing instead of skipping).
+          KROPA_REQUIRE_KEYRING_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: sway, weston and wl-paste play the compositors of the clipboard tests (lot 1.10).
+          KROPA_REQUIRE_WAYLAND_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: strace and an empty network namespace are required by the "zero request" test (lot 1.11).
+          KROPA_REQUIRE_NO_NETWORK_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: the IPC tests with two real users run `sudo -n -u nobody` (passwordless sudo on the
+          # runners); they fail if it is missing instead of skipping (lot 2.1d, review 2.1a I1).
+          KROPA_REQUIRE_IPC_UID_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+          # Linux: the vault tests with a real second user (`sudo -n -u nobody`, lot 2.8a).
+          KROPA_REQUIRE_VAULT_UID_TESTS: ${{ runner.os == 'Linux' && '1' || '' }}
+        run: cargo nextest run --profile ci --workspace --locked
+      - name: Doctests
+        run: cargo test --doc --workspace --locked
+      # The memory-dump protection is wired in `main` for release builds only: run the release binary.
+      # The same build must not carry the test-only features (`test-support` of `kropa-ipc` and
+      # `kropa-capture`) nor the fake application `kropa-ipc-fake` (lot 2.1d, review 2.1a m1).
+      - name: Release binary forbids core dumps and carries no test support (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --release -p kropa --locked
+          KROPA_RELEASE_BIN="$PWD/target/release/kropa" \
+            cargo nextest run --profile ci -p kropa --locked --test release_hardening --no-tests=fail
+          cargo build -p kropa --release --locked --message-format=json > "$RUNNER_TEMP/release-build.json"
+          scripts/check-release-features.sh "$RUNNER_TEMP/release-build.json" target/release
+      # Kropa.app: the command line inside a bundle, universal, ad hoc signed (no certificate and no
+      # Screen Recording permission on a runner: only the build and the layout are checked here).
+      - name: Add the second macOS architecture
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build Kropa.app (universal, ad hoc signature)
+        if: runner.os == 'macOS'
+        run: scripts/bundle-macos.sh --universal --profile dev --out "$RUNNER_TEMP/bundle"
+      - name: Check Kropa.app
+        if: runner.os == 'macOS'
+        run: |
+          app="$RUNNER_TEMP/bundle/Kropa.app"
+          codesign --verify --strict --verbose=2 "$app"
+          archs=$(lipo -archs "$app/Contents/MacOS/kropa")
+          echo "architectures: $archs"
+          case "$archs" in *arm64*x86_64* | *x86_64*arm64*) ;; *) echo "not a universal binary" >&2; exit 1 ;; esac
+          # kropa-app (the only client of the Keychain broker) is in the bundle, universal, signed apart.
+          archs=$(lipo -archs "$app/Contents/MacOS/kropa-app")
+          echo "kropa-app architectures: $archs"
+          case "$archs" in *arm64*x86_64* | *x86_64*arm64*) ;; *) echo "kropa-app is not a universal binary" >&2; exit 1 ;; esac
+          codesign --verify --strict --verbose=2 "$app/Contents/MacOS/kropa-app"
+          "$app/Contents/MacOS/kropa" --json doctor > "$RUNNER_TEMP/doctor.json"
+          cat "$RUNNER_TEMP/doctor.json"
+          grep -q '"key":"app_bundle","state":"present"' "$RUNNER_TEMP/doctor.json"
+          grep -q '"key":"bundle_identifier","state":"present","value":"io.github.fs0ciety7000.Kropa"' "$RUNNER_TEMP/doctor.json"
+
+  # Real servers (Zipline 4 + PostgreSQL, and Garage for S3, behind a TLS proxy), docs/testing/integration.md. Docker and the
+  # Actions quota make it costly: it runs on main and by hand, not on every pull request.
+  integration:
+    name: integration (Zipline, S3)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@0.9.151
+      - name: Cache Cargo (saved from main only)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install a keyring (the token goes to a real GNOME Keyring)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus gnome-keyring
+      # Starts Zipline, PostgreSQL, Garage and Caddy, makes the throwaway CA known to the system trust store,
+      # creates the Zipline user through its API and the Garage key and bucket, runs the tests, stops
+      # everything (even on failure).
+      - name: Zipline and S3 integration tests
+        run: tests/integration/run.sh test --trust system --profile s3
+
+  msrv:
+    name: msrv (1.95)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the MSRV toolchain
+        run: rustup toolchain install 1.95 --profile minimal --no-self-update
+      - name: Cache Cargo (saved from main only)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+      - name: Check
+        run: cargo +1.95 check --workspace --locked
+
+  deny:
+    name: deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-deny@0.20.2
+      - name: Licenses, advisories, bans, sources
+        run: cargo deny --locked check
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install zizmor
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: zizmor@1.32.0
+      - name: Audit the workflows
+        env:
+          # Read-only token for the online audits (impostor commits, known-vulnerable actions).
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --format=github .github/workflows/

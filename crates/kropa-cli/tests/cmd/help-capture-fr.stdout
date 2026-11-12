@@ -1,0 +1,19 @@
+Prendre une capture d'écran
+
+Utilisation : kropa capture [OPTIONS] <COMMANDE>
+
+Commandes :
+  screen  Capturer tous les écrans
+  output  Capturer un seul écran (l'écran principal par défaut)
+  area    Capturer une zone sélectionnée
+
+Options :
+      --json              Sortie lisible par une machine : un objet JSON sur stdout
+      --lang <LANGUE>     Langue des messages (fr ou en)
+  -q, --quiet             Moins de messages sur stderr (les erreurs restent)
+  -v, --verbose...        Plus de messages sur stderr (-vv : journal de débogage)
+      --no-input          Ne jamais poser de question, même sur un terminal
+      --color <COULEUR>   Couleur de la sortie stderr : auto (par défaut), always ou never
+      --config <DOSSIER>  Dossier de configuration
+      --password-fd <N>   Lire la phrase de passe du coffre sur ce descripteur de fichier
+  -h, --help              Afficher l'aide

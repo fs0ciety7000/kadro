@@ -1,0 +1,5 @@
+erreur : une sous-commande est obligatoire
+
+Utilisation : kropa [OPTIONS] <COMMANDE>
+
+Pour plus d'informations, essayez '--help'.

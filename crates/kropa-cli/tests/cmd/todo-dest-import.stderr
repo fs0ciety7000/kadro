@@ -1,0 +1,1 @@
+kropa: Importing without a terminal needs --yes and --expect-host HOST, so that a file cannot send you to a host you did not choose.

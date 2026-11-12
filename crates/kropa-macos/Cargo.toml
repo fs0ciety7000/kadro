@@ -1,0 +1,25 @@
+[package]
+name = "kropa-macos"
+description = "Kropa macOS shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+[[bin]]
+name = "kropa-app"
+path = "src/main.rs"
+
+# The diagnostic of the Keychain broker (`kropa-app --keychain-status`): macOS only.
+[target.'cfg(target_os = "macos")'.dependencies]
+kropa-core.workspace = true
+kropa-store.workspace = true
+kropa-upload.workspace = true

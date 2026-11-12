@@ -1,0 +1,5 @@
+error: a subcommand is required
+
+Usage: kropa [OPTIONS] <COMMAND>
+
+For more information, try '--help'.

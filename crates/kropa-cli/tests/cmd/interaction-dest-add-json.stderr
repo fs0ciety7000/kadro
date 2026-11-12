@@ -1,0 +1,1 @@
+kropa: A secret is required but input is not interactive. Use --secret-stdin or --secret-fd N.

@@ -1,12 +1,14 @@
-# Kadro — brief
+# Kropa — brief
 
-Outil de capture d'écran et d'enregistrement pour **Linux et macOS**. Commande : `kadro`. Langage imposé : **Rust**.
+> Nom de travail initial : Kadro (abandonné pour homonymie, voir `decisions.md`).
+
+Outil de capture d'écran, d'annotation et de partage pour **Linux et macOS**. Commande : `kropa`. Langage imposé : **Rust**.
 
 ## Produit
 
-Kadro capture, annote et partage. Chaque capture est enregistrée en local (dossier par défaut modifiable). Particularité :
+Kropa capture, annote et partage. Chaque capture est enregistrée en local (dossier par défaut modifiable). Particularité :
 envoi optionnel de chaque capture vers la destination choisie par l'utilisateur (Zipline auto-hébergé, S3 et compatibles,
-SFTP, Imgur, ou n'importe quelle API HTTP décrite par configuration, import ShareX `.sxcu`), puis copie automatique du
+SFTP, ou n'importe quelle API HTTP (Imgur via un modèle) décrite par configuration, import ShareX `.sxcu`), puis copie automatique du
 lien public (URL, Markdown ou HTML) dans le presse-papiers.
 
 - **Cible** : développeurs, admins système, rédacteurs de documentation, équipes support, souvent adeptes de
@@ -22,7 +24,7 @@ lien public (URL, Markdown ou HTML) dans le presse-papiers.
 - Secrets jamais stockés en clair : trousseau système (Keychain, Secret Service) ; **repli : fichier chiffré par mot
   de passe maître** quand aucun trousseau n'est disponible.
 - Interface en français et en anglais.
-- **Projet libre** (licence à choisir, compatible avec les dépendances retenues, notamment FFmpeg).
+- **Projet libre** (GPL-3.0-or-later).
 - **Pas de signature Apple** (pas de compte Developer) : signature ad hoc ; conséquences à documenter honnêtement.
 - **Pas d'AUR** (pas de compte Arch).
 - **Développeur seul, pas de délai** : le périmètre de la v1 doit être tenable par une personne.
@@ -38,13 +40,12 @@ pipette, règle en pixels ; OCR d'une zone, détection de QR codes.
 assistée des secrets ; compteurs d'étapes ; surligneur, projecteur ; habillage (fond, marge, ombre, préréglages) ;
 annotations rééditables après coup.
 
-**Vidéo et GIF** : zone/fenêtre/écran en MP4 et GIF, audio système et micro en option, pause/reprise ; affichage des
-clics et des raccourcis ; coupe début/fin avant export.
+**Vidéo et GIF** : retirés du produit (décision du 11/11/2026).
 
 **Après la capture** : miniature flottante glisser-déposable ; épinglage au-dessus des fenêtres ; enregistrement local ;
 historique avec recherche ; chaîne d'actions configurable ; suppression des métadonnées avant envoi.
 
-**Envoi** : Zipline, S3, SFTP, Imgur ; destination HTTP personnalisée + import `.sxcu` ; plusieurs profils, un par
+**Envoi** : Zipline, S3, SFTP (Imgur en modèle) ; destination HTTP personnalisée + import `.sxcu` ; plusieurs profils, un par
 défaut ; copie du lien (URL/Markdown/HTML) ; file d'attente avec reprise ; envoi par morceaux.
 
 **Transversal** : raccourcis globaux configurables ; CLI complète ; modèles de nom de fichier.

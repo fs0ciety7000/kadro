@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist of Kropa.app (scripts/bundle-macos.sh replaces @VERSION@).
+
+  The bundle identifier is the application ID of the project (docs/decisions.md). It is what macOS
+  (TCC, Keychain) knows the application by, and the identifier the code signature is made for: do
+  not change it without losing every permission already granted.
+
+  NSScreenCaptureUsageDescription: no documented key makes macOS ask for Screen Recording (the
+  system dialog comes from the first capture). It is set so that the text is ours if macOS shows it;
+  whether it ever does is unverified (docs/testing/manual-macos.md).
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>kropa</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.fs0ciety7000.Kropa</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>fr</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>Kropa</string>
+	<key>CFBundleDisplayName</key>
+	<string>Kropa</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.graphics-design</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Kropa, GPL-3.0-or-later</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Kropa needs to record the screen to take screenshots.</string>
+</dict>
+</plist>

@@ -1,0 +1,1 @@
+kropa: Refused: the value of '--var' looks like a secret. Secrets never go in arguments: use the hidden prompt, --secret-stdin or --secret-fd.

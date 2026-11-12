@@ -1,0 +1,5 @@
+error: the argument '[ID]' cannot be used with '--none'
+
+Usage: kropa dest set-default <ID|--none>
+
+For more information, try '--help'.

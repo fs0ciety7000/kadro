@@ -1,0 +1,8 @@
+{
+  "Version": "16.0.1",
+  "Name": "Redirecting host",
+  "DestinationType": "ImageUploader",
+  "RequestURL": "https://r.example.org/up",
+  "Body": "MultipartFormData",
+  "ResponseType": "RedirectionURL"
+}

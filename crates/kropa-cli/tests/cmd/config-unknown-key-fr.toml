@@ -1,0 +1,8 @@
+bin.name = "kropa"
+args = ["--lang", "fr", "--config", ".", "dest", "list"]
+status.code = 6
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
+fs.cwd = "ctx/unknown-key"
+fs.sandbox = true

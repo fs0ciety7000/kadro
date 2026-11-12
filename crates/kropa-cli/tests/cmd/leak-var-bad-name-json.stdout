@@ -1,0 +1,1 @@
+{"schema":"kropa.error/1","status":"error","exit_code":2,"error":{"code":"usage","reason":null,"message":"invalid value for '--var <NAME=VALUE>': expected NAME=VALUE, where NAME starts with a letter or '_' and has only letters, digits and '_'","step":null}}

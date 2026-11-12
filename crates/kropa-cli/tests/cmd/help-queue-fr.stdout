@@ -1,0 +1,20 @@
+Gérer la file d'envoi
+
+Utilisation : kropa queue [OPTIONS] <COMMANDE>
+
+Commandes :
+  list    Lister les tâches en file
+  retry   Relancer une tâche, ou toutes les tâches échouées
+  cancel  Annuler une tâche
+  clear   Retirer les tâches terminées de la file
+
+Options :
+      --json              Sortie lisible par une machine : un objet JSON sur stdout
+      --lang <LANGUE>     Langue des messages (fr ou en)
+  -q, --quiet             Moins de messages sur stderr (les erreurs restent)
+  -v, --verbose...        Plus de messages sur stderr (-vv : journal de débogage)
+      --no-input          Ne jamais poser de question, même sur un terminal
+      --color <COULEUR>   Couleur de la sortie stderr : auto (par défaut), always ou never
+      --config <DOSSIER>  Dossier de configuration
+      --password-fd <N>   Lire la phrase de passe du coffre sur ce descripteur de fichier
+  -h, --help              Afficher l'aide

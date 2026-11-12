@@ -1,0 +1,41 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":pinAllExceptPeerDependencies", "helpers:pinGitHubActionDigests"],
+  "pinDigests": true,
+  "minimumReleaseAge": "3 days",
+  "timezone": "Europe/Brussels",
+  "schedule": ["after 9am and before 6pm every weekday"],
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": { "labels": ["security"], "minimumReleaseAge": null, "schedule": ["at any time"] },
+  "packageRules": [
+    {
+      "description": "Patches and digests: merged automatically once CI is green",
+      "matchUpdateTypes": ["patch", "digest", "pinDigest"],
+      "automerge": true
+    },
+    {
+      "description": "Majors are always reviewed",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "majeure"]
+    },
+    {
+      "description": "Cargo: keep Cargo.toml ranges as written; exact versions live in the committed Cargo.lock",
+      "matchManagers": ["cargo"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
+      "description": "Rust: minor updates of crates grouped in a single pull request (patches keep automerging, majors stay separate)",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "rust minor updates",
+      "automerge": false
+    },
+    {
+      "description": "Never a major of a database engine: it needs a dump and a restore",
+      "matchPackageNames": ["postgres", "/postgres/", "redis", "valkey/valkey", "mysql", "mariadb", "mongo"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}

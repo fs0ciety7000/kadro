@@ -1,0 +1,3 @@
+error: invalid value for '--upload[=<PROFILE>]': a profile name uses 1 to 64 letters, digits, '-' or '_'
+
+For more information, try '--help'.

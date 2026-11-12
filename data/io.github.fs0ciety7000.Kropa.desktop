@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Kropa
+GenericName=Screenshot tool
+GenericName[fr]=Outil de capture d'écran
+Comment=Capture, annotate and upload screenshots
+Comment[fr]=Capturer, annoter et envoyer des captures d'écran
+# The file name is the application ID: the portals look permissions up under it.
+# The graphical interface (kropa-gtk) does not exist yet, so the entry stays out of the launcher.
+# scripts/dev-install.sh replaces the command of TryExec and Exec with the path of the binary it installs for.
+TryExec=kropa
+Exec=kropa capture screen
+Terminal=false
+NoDisplay=true
+Categories=Graphics;
+Keywords=screenshot;capture;screen;annotate;upload;
+StartupNotify=false

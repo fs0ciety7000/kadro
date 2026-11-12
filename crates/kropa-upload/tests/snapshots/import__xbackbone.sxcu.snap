@@ -1,0 +1,42 @@
+---
+source: crates/kropa-upload/tests/import.rs
+expression: text
+---
+origin: https://xbb.example.net:443 (host xbb.example.net, https true)
+
+--- profile ---
+[[destination]]
+id = "xbackbone"
+type = "http"
+label = "XBackBone"
+kinds = ["image", "file"]
+
+[destination.request]
+method = "POST"
+url = "https://xbb.example.net/upload"
+body = "multipart"
+file_field = "upload"
+redirects = "same-origin"
+
+[destination.request.query]
+api_key = "{secret:api-key}"
+
+[destination.request.fields]
+title = "{filename}"
+token = "{secret:token}"
+
+[destination.secrets.api-key]
+
+[destination.secrets.token]
+
+[destination.response]
+url = "{json:url}"
+thumbnail_url = "{json:url}/thumb"
+deletion_url = "{json:url}/delete/{json:delete_token}"
+
+--- secrets ---
+api-key | Query("api_key") | query:api_key | https://xbb.example.net:443 | ***cdef | value
+token | Form("token") | form:token | https://xbb.example.net:443 | ***3210 | value
+
+--- notes ---
+query_secret: api-key

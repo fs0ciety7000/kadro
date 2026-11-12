@@ -1,0 +1,80 @@
+# cargo-deny 0.20.x. Run: cargo deny check
+# Kropa is GPL-3.0-or-later. Compatibility is not inferred by the tool: the allow-list
+# below is the reviewed translation (docs/quality-release.md §2.2).
+
+[graph]
+# Only the platforms we ship: no Windows-only crates in the audit.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+all-features = true
+
+[licenses]
+# Everything not listed is denied, including AGPL-*, GPL-2.0-only, SSPL and unknown licenses.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unlicense",
+    "LGPL-2.1-or-later",
+    "GPL-3.0-or-later",
+]
+confidence-threshold = 0.93
+# The allow-list is intentionally wider than what the tree uses today.
+unused-allowed-license = "allow"
+# Any exception ([licenses.exceptions] or [[licenses.clarify]]) must be commented here with the crate and the reason.
+
+[advisories]
+# RustSec database; a vulnerability, an unsound crate or a yanked version fails the check.
+yanked = "deny"
+version = 2
+# Ignored advisories must carry an id and a justification, e.g.:
+# ignore = [{ id = "RUSTSEC-0000-0000", reason = "..." }]
+#
+# RUSTSEC-2026-0370, -0371 and -0372 (zvariant, zbus_names, zvariant_derive 5.x/4.x): "unmaintained",
+# not vulnerabilities; the crates were merged into zbus 6. They come only from `secret-service` 5.2.0
+# (zbus 5), the Linux keyring client of `kropa-store` (lot 1.8). The next major, secret-service 6
+# (zbus 6), is a release candidate at the time of writing (6.0.0-rc.1, 2026-11-06).
+# Removal: as soon as secret-service 6.0.0 is stable, drop the three lines below and move to it; review
+# at the latest on 2027-02-28, and if there is still no stable release then, write a direct client on
+# zbus 6 (OpenSession DH, SearchItems, Unlock, Prompt, GetSecret, CreateItem, SetSecret, Delete).
+# Immediate removal if a vulnerability is published for zbus 5, zvariant 5 or zbus_names 4 (no 5.x fix
+# to wait for).
+# Reviewed by: security-reviewer, docs/reviews/2026-11-11-security-1.8.md (section "Exceptions RUSTSEC").
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "zvariant 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names 4 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5 unmaintained (merged into zbus 6); via secret-service 5.2.0 only; no vulnerability" },
+    # RUSTSEC-2026-0387 (crypto-bigint 0.5.5, timing) and RUSTSEC-2026-0374 (basic-toml, unmaintained) come only
+    # from `age` 0.12.1 (latest), the vault of `kropa-store` (lot 2.8): crypto-bigint through p256/hpke, which the
+    # vault never uses (scrypt recipient only, no P-256 operation on a secret); basic-toml through the
+    # i18n-embed-fl proc-macro, at build time only. Exception accepted by the user on 2026-11-12, to be confirmed by
+    # security-reviewer (docs/reviews/2026-11-12-security-2.8a.md). Removal: as soon as `age` ships without them;
+    # review at the latest on 2027-02-28; immediate removal if the advisory reaches the scrypt path.
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint timing via age -> p256/hpke; vault uses the scrypt recipient only; no fix in age 0.12.1" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml unmaintained; build-time proc-macro dependency of age (i18n-embed-fl) only" },
+]
+
+[bans]
+# Duplicated versions of a crate: warning only.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only: no other registry, no git dependency.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

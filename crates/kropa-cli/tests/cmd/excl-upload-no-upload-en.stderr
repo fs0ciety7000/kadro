@@ -1,0 +1,5 @@
+error: the argument '--upload[=<PROFILE>]' cannot be used with '--no-upload'
+
+Usage: kropa capture screen --upload[=<PROFILE>]
+
+For more information, try '--help'.

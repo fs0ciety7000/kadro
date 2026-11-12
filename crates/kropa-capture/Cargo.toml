@@ -1,0 +1,55 @@
+[package]
+name = "kropa-capture"
+description = "Kropa capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+kropa-core.workspace = true
+png.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd.workspace = true
+# Wayland clipboard through ext-data-control / wlr-data-control (pure Rust, no libwayland): the
+# selection is served by a detached child process (`clipboard/wayland.rs`).
+wl-clipboard-rs.workspace = true
+
+# ScreenCaptureKit and NSPasteboard through the generated Objective-C bindings (no Swift bridge). Only
+# the features the macOS backend uses are enabled; every `unsafe` call lives in `src/macos/`.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSGraphics", "NSPasteboard", "NSScreen"] }
+objc2-core-foundation = { workspace = true, features = ["CFData", "CFString", "CFDictionary"] }
+objc2-core-graphics = { workspace = true, features = [
+    "CGBitmapContext", "CGColorSpace", "CGContext", "CGDirectDisplay", "CGDisplayConfiguration",
+    "CGError", "CGGeometry", "CGImage", "CGSession", "CGWindow",
+] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSData", "NSDictionary", "NSEnumerator", "NSError", "NSString", "NSProcessInfo", "NSValue"] }
+objc2-image-io = { workspace = true, features = ["CGImageDestination", "objc2", "objc2-core-graphics"] }
+objc2-screen-capture-kit = { workspace = true, features = [
+    "SCStream", "SCShareableContent", "SCScreenshotManager", "block2",
+    "objc2-core-foundation", "objc2-core-graphics",
+] }
+
+[features]
+# Builders of small PNG files, for the tests of crates that fake a portal.
+test-support = []
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

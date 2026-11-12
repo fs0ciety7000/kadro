@@ -1,0 +1,1 @@
+{"schema":"kropa.dest.export/1","status":"ok","exit_code":0,"destinations":["zipline"],"toml":"[[destination]]/nid = /"zipline/"/ntype = /"zipline/"/nkinds = [/"image/", /"file/"]/nurl = /"https://zipline.example.org/"/n/n[destination.secrets.token]/n","error":null}

@@ -1,0 +1,1 @@
+{ "Version": "16.0.1", "Name": "Userinfo", "RequestURL": "https://user:hunter2hunter2@x.example.org/up", "Body": "MultipartFormData", "URL": "{json:link}" }

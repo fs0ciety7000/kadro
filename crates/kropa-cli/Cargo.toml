@@ -1,0 +1,55 @@
+[package]
+name = "kropa"
+description = "Kropa command-line client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "kropa_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kropa"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+gethostname.workspace = true
+jiff.workspace = true
+kropa-capture.workspace = true
+kropa-core.workspace = true
+kropa-i18n.workspace = true
+kropa-ipc.workspace = true
+kropa-store.workspace = true
+kropa-upload.workspace = true
+serde_json.workspace = true
+zeroize.workspace = true
+
+# Hidden prompt of a secret on the terminal (safe termios, no `unsafe`).
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+# Signals ignored while the editor of `dest edit` runs, so that its private copy is removed.
+signal-hook.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+trycmd.workspace = true
+wiremock.workspace = true
+
+# macOS: the real broker is started by the real client in `tests/macos.rs`.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+kropa-keychain.workspace = true
+
+# The fake screenshot portal of `tests/portal.rs`: a D-Bus service on a private bus.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+kropa-capture = { workspace = true, features = ["test-support"] }
+zbus = { workspace = true, features = ["default-rt", "service", "proxy"] }
+
+[lints]
+workspace = true

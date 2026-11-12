@@ -1,0 +1,46 @@
+Diagnostic de Kropa
+
+Système
+  linux ([..]), kropa [..]
+
+Capacités
+  capture d'écran (screen) : indisponible
+    Pourquoi : pas de bus de session D-Bus : lancez kropa dans une session graphique
+  capture d'un écran (output) : indisponible
+    Pourquoi : le portail rend tous les écrans en une seule image
+
+Détails
+  Bureau (à titre indicatif, jamais utilisé pour choisir un moteur) : introuvable
+  Type de session : introuvable
+  WAYLAND_DISPLAY défini : non
+  DISPLAY défini : non
+  Bus de session D-Bus joignable : non
+  Erreur du bus de session : failed to connect to `unix:path=/nonexistent-kropa-bus`: No such file or directory (os error 2)
+  Portail Screenshot, version de l'interface : non vérifié : pas de bus de session
+  Cibles du portail Screenshot : non vérifié : pas de bus de session
+  Portail ScreenCast, version de l'interface : non vérifié : pas de bus de session
+  Portail GlobalShortcuts, version de l'interface : non vérifié : pas de bus de session
+  Portail Secret, version de l'interface : non vérifié : pas de bus de session
+  Registre des applications hôtes, version de l'interface : non vérifié : pas de bus de session
+  KWin sur le bus de session (son interface ScreenShot2 n'est pas utilisée) : non vérifié : pas de bus de session
+  Identifiant d'application : io.github.fs0ciety7000.Kropa
+  Fichier .desktop de l'identifiant installé (scripts/dev-install.sh) : non
+  Wayland layer-shell : pas encore vérifié
+  Wayland data-control (presse-papiers) : introuvable
+
+Chemins
+  Fichier de configuration : /nonexistent-kropa-home/.config/kropa/config.toml
+  Dossier des captures : /nonexistent-kropa-home/Images/Kropa
+
+Magasin de secrets
+  Magasin : keyring (indisponible)
+    Détail technique (non traduit) : the Secret Service could not be reached on the session bus
+  Profils qui détiennent des secrets : 0
+
+Application (IPC)
+  État : non sûr, Kropa ne l'utilise pas
+    Raison : pas de dossier d'exécution (XDG_RUNTIME_DIR n'est pas défini ; aucun repli vers /tmp)
+  Fichier de service D-Bus installé : non
+
+Pas encore disponible
+  Écrans et leurs noms : lot 2.5

@@ -1,0 +1,34 @@
+Ajouter une destination
+
+Utilisation : kropa dest add [OPTIONS] --type <TYPE> <ID>
+
+Arguments :
+  <ID>  Identifiant du profil
+
+Options :
+      --type <TYPE>            Type de destination : zipline, s3 ou sftp (une API HTTP se décrit dans un fichier : 'kropa dest import')
+      --url <URL>              URL de base de la destination
+      --default                En faire la destination par défaut
+      --bucket <BUCKET>        Bucket S3
+      --region <REGION>        Région S3
+      --endpoint <URL>         URL du point d'accès S3
+      --path-style             Adressage S3 de type chemin
+      --prefix <PREFIX>        Préfixe des clés S3
+      --public-base-url <URL>  URL publique de base du bucket
+      --presign <DURÉE>        Durée de vie des URL présignées, 7 jours au plus (par exemple 12h, 7d)
+      --host <HOST>            Hôte SFTP
+      --port <PORT>            Port SFTP
+      --user <USER>            Utilisateur SFTP
+      --remote-dir <DIR>       Dossier distant SFTP
+      --public-url <URL>       URL publique de base du dossier SFTP
+      --secret-stdin           Lire le secret sur stdin
+      --secret-fd <N>          Lire le secret sur ce descripteur de fichier
+      --json                   Sortie lisible par une machine : un objet JSON sur stdout
+      --lang <LANGUE>          Langue des messages (fr ou en)
+  -q, --quiet                  Moins de messages sur stderr (les erreurs restent)
+  -v, --verbose...             Plus de messages sur stderr (-vv : journal de débogage)
+      --no-input               Ne jamais poser de question, même sur un terminal
+      --color <COULEUR>        Couleur de la sortie stderr : auto (par défaut), always ou never
+      --config <DOSSIER>       Dossier de configuration
+      --password-fd <N>        Lire la phrase de passe du coffre sur ce descripteur de fichier
+  -h, --help                   Afficher l'aide

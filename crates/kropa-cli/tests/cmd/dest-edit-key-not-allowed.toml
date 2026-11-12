@@ -1,0 +1,8 @@
+bin.name = "kropa"
+args = ["--lang", "en", "--config", ".", "dest", "edit", "zipline", "--set", "request.url=https://x.example.org"]
+status.code = 2
+env.inherit = false
+env.add.HOME = "/nonexistent-kropa-home"
+env.add.XDG_CONFIG_HOME = "/nonexistent-kropa-home/.config"
+fs.cwd = "ctx/with-zipline"
+fs.sandbox = true

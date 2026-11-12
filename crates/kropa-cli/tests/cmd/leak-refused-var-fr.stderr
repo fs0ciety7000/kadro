@@ -1,0 +1,1 @@
+kropa: Refusé : la valeur de '--var' ressemble à un secret. Un secret ne passe jamais en argument : utilisez la saisie masquée, --secret-stdin ou --secret-fd.

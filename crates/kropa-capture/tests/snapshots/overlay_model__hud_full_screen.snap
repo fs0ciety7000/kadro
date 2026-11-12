@@ -1,0 +1,17 @@
+---
+source: crates/kropa-capture/tests/overlay_model.rs
+expression: "format!(\"{layout:#?}\")"
+---
+HudLayout {
+    dimensions: Some(
+        PxRect {
+            x: 8,
+            y: 684,
+            width: 236,
+            height: 28,
+        },
+    ),
+    dimensions_inside: true,
+    magnifier: None,
+    help: Hidden,
+}

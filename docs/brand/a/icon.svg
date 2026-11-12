@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<title>Kropa (macOS)</title>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#262A33"/><stop offset="1" stop-color="#111318"/></linearGradient>
+<linearGradient id="lit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A5160"/><stop offset="1" stop-color="#3A404C"/></linearGradient>
+<filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/></filter>
+<path id="sq" d="M924 512C924 711.7 928.6 812.8 870.7 870.7C812.8 928.6 711.7 924 512 924C312.3 924 211.2 928.6 153.3 870.7C95.4 812.8 100 711.7 100 512C100 312.3 95.4 211.2 153.3 153.3C211.2 95.4 312.3 100 512 100C711.7 100 812.8 95.4 870.7 153.3C928.6 211.2 924 312.3 924 512Z"/>
+</defs>
+<use href="#sq" fill="url(#bg)" filter="url(#sh)"/>
+<use href="#sq" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="4"/>
+<g transform="translate(139 135) scale(31.1)">
+<rect x="4.2" y="4.2" width="15.6" height="15.6" rx="0.6" fill="url(#lit)"/>
+<g fill="#F2F4F7"><rect x="3" y="3" width="8.5" height="2.5"/><rect x="3" y="3" width="2.5" height="8.5"/><rect x="12.5" y="18.5" width="8.5" height="2.5"/><rect x="18.5" y="12.5" width="2.5" height="8.5"/></g><rect x="16" y="16" width="5.5" height="5.5" fill="#FF8A1F"/>
+</g>
+</svg>

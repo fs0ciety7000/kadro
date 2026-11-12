@@ -1,0 +1,1 @@
+{"schema":"kropa.capture/1","status":"error","exit_code":5,"error":{"code":"unsupported","reason":"image_format_unsupported","message":"Screenshots are delivered as PNG images only: the format jpg is not supported yet. Use png in the configuration, or a .png file name.","step":"capture"}}

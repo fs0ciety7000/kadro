@@ -1,0 +1,35 @@
+# Kropa destination model: Imgur, anonymous upload (a custom HTTP API, described in TOML).
+#
+# `kropa dest add --type http` does not exist: an API of your own is a file like this one.
+#
+#   kropa dest import docs/examples/imgur.toml --expect-host api.imgur.com
+#   kropa secrets set imgur client_id        # asks for the value, hidden
+#   kropa dest test imgur
+#
+# This file holds no secret and Kropa ships no client ID: Imgur no longer registers new applications
+# (checked on 2026-11-11), so this model is only useful if you already own a client ID of your own.
+# The value goes to the system keyring, tied to https://api.imgur.com and to the header named below.
+
+[[destination]]
+id = "imgur"
+type = "http"
+label = "Imgur (anonymous)"
+kinds = ["image"]
+
+[destination.request]
+method = "POST"
+url = "https://api.imgur.com/3/image"
+body = "multipart"
+file_field = "image"
+redirects = "same-origin"
+
+[destination.request.headers]
+Authorization = "Client-ID {secret:client_id}"
+
+[destination.secrets.client_id]
+description = "Your own Imgur client ID"
+
+[destination.response]
+url = "{json:data.link}"
+deletion_url = "https://imgur.com/delete/{json:data.deletehash}"
+error = "{json:data.error}"

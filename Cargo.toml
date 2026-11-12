@@ -1,0 +1,103 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.95"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/fs0ciety7000/kropa"
+
+[workspace.dependencies]
+ashpd = { version = "0.14.0", default-features = false, features = ["async-io", "screenshot"] }
+age = { version = "0.12.1", default-features = false }
+async-trait = "0.1.92"
+aws-lc-rs = { version = "1.19.0", default-features = false, features = ["aws-lc-sys"] }
+base64 = "0.23.1"
+bytes = "1.12.1"
+block2 = { version = "0.6.2", default-features = false, features = ["std"] }
+clap = { version = "4.6.7", features = ["derive", "string"] }
+core-foundation = "0.10.1"
+directories = "6.0.0"
+fluent-bundle = "0.16.0"
+gethostname = "1.1.0"
+insta = { version = "1.49.0", features = ["json"] }
+jiff = { version = "0.2.42", default-features = false, features = ["std", "tz-system"] }
+libc = "0.2.191"
+objc2 = "0.6.5"
+# S3 on the one HTTP client: `aws-base` + `reqwest` and **not** `aws` (which turns on `reqwest/rustls` and a second TLS).
+object_store = { version = "0.14.2", default-features = false, features = ["aws-base", "reqwest"] }
+png = "0.18.1"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-image-io = { version = "0.3.2", default-features = false, features = ["std"] }
+objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std"] }
+proptest = "1.12.0"
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs"] }
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "multipart"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+rustls-platform-verifier = "0.7.1"
+rustix = { version = "1.1.6", default-features = false, features = ["std", "process", "termios"] }
+secret-service = { version = "5.2.0", default-features = false, features = ["rt-async-io-crypto-rust"] }
+security-framework = { version = "3.7.0", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+serde_json_path = "0.7.2"
+sha2 = "0.11.1"
+# Ignores SIGINT, SIGQUIT and SIGHUP while the editor of `dest edit` runs (no `unsafe` on our side).
+signal-hook = { version = "0.4.6", default-features = false }
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", default-features = false }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12", "aws_lc_rs"] }
+toml = "1.2.1"
+toml_edit = { version = "0.25.19", default-features = false, features = ["parse", "display"] }
+trycmd = "1.2.1"
+unic-langid = "0.9.6"
+url = "2.5.8"
+wiremock = "0.6.5"
+wl-clipboard-rs = "0.9.5"
+zbus = { version = "6.2.1", default-features = false }
+zeroize = "1.9.1"
+kropa-core = { path = "crates/kropa-core", version = "0.0.1" }
+kropa-doc = { path = "crates/kropa-doc", version = "0.0.1" }
+kropa-render = { path = "crates/kropa-render", version = "0.0.1" }
+kropa-capture = { path = "crates/kropa-capture", version = "0.0.1" }
+kropa-upload = { path = "crates/kropa-upload", version = "0.0.1" }
+kropa-keychain = { path = "crates/kropa-keychain", version = "0.0.1" }
+kropa-store = { path = "crates/kropa-store", version = "0.0.1" }
+kropa-i18n = { path = "crates/kropa-i18n", version = "0.0.1" }
+kropa-ipc = { path = "crates/kropa-ipc", version = "0.0.1" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+# scrypt of the `age` vault (lot 2.8a): in an unoptimised build one derivation at 2^18 takes half a
+# minute, and `age` times one derivation before each use. Only these crates are optimised.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.salsa20]
+opt-level = 3
+[profile.dev.package.pbkdf2]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.hmac]
+opt-level = 3
+[profile.test.package.scrypt]
+opt-level = 3
+[profile.test.package.salsa20]
+opt-level = 3
+[profile.test.package.pbkdf2]
+opt-level = 3
+[profile.test.package.sha2]
+opt-level = 3
+[profile.test.package.hmac]
+opt-level = 3

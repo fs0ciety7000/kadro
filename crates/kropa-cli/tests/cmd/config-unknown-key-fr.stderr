@@ -1,0 +1,1 @@
+kropa: Configuration invalide : ./config.toml:1:1: unknown field `colour`, expected one of `output_dir`, `language`, `name_template`, `image_format`, `default_destination`

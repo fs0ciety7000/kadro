@@ -1,0 +1,151 @@
+# Plan de livraison — Kropa
+
+> État : **validé par l'utilisateur le 11/11/2026 (V2).** Rédigé par `architect` à partir de `decisions.md` (prioritaire) et
+> des documents d'équipe. Vidéo et GIF retirés. Développeur seul, sans délai.
+> Chaque PR : `code-reviewer` puis `qa-tester` ; `security-reviewer` en plus si elle touche aux secrets, au réseau, aux
+> dépendances, à la signature ou à la publication. Les tâches **[Utilisateur]** ne se délèguent pas.
+
+## Équipe
+
+| Agent | Rôle ici | Modèle / effort | Source |
+|---|---|---|---|
+| `architect` | conception des lots, `CLAUDE.md`, spec CLI, modèle de secrets | opus / high | kit |
+| `backend-dev` | cœur Rust : config, CLI, rendu, document, envoi, store, IPC | sonnet / medium | kit |
+| `linux-desktop-dev` | GTK4/libadwaita, portails (ashpd), Wayland, Secret Service, `.desktop` | sonnet / high | à écrire pour le projet |
+| `macos-desktop-dev` | objc2/AppKit, ScreenCaptureKit, TCC, Keychain, `.app`, codesign | sonnet / high | à écrire pour le projet |
+| `qa-tester` | tests, instantanés d'image, check-lists manuelles | sonnet / medium | kit |
+| `code-reviewer` | relecture de chaque PR | sonnet / high | kit |
+| `security-reviewer` | secrets, réseau, dépendances, signature, release | opus / xhigh | kit |
+
+Appui ponctuel (kit) : `brand-identity` (D1), `ui-designer` puis `design-critic` (D2, 3.9, 5.7), `copywriter` (FR/EN,
+docs), `devops` (CI, paquets, release).
+
+## Décisions proposées (recommandation en premier)
+
+1. **S3 : `object_store` 0.14.2** plutôt que `aws-sigv4` + reqwest : multipart, présignature, XML et reprises déjà
+   maintenus. Garde-fous : identifiants statiques seulement (jamais `from_env` ni IMDS), trait `S3Backend`.
+2. **Presse-papiers GNOME en v0.1** : lien sur stdout et message « non copié » ; copie fiable en v0.2 (image, focus de
+   l'overlay) et v0.4 (lien, notification « Lien prêt, Copier »). Mutter n'a pas data-control.
+3. **Paquet CLI nommé `kropa`** (`crates/kropa-cli`) : réservation du crate et `cargo install kropa` coïncident.
+4. **`kropa-vision` créée au lot 7 seulement** (pas de crate morte).
+5. **IPC : socket Unix JSON-RPC 2.0** plutôt que D-Bus de session.
+6. **Une seule base SQLite** (`kropa-store`) pour l'historique et la file d'envoi.
+7. **Certificat auto-signé créé dès la v0.1** pour tester tôt la survie des permissions TCC.
+8. **Linux minimal : Debian 13, Ubuntu 24.04 LTS, Fedora stable** (fixe GTK4/libadwaita minimales ; à vérifier).
+9. **Binaire macOS universel**, partie Intel testée seulement sur `macos-15-intel` (limite documentée).
+10. **App ID `io.github.<compte>.Kropa`** (requis par les portails même sans Flathub).
+
+## Lot 0 — Fondations
+Dépend de : rien. En parallèle : D1, S.
+- [x] 0.1 **[Utilisateur]** Renommer le dépôt GitHub `kadro` → `kropa`. Fin : remote à jour, ancienne URL redirige.
+- [x] 0.2 Créer `linux-desktop-dev` et `macos-desktop-dev` dans `.claude/agents/`. Agent : session principale. Fin : relus et validés.
+- [x] 0.3 Workspace Cargo : `kropa-core`, `kropa-doc`, `kropa-render`, `kropa-capture`, `kropa-upload`, `kropa-store`, `kropa-i18n`, `kropa` (CLI), `kropa-gtk`, `kropa-macos` (binaire `kropa-app`, sous `cfg`). Édition 2024, `rust-toolchain.toml`, MSRV, `[workspace.dependencies]`, `Cargo.lock`, `LICENSE` GPL-3.0-or-later, SPDX. Agent : `backend-dev`. Fin : `cargo build --workspace --locked` et `cargo test` verts sur Linux et macOS ; `kropa --version` répond.
+- [x] 0.4 (CI verte sur la PR n° 1, Linux et macOS 15, < 1 min) CI GitHub Actions : fmt, clippy `-D warnings`, nextest + doctests sur `ubuntu-24.04` et `macos-15`, MSRV, `cargo-deny` (licences), `zizmor` ; actions épinglées par SHA, `permissions: contents: read`, Renovate (`renovate.json`, à la place de Dependabot). Agent : `devops`. Fin : PR verte en < 12 min ; une dépendance AGPL fait échouer `deny`.
+- [x] 0.5 `CLAUDE.md` et `AGENTS.md` (stack, commandes, règles : local d'abord, client HTTP unique, horloge injectable, jamais de succès simulé, secrets ni en argument ni en variable d'environnement, Fluent dès la première chaîne, `unsafe` confiné à macOS), `docs/memory/`. Agent : `architect`. Fin : relus par l'utilisateur.
+- [x] 0.6 Spécification CLI v1 `docs/cli.md` (`capture screen|output|area`, `upload`, `dest`, `queue`, `secrets`, `history`, `edit`, `doctor`, `version` ; `--upload[=profil]`, `--no-upload`, `--copy url|markdown|html|none`, `--json`, `--output`, `--name`, `--delay`, `--last` ; codes de sortie, schéma JSON). Agents : `architect`, `copywriter`. Fin : validée par l'utilisateur.
+- [x] 0.7 Kadro → Kropa dans `docs/` (historique conservé), `.kadro` → `.kropa` ; mettre à jour `uploads.md` (age, plus de vidéo). Agent : `copywriter`. Fin : `grep -ri kadro docs/` ne renvoie que l'historique.
+- [ ] 0.8 **[Utilisateur]** Réserver le crate `kropa` (squelette 0.0.x). Dépend de 0.3.
+- [ ] 0.9 **[Utilisateur]** Recherche de marques (classes 9 et 42) et de domaines ; résultat dans `decisions.md`.
+
+## Lot D1 — Mot-symbole « kropa » (identité A)
+Dépend de : rien. En parallèle : 0, S, 1.
+- [x] D1.1 Dessiner « kropa » sur la grille A (`p` à créer), `logo*.svg`, taille minimale, `preview.html`. Agent : `brand-identity`. Fin : validé par l'utilisateur.
+- [x] D1.2 `brand.md` réduit à A (B archivée), exemples de ton avec `kropa`. Agent : `brand-identity`.
+- [x] D1.3 Critique logo et icône à 16/32/80 px (dock GNOME, Launchpad ; risque « icône de terminal »). Agent : `design-critic`. Fin : aucun bloquant.
+
+## Lot S — Modèle de secrets (avant tout code de stockage)
+Dépend de : rien. En parallèle : 0, D1.
+- [x] S.1 `docs/security/secrets.md` : trousseau (Secret Service, Keychain et ACL liées à la signature) ; repli `age` (scrypt, `zeroize`, `0600`, écriture atomique) ; bascule jamais silencieuse ; origines autorisées stockées avec le secret ; `{secret:}`, redirections, HTTPS, import `.sxcu`, journaux expurgés, `--password-fd`, mode non interactif ; modèle de menaces. Agent : `architect`.
+- [x] S.2 Revue. Agent : `security-reviewer`. Fin : points classés bloquants ou non.
+- [x] S.3 Corrections ; contre-revue : **aucun bloquant ouvert** (11/11/2026) ; décisions U1-U4 tranchées (`decisions.md`).
+- [x] S.4 Avant 1.8 : préciser N1 (type `MaskedText`, masquage avant coupe de l'extrait) et N3 (méthode de vérification du
+  parent par le courtier Keychain macOS) dans `docs/security/secrets.md` ; reporter les ajouts acceptés dans `docs/cli.md`.
+  Agent : `architect`. Constats faibles N2, N4-N6 traités à l'implémentation (1.7, 1.8).
+
+## Lot D2 — Maquettes et `DESIGN.md` (avant toute interface)
+Dépend de : D1 pour le logo. En parallèle : lot 1. Bloque : 2.3, 2.4, 3.5, 3.6, 4.10, 4.11.
+- [x] D2.1 Maquettes libadwaita et AppKit, clair/sombre, FR/EN : overlay (loupe, dimensions, clavier, multi-écran), éditeur (outils à une touche), notifications (« Lien copié », « Lien prêt, Copier », « Envoi échoué »), réglages (destinations, test, import `.sxcu`, raccourcis), coffre `age`, file d'attente, premier lancement et permissions, miniature (macOS, KDE) et variante notification (GNOME) ; puis `DESIGN.md`. Agent : `ui-designer`. Fin : fichiers dans `docs/design/`.
+- [x] D2.2 Icônes d'outils (grille 20 px, trait 1,75 px). Agent : `ui-designer`.
+- [x] D2.3 Critique et corrections. Agent : `design-critic`. Fin : aucun bloquant ; **[Utilisateur]** valide.
+- [x] D2.4 Chaînes FR et EN en `.ftl`. Agent : `copywriter`.
+
+## Lot 1 — v0.1 Cœur scriptable (capture → fichier → envoi → lien)
+Dépend de : 0 ; S pour 1.8. En parallèle : D2 ; 1.4 et 1.5 ensemble.
+- [x] 1.1 `kropa-core` : config TOML, chemins, modèles de nom (`proptest` : aucune sortie hors du dossier), erreurs et codes de sortie, horloge injectable. Agent : `backend-dev`.
+- [x] 1.2 `kropa-i18n` : Fluent branché sur la CLI. Agent : `backend-dev`. Fin : `LANG=fr` / `LANG=en` distincts.
+- [x] 1.3 CLI clap conforme à `docs/cli.md`. Agent : `backend-dev`. Fin : fixtures `trycmd` vertes.
+- [x] 1.3b Corrections de la revue de code 1.1-1.3 (`docs/reviews/2026-11-11-lot1-1.1-1.3.md` : 1 bloquant, 6 importants). Agent : `backend-dev`. Après 1.4 (mêmes fichiers).
+- [x] 1.4 (automatique : portail factice D-Bus ; essai réel GNOME/KDE en 1.12) Capture Linux : trait de capacités, portail Screenshot (`screen`, `output`), `kropa doctor`, `.desktop` + Registry (`scripts/dev-install.sh`). Agent : `linux-desktop-dev`. Fin : test sur portail factice en CI ; refus du portail = code d'erreur dédié.
+- [x] 1.5 (compilé pour macOS, CI macos-15 ; essai réel sur le Mac en 1.12) Capture macOS : `SCScreenshotManager`, TCC, `.app` minimal. Agent : `macos-desktop-dev`. Fin : `.app` construit en CI ; capture réussie sur le Mac.
+- [ ] 1.6 **[Utilisateur]** Certificat auto-signé (20 ans, sauvegarde `age` hors ligne) ; vérifier que la permission survit à deux builds. Fin : résultat dans `decisions.md`.
+- [x] 1.7 `kropa-upload` : client HTTP unique, destinations TOML (gabarits, JSONPath, redirections même origine, HTTPS obligatoire avec secret, réponse ≤ 1 Mio), préréglage Zipline, import `.sxcu`. Agent : `backend-dev`. Fin : tests `wiremock` + `insta` verts.
+- [x] 1.7b Corrections de la revue de sécurité 1.7 (`docs/reviews/2026-11-11-security-1.7.md` : 2 bloquants, 3 importants). Agent : `backend-dev`. I3 fait : fournisseur aws-lc-rs (décision du 11/11).
+- [x] 1.8 (cœur + Linux ; macOS = 1.8m) `kropa-store` + secrets au trousseau (origines liées), `kropa secrets status`. Dépend de S.3. Agent : `backend-dev`. Fin : tests gnome-keyring (CI) et trousseau temporaire macOS ; `security-reviewer` sans bloquant.
+- [x] 1.8m (Linux vert, macOS type-checké ; CI macos-15 et essai Mac à confirmer) Courtier Keychain macOS (`KeychainBroker`, un seul binaire accède au Keychain, `socketpair` hérité, vérification `SecCode`/`audit_token`, voir `docs/security/secrets.md` § 2.2.1). Agent : `macos-desktop-dev`. Fin : CI macOS verte ; essai réel en 1.12.
+- [x] 1.8r Revue de sécurité de 1.8 : aucun bloquant, 6 importants (`docs/reviews/2026-11-11-security-1.8.md`). Agent : `security-reviewer`.
+- [x] 1.8b Suites de la revue 1.8 : preuve de l'absence de prompt (moniteur D-Bus), test de `set_interactive`, `RLIMIT_CORE` (§ 6 ; `PR_SET_DUMPABLE` écarté : portail), `doctor` (doublons, orphelins N2), `keyring_timeout` et rollback d'import silencieux, mise à jour de `docs/security/secrets.md` (§ 2-3, 7, 8). Agent : `backend-dev`.
+- [x] 1.9 Liens URL/Markdown/HTML échappés ; journaux expurgés. Agent : `backend-dev`. Fin : un test prouve qu'aucun secret n'apparaît dans les journaux.
+- [x] 1.9b Suites de la revue de sécurité 1.9 (`docs/reviews/2026-11-11-security-1.9.md`) : contrôle avant échappement Markdown, oracle par fragments, séquences de terminal neutralisées, gabarit `error` sur corps masqué. Agent : `backend-dev`.
+- [x] 1.10 Presse-papiers : `NSPasteboard`, data-control (KDE, wlroots), message honnête sur GNOME. Agents : plateformes. Fin : statut = effet réel.
+- [x] 1.11 Compose de test (Zipline + PostgreSQL, Garage, OpenSSH ; digests épinglés), job d'intégration, test « zéro requête » (`unshare -rn`). Agents : `devops`, `qa-tester`.
+- [x] 1.12b Retour d'essai KDE : quand la permission de capture est refusée, ne plus renvoyer vers `flatpak permission-reset` (absent hors Flatpak) ; proposer une commande Kropa qui réinitialise la permission par le PermissionStore. Fait : `kropa doctor --reset-screenshot-permission` (D-Bus `DeletePermission`, schéma `kropa.doctor.reset/1`, `docs/cli.md` § 2.8), message de refus FR/EN mis à jour, code 5 sur macOS. À revérifier à la main sur KDE réel (1.12). Agent : `linux-desktop-dev`.
+- [x] 1.12c Retour d'essai : ne pas afficher l'avertissement `metadata_not_stripped` quand le fichier envoyé est une capture que Kropa vient d'écrire (métadonnées déjà retirées) ; le garder pour un fichier quelconque jusqu'au lot 4.8. Fait (`Delivery::with_stripped_metadata`, test CLI des deux cas). Agent : `backend-dev`.
+- [ ] 1.12 **[Utilisateur]** Essai réel GNOME, KDE, Mac.
+**Critère** : sur les trois plateformes, fichier enregistré et lien Zipline réel sur stdout ; copié sur KDE et macOS ; refus explicite sur GNOME ; « zéro requête » vert.
+
+## Lot 2 — v0.2 Sélection, profils, S3, coffre
+Dépend de : 1 et D2. Plan détaillé : `docs/lots/lot-2.md`. Une PR par fonctionnalité ; vérification normale (diff, tests,
+lint, build) par la session, sans relecteur séparé (rigueur standard, 12/11/2026).
+- [x] 2.A Profils et défaut : `kropa dest add|edit|remove|set-default|export`, jeton via TTY/stdin/fd, modèle Imgur (ex-2.6, 2.6b, 2.6c). Base faite : IPC `kropa-ipc` (ex-2.1a, 2.1d), modèle de sélection (ex-2.2).
+- [ ] 2.B Sélection de zone : serveur `kropa-gtk` et `kropa-app`, overlay GTK (layer-shell KDE/wlroots, plein écran GNOME) et AppKit, `kropa capture area [--last] [--delay]` (ex-2.1b, 2.1c, 2.3, 2.4, 2.5). Agents : `linux-desktop-dev`, `macos-desktop-dev`, `backend-dev`.
+- [ ] 2.C (moteur fait et testé sur Garage ; reste `dest add --type s3` et envoi par la CLI) S3 via `object_store` (endpoint, path/virtual-host, préfixe, `public_base_url`, présignature ≤ 7 j), `dest add --type s3`, test Garage (ex-2.7a, 2.7b). Agent : `backend-dev`.
+- [ ] 2.D (magasin fait, revue de sécurité en cours ; restent les commandes) Coffre `age` de repli : magasin, `kropa secrets use|migrate`, `--password-fd` (ex-2.8a, 2.8b ; `unlock|lock` au 4.C, décision D11). Agent : `backend-dev`.
+- [ ] 2.E **[Utilisateur]** Essai du parcours sans annotation (KDE, Mac ; GNOME non vérifié, D8).
+- Retiré (rigueur standard) : 2.9 job hebdomadaire Sway séparé (les tests sway restent dans la CI normale).
+
+## Lot 3 — v0.3 Éditeur
+Dépend de : 2 et D2.2.
+- [ ] 3.A Éditeur d'annotation : `kropa-doc` (objets, annuler/rétablir, `.kropa` v1, `docs/format-kropa.md`), `kropa-render` (formes, crayon, texte, flou, pixellisation, masque, compteurs, surligneur, Recadrer `C`, export PNG sans métadonnées), machine d'états au clavier, coquilles GTK et AppKit accessibles, `kropa edit <fichier>` ; fluide sur une capture 5K (ex-3.1, 3.2, 3.2b, 3.4, 3.5, 3.6, 3.7, 3.8). Agents : `backend-dev`, plateformes.
+- [ ] 3.B **[Utilisateur]** Parcours complet sans souris.
+- Retiré (rigueur standard) : 3.3 instantanés d'image comme tâche séparée (tests de rendu dans 3.A), 3.9 critique de design séparée.
+
+## Lot 4 — v0.4 Usage quotidien
+Dépend de : 3.
+- [ ] 4.A Application résidente : résident Linux et macOS (icône KDE, `NSStatusItem`), raccourcis globaux et repli documenté, notifications avec « Lien prêt, Copier » sur GNOME, réglages simples, premier lancement et permissions expliquées (ex-4.1, 4.2, 4.3, 4.4, 4.10, 4.11). Agents : plateformes.
+- [ ] 4.B File d'envoi SQLite (reprise, backoff, `kropa queue …`) et historique `kropa history list` (ex-4.5, 4.6). Agent : `backend-dev`.
+- [ ] 4.C Session du coffre dans le résident (15 min, verrouillage avec l'écran, `secrets unlock|lock`) ; avant toute méthode `secrets.*` sur l'IPC, PID du pair = propriétaire du nom D-Bus (revue 2.1a, I2) (ex-4.7). Agents : `backend-dev`, plateformes.
+- [ ] 4.D Retrait des métadonnées sur la copie envoyée, fixtures EXIF GPS (ex-4.8). Agent : `backend-dev`.
+- [ ] 4.E SFTP (russh, `known_hosts` strict), tests OpenSSH (ex-4.9). Agent : `backend-dev`.
+- [ ] 4.F **[Utilisateur]** Deux semaines d'usage réel.
+
+## Lot 5 — v1.0 Paquets et docs
+Dépend de : 4.
+- [ ] 5.A Paquets : `.deb`, `.rpm`, `.dmg` universel auto-signé, tap Homebrew, `.desktop`, MetaInfo, icônes (ex-5.1, 5.2, 5.4 ; l'utilisateur crée `homebrew-tap`). Agents : `devops`, `macos-desktop-dev`.
+- [ ] 5.B Workflow de release (approbation manuelle, `SHA256SUMS`, provenance, `cargo vendor`, `git-cliff`, `cargo-about`) (ex-5.3). Agent : `devops`.
+- [ ] 5.C Docs FR/EN : README, installation, signature macOS, `compat.md`, référence CLI, `CHANGELOG.md` (ex-5.6). Agent : `copywriter`.
+- [ ] 5.D Should si prêts : miniature flottante, réouverture `.kropa`, wlroots et X11 au mieux ; sinon reporté dans `compat.md` (ex-5.5). Agents : plateformes.
+- [ ] 5.E **[Utilisateur]** Check-list manuelle, fusion, étiquette, release v1.0.
+- Retiré (rigueur standard) : 5.7 audit et critique finale séparés.
+
+## Après v1
+- **Lot 6, v1.1 Rendu soigné** : fenêtre propre, habillage et préréglages, projecteur, historique graphique.
+- **Lot 7, v1.2 Lecture d'image** : `kropa-vision`, OCR (Vision, Tesseract), QR, détection assistée des secrets, pipette, règle.
+- **Plus tard** : capture défilante, épinglage (pas sur GNOME), chaîne d'actions libre, envoi par morceaux, suppression distante, crates.io, COPR/OBS.
+
+## Incohérences relevées entre documents (non tranchées)
+- Flathub, AppImage, PKGBUILD encore cités par `quality-release.md`, `platform-linux.md`, `product.md` : ce plan suit `decisions.md`.
+- Tap Homebrew : v1.x selon `quality-release.md`, v1 selon `decisions.md` : ce plan suit `decisions.md`.
+- Critère v0.1 de Produit (lien copié sur GNOME) irréalisable : voir décision 2.
+- macOS impose un `.app` même pour la CLI (TCC) : ajouté en 1.5.
+- Noms de commandes divergents entre documents : unifiés par 0.6.
+- `uploads.md` dépassé (Argon2id, vidéo) : corrigé en 0.7.
+- macOS 15 validé, mais sa justification (vidéo) a disparu : rien à changer.
+- Résident GNOME sans icône de barre système, alors que Produit en promettait une.
+- Envoi par morceaux : reporté après v1 (sans vidéo, les fichiers restent petits).
+
+## Points d'attention
+1. Le lot 1 n'est crédible que si 1.6 (certificat et TCC) tient sur le Mac ; sinon, revoir la distribution macOS avant v0.2.
+2. Portail Screenshot appelé depuis une CLI sans App ID : non vérifié, à tester dès 1.4 sur un vrai GNOME.
+3. `object_store` est en 0.x : trait `S3Backend` et test « zéro requête » indispensables.
+4. Deux coquilles natives = risque n° 1 ; la tâche macOS d'un lot peut glisser d'un lot, avec validation de l'utilisateur.
+5. Seules les versions d'`object_store` et `aws-sigv4` sont vérifiées ; toutes les autres le seront à leur ajout.

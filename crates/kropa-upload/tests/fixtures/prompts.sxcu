@@ -1,0 +1,16 @@
+{
+  "Version": "16.0.1",
+  "Name": "Gallery with prompts",
+  "DestinationType": "ImageUploader",
+  "RequestURL": "https://gallery.example.org/api/v2/images",
+  "Headers": {
+    "Authorization": "Bearer {inputbox:API key}",
+    "X-Album": "{select:Holidays|Work|Family}"
+  },
+  "Body": "MultipartFormData",
+  "Arguments": {
+    "album": "{select:Holidays|Work|Family}",
+    "caption": "{inputbox:Caption|Screenshot}"
+  },
+  "URL": "{json:link}"
+}
