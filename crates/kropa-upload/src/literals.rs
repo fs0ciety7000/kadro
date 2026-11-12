@@ -23,18 +23,28 @@ use crate::sensitive::{
 };
 use crate::template::{Side, Template};
 
+/// Longest word taken for the scheme of an authorization that Kropa does not know (`Client-ID`).
+const MAX_SCHEME_WORD: usize = 12;
+
 /// Whether what is left of `template` once the references, the scheme and the separators are taken
-/// out is long enough to be a secret.
+/// out is long enough to be a secret. The scheme is a known one (`Bearer`, `Basic`...) or a short word
+/// followed by a blank (`Client-ID {secret:id}`).
 #[must_use]
 pub fn mixed_literal(template: &Template) -> bool {
     let text = template.literal_text();
-    let lower = text.trim().to_lowercase();
-    let without_scheme = CREDENTIAL_SCHEMES
-        .iter()
-        .find_map(|s| {
-            lower
-                .strip_prefix(s)
-                .filter(|r| r.is_empty() || r.starts_with(char::is_whitespace))
+    let lower = text.trim_start().to_lowercase();
+    let known = CREDENTIAL_SCHEMES.iter().find_map(|s| {
+        lower
+            .strip_prefix(s)
+            .filter(|r| r.is_empty() || r.starts_with(char::is_whitespace))
+    });
+    let without_scheme = known
+        .or_else(|| {
+            lower.split_once(char::is_whitespace).and_then(|(word, rest)| {
+                (word.len() <= MAX_SCHEME_WORD
+                    && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                .then_some(rest)
+            })
         })
         .unwrap_or(&lower);
     without_scheme
@@ -175,6 +185,7 @@ mod tests {
             (Slot::Form("name".into()), "{var:name}".to_owned()),
             (Slot::Query("a".into()), String::new()),
             (header("Accept"), "application/json".to_owned()),
+            (header("Authorization"), "Client-ID {secret:client_id}".to_owned()),
             (Slot::Query("n".into()), "abc".to_owned()),
             (Slot::Query("n".into()), "{secret:k}-v2".to_owned()),
             (Slot::Query("n".into()), "{inputbox:Title}".to_owned()),
@@ -230,6 +241,7 @@ mod tests {
             format!("Bearer {t}"),
             format!("Basic {{base64:{t}}}"),
             "Basic {base64:{secret:a}:{secret:b}}".to_owned(),
+            "Client-ID {secret:key}".to_owned(),
             format!("{{secret:key}}:{t}"),
         ];
         for (kind, table) in [("header", "headers"), ("query", "query"), ("field", "fields")] {

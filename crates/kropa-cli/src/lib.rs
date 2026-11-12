@@ -257,6 +257,9 @@ fn run_inner(
         input: services.input,
         confirm: services.confirm,
         editor: lookup("EDITOR").filter(|e| !e.trim().is_empty()),
+        scratch_dir: lookup("XDG_RUNTIME_DIR")
+            .filter(|d| !d.is_empty())
+            .map(std::path::PathBuf::from),
     };
     ctx.secrets.set_interactive(store_may_prompt(
         session.interactive,

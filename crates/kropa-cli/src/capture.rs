@@ -556,6 +556,7 @@ mod tests {
                 input: &crate::secret_input::SystemInput,
                 confirm: &|_| false,
                 editor: None,
+                scratch_dir: None,
             };
             let opts = opts(extra);
             let job = Job {

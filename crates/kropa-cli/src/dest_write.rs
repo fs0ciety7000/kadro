@@ -663,15 +663,69 @@ fn require_https(destination: &Destination, loc: &Localizer) -> Result<(), CliEr
     Ok(())
 }
 
-/// A file for the editor, private to the user, removed when this value goes away.
+/// A directory for the editor, private to the user (`0700`, a random name) and the file inside it
+/// (`0600`). The whole directory is removed when this value goes away: the editor leaves its own
+/// swap and backup files next to the file.
 struct EditFile {
+    dir: PathBuf,
     path: PathBuf,
 }
 
+/// 12 random bytes, in hexadecimal.
+fn random_name() -> std::io::Result<String> {
+    let mut bytes = [0u8; 12];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn make_private_dir(path: &Path, recursive: bool) -> std::io::Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(recursive);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
 impl EditFile {
-    fn create(dir: &Path, id: &str, text: &str) -> std::io::Result<Self> {
+    /// Under `$XDG_RUNTIME_DIR/kropa` when there is one (it is private to the user and goes away at
+    /// logout, whatever happened), else in `fallback` (the configuration directory).
+    fn create(
+        scratch: Option<&Path>,
+        fallback: &Path,
+        id: &str,
+        text: &str,
+    ) -> std::io::Result<Self> {
         use std::io::Write as _;
-        let path = dir.join(format!(".{id}.edit.{}.toml", std::process::id()));
+        let parent = match scratch.filter(|p| p.is_absolute() && p.is_dir()) {
+            Some(runtime) => {
+                let parent = runtime.join("kropa");
+                match make_private_dir(&parent, true) {
+                    Ok(()) => parent,
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => parent,
+                    Err(_) => fallback.to_owned(),
+                }
+            }
+            None => fallback.to_owned(),
+        };
+        let mut attempts = 0;
+        let dir = loop {
+            let dir = parent.join(format!(".edit-{}", random_name()?));
+            match make_private_dir(&dir, false) {
+                Ok(()) => break dir,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && attempts < 3 => {
+                    attempts += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+        // From here the directory is removed by `Drop`, whatever fails.
+        let guard = Self {
+            path: dir.join(format!("{id}.toml")),
+            dir,
+        };
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -679,11 +733,10 @@ impl EditFile {
             use std::os::unix::fs::OpenOptionsExt as _;
             options.mode(0o600);
         }
-        let mut file = options.open(&path)?;
-        let file_guard = Self { path };
+        let mut file = options.open(&guard.path)?;
         file.write_all(text.as_bytes())?;
         file.sync_all()?;
-        Ok(file_guard)
+        Ok(guard)
     }
 
     fn read(&self) -> std::io::Result<Vec<u8>> {
@@ -693,12 +746,73 @@ impl EditFile {
             .read_to_end(&mut bytes)?;
         Ok(bytes)
     }
+
+    /// Removes the directory now (it is not needed any more). `Drop` does it again, harmlessly.
+    fn remove(&self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 impl Drop for EditFile {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        self.remove();
     }
+}
+
+/// Signals that would kill `kropa` without a `Drop` (Ctrl-C, Ctrl-\, a closed terminal) are held back
+/// while the editor runs, so that its private directory is removed. The editor, which shares the
+/// terminal, gets them too and deals with them as it likes; if one arrived, [`Self::raised`] says so
+/// and the command is cancelled. When the guard goes away the signals act as usual again.
+struct EditorSignals {
+    #[cfg(unix)]
+    raised: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(unix)]
+    armed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(unix)]
+impl EditorSignals {
+    fn new() -> std::io::Result<Self> {
+        use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT};
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicBool;
+        let (raised, armed) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        for signal in [SIGINT, SIGQUIT, SIGHUP] {
+            // Once `armed`, the default action runs again; before, the signal is only noted.
+            signal_hook::flag::register_conditional_default(signal, Arc::clone(&armed))?;
+            signal_hook::flag::register(signal, Arc::clone(&raised))?;
+        }
+        Ok(Self { raised, armed })
+    }
+
+    fn raised(&self) -> bool {
+        self.raised.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Gives the signals back their usual effect.
+    fn arm(&self) {
+        self.armed.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[cfg(unix)]
+impl Drop for EditorSignals {
+    fn drop(&mut self) {
+        self.arm();
+    }
+}
+
+#[cfg(not(unix))]
+impl EditorSignals {
+    fn new() -> std::io::Result<Self> {
+        Ok(Self {})
+    }
+
+    fn raised(&self) -> bool {
+        false
+    }
+
+    fn arm(&self) {}
 }
 
 /// Checks the text a user made of the profile, with the rules of an import. Returns the profile it
@@ -819,9 +933,16 @@ fn edit_in_editor(
         )
         .at_step("dest")
     };
-    let file = EditFile::create(config_dir, id, &original).map_err(|e| io(&e))?;
+    // Declared before the file: dropped after it, so the file is gone when the signals act again.
+    let signals = EditorSignals::new().map_err(|e| io(&e))?;
+    let file = EditFile::create(ctx.scratch_dir.as_deref(), config_dir, id, &original)
+        .map_err(|e| io(&e))?;
     loop {
-        run_editor(editor, &file.path, loc)?;
+        let ran = run_editor(editor, &file.path, loc);
+        if signals.raised() {
+            return Err(cancelled(loc));
+        }
+        ran?;
         let bytes = file.read().map_err(|e| io(&e))?;
         if bytes == original.as_bytes() {
             return Ok(None);
@@ -829,6 +950,10 @@ fn edit_in_editor(
         match check_edited(&bytes, old, loc) {
             Ok(new) => {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
+                // The copy is not needed any more: gone before the question, and the signals act as
+                // usual again.
+                file.remove();
+                signals.arm();
                 require_https(&new, loc)?;
                 let secrets = apply_change(old, &new, ctx, session, || {
                     replace_destination_text(config_dir, id, &text)

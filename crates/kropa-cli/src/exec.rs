@@ -80,6 +80,8 @@ pub struct Context<'a> {
     pub confirm: &'a dyn Fn(&str) -> bool,
     /// The editor of the user (`EDITOR`), for `dest edit` without options.
     pub editor: Option<String>,
+    /// `XDG_RUNTIME_DIR`: where the private copy of `dest edit` goes when there is one.
+    pub scratch_dir: Option<std::path::PathBuf>,
 }
 
 /// Command path used for the schema name: `capture`, `dest.list`, `secrets.status`...
