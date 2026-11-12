@@ -471,6 +471,30 @@ impl SecretStore for SecretServiceStore {
         }
     }
 
+    fn names(&self, profile: &str) -> Result<Vec<String>, SecretError> {
+        let profile = profile.to_owned();
+        self.run(move |s| {
+            let found = call(s.service.search_items(attributes(Some(&profile), None)))?;
+            let mut names = Vec::new();
+            for item in found.unlocked.iter().chain(found.locked.iter()) {
+                // Without its attributes an entry cannot be named, and silently skipping it would
+                // leave it behind when a profile is removed.
+                let attrs = call(item.get_attributes())?;
+                if attrs.get("service").map(String::as_str) != Some(SERVICE)
+                    || attrs.get("profile").map(String::as_str) != Some(profile.as_str())
+                {
+                    continue;
+                }
+                if let Some(name) = attrs.get("name") {
+                    names.push(name.clone());
+                }
+            }
+            names.sort();
+            names.dedup();
+            Ok(names)
+        })
+    }
+
     fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError> {
         let (profile, name) = (profile.to_owned(), name.to_owned());
         self.run(move |s| {

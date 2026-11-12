@@ -303,6 +303,13 @@ pub trait SecretStore: SecretSource {
     /// [`SecretError`] when the store cannot be read.
     fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError>;
 
+    /// The names of the entries `<profile>/*`, sorted, without repeats: names only, no entry is
+    /// decoded and nothing is asked (`kropa dest remove`).
+    ///
+    /// # Errors
+    /// [`SecretError`] when the store cannot be read.
+    fn names(&self, profile: &str) -> Result<Vec<String>, SecretError>;
+
     /// Stores `value` in `<profile>/<name>`. An entry that exists (even empty) keeps its origins
     /// and places; a new one gets `fresh`.
     ///
@@ -363,6 +370,11 @@ impl SecretStore for UnavailableSecretSource {
             detail: None,
             profiles: BTreeMap::new(),
         }
+    }
+
+    fn names(&self, _profile: &str) -> Result<Vec<String>, SecretError> {
+        // Like `profile_exists`: a build without a store holds no entry.
+        Ok(Vec::new())
     }
 
     fn inspect(&self, _profile: &str, _name: &str) -> Result<Option<EntryInfo>, SecretError> {
@@ -497,6 +509,18 @@ impl SecretStore for MemorySecretSource {
             detail: None,
             profiles,
         }
+    }
+
+    fn names(&self, profile: &str) -> Result<Vec<String>, SecretError> {
+        let entries = self.entries.lock().expect("lock");
+        let mut names: Vec<String> = entries
+            .keys()
+            .filter(|(p, _)| p == profile)
+            .map(|(_, n)| n.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
     }
 
     fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError> {
@@ -667,6 +691,8 @@ mod tests {
             2
         );
         assert!(store.authorize("zipline", "nope", None, None).is_err());
+        assert_eq!(store.names("zipline").unwrap(), vec!["token".to_owned()]);
+        assert!(store.names("other").unwrap().is_empty());
         assert!(store.remove("zipline", "token").unwrap());
         assert!(!store.remove("zipline", "token").unwrap());
         assert!(store.inspect("zipline", "token").unwrap().is_none());

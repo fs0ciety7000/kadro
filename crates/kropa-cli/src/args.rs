@@ -143,7 +143,9 @@ pub enum DestKind {
     S3,
     /// SFTP server.
     Sftp,
-    /// Custom HTTP API.
+    /// Custom HTTP API: not created by `dest add`, which points to `dest import` (decision D10 of
+    /// lot 2), so it is kept out of the list of values.
+    #[value(hide = true)]
     Http,
 }
 
@@ -338,6 +340,9 @@ pub enum DestCommand {
         /// Set a profile key.
         #[arg(long = "set", id = "set", value_name = "KEY=VALUE", value_parser = parse_set)]
         sets: Vec<(String, String)>,
+        /// Has no effect: moving a secret is never confirmed without a terminal.
+        #[arg(long, hide = true)]
+        yes: bool,
     },
     /// Test a destination.
     Test {
@@ -458,6 +463,31 @@ pub struct TypeOpts {
     /// Public base URL of the SFTP folder.
     #[arg(long, value_name = "URL", value_parser = parse_url)]
     pub public_url: Option<String>,
+}
+
+impl TypeOpts {
+    /// Names of the options of this group that were given, for the message that says they do not
+    /// belong to the type (names only, never a value).
+    #[must_use]
+    pub fn given(&self) -> Vec<&'static str> {
+        [
+            ("--bucket", self.bucket.is_some()),
+            ("--region", self.region.is_some()),
+            ("--endpoint", self.endpoint.is_some()),
+            ("--path-style", self.path_style),
+            ("--prefix", self.prefix.is_some()),
+            ("--public-base-url", self.public_base_url.is_some()),
+            ("--presign", self.presign.is_some()),
+            ("--host", self.host.is_some()),
+            ("--port", self.port.is_some()),
+            ("--user", self.user.is_some()),
+            ("--remote-dir", self.remote_dir.is_some()),
+            ("--public-url", self.public_url.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(name, given)| given.then_some(name))
+        .collect()
+    }
 }
 
 /// How a secret is provided when there is no terminal.

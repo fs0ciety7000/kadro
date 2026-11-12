@@ -15,6 +15,7 @@ pub mod clipboard;
 pub mod command;
 pub mod daemon;
 pub mod dest;
+pub mod dest_write;
 pub mod doctor;
 pub mod errors;
 pub mod exec;
@@ -258,6 +259,7 @@ fn run_inner(
         secrets: services.secrets,
         input: services.input,
         confirm: services.confirm,
+        editor: lookup("EDITOR").filter(|e| !e.trim().is_empty()),
     };
     ctx.secrets.set_interactive(store_may_prompt(
         session.interactive,

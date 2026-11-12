@@ -1682,6 +1682,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]
@@ -1780,6 +1781,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "toml",
+ "toml_edit",
  "url",
  "wiremock",
  "zeroize",

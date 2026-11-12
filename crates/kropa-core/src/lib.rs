@@ -14,6 +14,7 @@ pub const APP_ID: &str = "io.github.fs0ciety7000.Kropa";
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use config::{
     CONFIG_FILE, Config, DEFAULT_NAME_TEMPLATE, ImageFormat, config_dir, default_output_dir,
+    set_default_destination, write_atomic,
 };
 pub use error::{CoreError, NameError};
 pub use exit::ExitCode;

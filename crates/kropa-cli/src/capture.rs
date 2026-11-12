@@ -555,6 +555,7 @@ mod tests {
                 secrets: &kropa_upload::secret::UnavailableSecretSource,
                 input: &crate::secret_input::SystemInput,
                 confirm: &|_| false,
+                editor: None,
             };
             let opts = opts(extra);
             let job = Job {

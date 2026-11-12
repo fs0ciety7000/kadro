@@ -187,6 +187,21 @@ impl<B: ItemStore> SecretStore for KeychainStore<B> {
         }
     }
 
+    fn names(&self, profile: &str) -> Result<Vec<String>, SecretError> {
+        // Names only: no document is decoded.
+        let mut names: Vec<String> = self
+            .backend
+            .list()
+            .map_err(fail)?
+            .into_iter()
+            .filter(|n| n.profile == profile)
+            .map(|n| n.name)
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
+    }
+
     fn inspect(&self, profile: &str, name: &str) -> Result<Option<EntryInfo>, SecretError> {
         Ok(self.find_one(profile, name)?.map(|record| EntryInfo {
             has_value: record.value.is_some(),
@@ -369,6 +384,27 @@ mod tests {
         assert_eq!(status.profiles["s3"].entries, 2);
         assert_eq!(status.profiles["z"].entries, 1);
         assert!(!format!("{status:?}").contains("AAAA"));
+    }
+
+    #[test]
+    fn names_lists_the_entries_of_one_profile_and_nothing_else() {
+        let s = store();
+        s.set("s3", "secret", value("BBBB-2"), fresh()).unwrap();
+        s.set("s3", "access", value("AAAA-1"), fresh()).unwrap();
+        s.set("z", "token", value("CCCC-3"), fresh()).unwrap();
+        s.put(
+            "s3",
+            "empty",
+            NewSecret {
+                value: None,
+                origins: vec![],
+                placements: vec![],
+            },
+        )
+        .unwrap();
+        assert_eq!(s.names("s3").unwrap(), ["access", "empty", "secret"]);
+        assert_eq!(s.names("z").unwrap(), ["token"]);
+        assert!(s.names("nobody").unwrap().is_empty());
     }
 
     #[test]

@@ -18,10 +18,12 @@ use kropa_upload::secret::SecretStore;
 use serde_json::json;
 
 use crate::args::{
-    CaptureCommand, Cli, Command, DestCommand, HistoryCommand, QueueCommand, SecretsCommand,
+    CaptureCommand, Cli, Command, DestCommand, DestKind, HistoryCommand, QueueCommand,
+    SecretsCommand,
 };
 use crate::capture::{self, Job};
 use crate::dest;
+use crate::dest_write;
 use crate::doctor;
 use crate::errors::CliError;
 use crate::output::Session;
@@ -35,13 +37,15 @@ use crate::upload;
 pub const ERROR_SCHEMA: &str = "kropa.error/1";
 
 /// JSON schemas this binary speaks (`docs/cli.md` section 4).
-pub const SCHEMAS: [&str; 13] = [
+pub const SCHEMAS: [&str; 15] = [
     "kropa.capture/1",
     "kropa.upload/1",
     "kropa.dest.list/1",
     "kropa.dest.show/1",
     "kropa.dest.test/1",
     "kropa.dest.import/1",
+    "kropa.dest.change/1",
+    "kropa.dest.export/1",
     "kropa.queue.list/1",
     "kropa.history.list/1",
     "kropa.doctor/1",
@@ -74,6 +78,8 @@ pub struct Context<'a> {
     pub input: &'a dyn SecretInput,
     /// Answers a yes/no question put to the user on a terminal.
     pub confirm: &'a dyn Fn(&str) -> bool,
+    /// The editor of the user (`EDITOR`), for `dest edit` without options.
+    pub editor: Option<String>,
 }
 
 /// Command path used for the schema name: `capture`, `dest.list`, `secrets.status`...
@@ -130,6 +136,18 @@ fn path(cmd: &Command) -> Vec<&'static str> {
 /// a schema name that is not listed by `kropa version --json`.
 #[must_use]
 pub fn schema_of(cmd: &Command) -> String {
+    // `dest add|edit|remove|set-default` share one schema: what changed.
+    if matches!(
+        cmd,
+        Command::Dest {
+            action: DestCommand::Add(_)
+                | DestCommand::Edit { .. }
+                | DestCommand::Remove { .. }
+                | DestCommand::SetDefault { .. },
+        }
+    ) {
+        return dest_write::CHANGE_SCHEMA.to_owned();
+    }
     let own = format!("kropa.{}/1", path(cmd).join("."));
     if SCHEMAS.contains(&own.as_str()) {
         own
@@ -165,11 +183,21 @@ fn lots_of(cmd: &Command) -> Vec<&'static str> {
         }
         Command::Upload(_) => Vec::new(),
         Command::Dest { action } => match action {
+            // S3 arrives with the CLI of lot 2.7b, SFTP with lot 4.9; `http` is refused by `add`
+            // itself (it is not a lot to wait for, but a choice: decision D10).
+            DestCommand::Add(a) => match a.kind {
+                DestKind::Zipline | DestKind::Http => Vec::new(),
+                DestKind::S3 => vec!["2.7"],
+                DestKind::Sftp => vec!["4.9"],
+            },
             DestCommand::List
             | DestCommand::Show { .. }
             | DestCommand::Test { .. }
-            | DestCommand::Import { .. } => Vec::new(),
-            _ => vec!["2.6"],
+            | DestCommand::Import { .. }
+            | DestCommand::Edit { .. }
+            | DestCommand::Remove { .. }
+            | DestCommand::SetDefault { .. }
+            | DestCommand::Export { .. } => Vec::new(),
         },
         Command::Secrets { action } => match action {
             SecretsCommand::Status
@@ -277,7 +305,21 @@ fn run_command(
                         session,
                     );
                 }
-                _ => {}
+                DestCommand::Add(args) => {
+                    return dest_write::add(args, &config, &dir, ctx, session);
+                }
+                DestCommand::Edit { id, url, sets, .. } => {
+                    return dest_write::edit(id, url.as_deref(), sets, &dir, ctx, session);
+                }
+                DestCommand::Remove { id, .. } => {
+                    return dest_write::remove(id, &config, &dir, ctx, session);
+                }
+                DestCommand::SetDefault { id, .. } => {
+                    return dest_write::set_default(id.as_deref(), &dir, ctx, session);
+                }
+                DestCommand::Export { ids } => {
+                    return dest_write::export(ids, &dir, ctx, session);
+                }
             }
         }
         Command::Secrets { action } => match action {
@@ -433,7 +475,9 @@ fn refuse_secrets_in_arguments(cmd: &Command, loc: &Localizer) -> Result<(), Cli
         }
     }
     for (key, value) in sets {
-        if set_carries_secret(key, value) {
+        // A reference is no secret, but a profile key set from the command line is never a template:
+        // the places of a secret are fixed in the file, in the editor, under a confirmation.
+        if set_carries_secret(key, value) || value.contains("{secret:") {
             return refuse("--set");
         }
     }
@@ -585,9 +629,10 @@ fn check_interaction(cmd: &Command, interactive: bool, loc: &Localizer) -> Resul
         ));
     }
     let source = match cmd {
+        // S3 and SFTP are not delivered yet: they answer 5 before any secret is asked for.
         Command::Dest {
             action: DestCommand::Add(a),
-        } => Some(&a.secret),
+        } if a.kind == DestKind::Zipline => Some(&a.secret),
         Command::Secrets {
             action: SecretsCommand::Set { source, .. },
         } => Some(source),

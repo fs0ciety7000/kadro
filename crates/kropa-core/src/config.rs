@@ -203,6 +203,73 @@ pub fn default_output_dir() -> Result<PathBuf, CoreError> {
     Ok(pictures.join(PICTURES_SUBDIR))
 }
 
+/// Writes `text` to `path` in one step: a temporary file next to it (created new, flushed to disk),
+/// then a rename. A reader sees the old file or the new one, never half of it, and nothing is left
+/// behind when a step fails.
+///
+/// # Errors
+/// The I/O error of the step that failed.
+pub fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let name = path
+        .file_name()
+        .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned());
+    let temporary = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|()| std::fs::rename(&temporary, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    written
+}
+
+/// Sets (`Some`) or clears (`None`) `default_destination` in the `config.toml` of `dir`, keeping the
+/// comments and the order of the file. The result is read back with [`Config::from_toml_str`] before it
+/// replaces the file, which is written in one step ([`write_atomic`]). A missing file is created.
+///
+/// # Errors
+/// [`CoreError::ConfigParse`] or [`CoreError::ConfigValue`] when the file, or the profile name, is not
+/// valid (nothing is written); [`CoreError::Io`] when the file cannot be read or written.
+pub fn set_default_destination(dir: &Path, profile: Option<&str>) -> Result<(), CoreError> {
+    let path = dir.join(CONFIG_FILE);
+    let io = |source| CoreError::Io {
+        path: path.clone(),
+        source,
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(io(e)),
+    };
+    // The file must be valid as it is, so that nothing but the key changes.
+    Config::from_toml_str(&text, &path)?;
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
+        let (line, column) = e.span().map_or((1, 1), |s| line_column(&text, s.start));
+        CoreError::ConfigParse {
+            path: path.clone(),
+            line,
+            column,
+            message: e.message().to_owned(),
+        }
+    })?;
+    match profile {
+        Some(profile) => doc["default_destination"] = toml_edit::value(profile),
+        None => {
+            doc.remove("default_destination");
+        }
+    }
+    let result = doc.to_string();
+    Config::from_toml_str(&result, &path)?;
+    write_atomic(&path, &result).map_err(io)
+}
+
 /// 1-based line and column (in characters) of byte offset `offset` in `text`.
 fn line_column(text: &str, offset: usize) -> (usize, usize) {
     let mut end = offset.min(text.len());
@@ -219,7 +286,10 @@ fn line_column(text: &str, offset: usize) -> (usize, usize) {
 mod tests {
     use std::path::Path;
 
-    use super::{Config, DEFAULT_NAME_TEMPLATE, ImageFormat, line_column};
+    use super::{
+        Config, DEFAULT_NAME_TEMPLATE, ImageFormat, line_column, set_default_destination,
+        write_atomic,
+    };
     use crate::{CoreError, ExitCode};
 
     fn parse(text: &str) -> Result<Config, CoreError> {
@@ -336,5 +406,73 @@ mod tests {
     fn line_column_counts_characters() {
         assert_eq!(line_column("ab\ncé=x", 6), (2, 3));
         assert_eq!(line_column("abc", 99), (1, 4));
+    }
+    #[test]
+    fn default_destination_is_set_and_cleared_without_touching_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        // A missing file is created.
+        set_default_destination(dir.path(), Some("zip")).unwrap();
+        assert_eq!(
+            Config::load_from(Some(dir.path()))
+                .unwrap()
+                .default_destination
+                .as_deref(),
+            Some("zip")
+        );
+        std::fs::write(
+            &path,
+            "# my settings\nlanguage = \"fr\"  # keep\ndefault_destination = \"zip\"\nimage_format = \"webp\"\n",
+        )
+        .unwrap();
+        set_default_destination(dir.path(), Some("s3-prod")).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# my settings\n"), "{text}");
+        assert!(text.contains("language = \"fr\"  # keep"), "{text}");
+        assert!(text.contains("default_destination = \"s3-prod\""), "{text}");
+        set_default_destination(dir.path(), None).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("default_destination"), "{text}");
+        assert!(text.contains("image_format = \"webp\""), "{text}");
+        assert_eq!(
+            Config::load_from(Some(dir.path()))
+                .unwrap()
+                .default_destination,
+            None
+        );
+        // Clearing what is not there is fine.
+        set_default_destination(dir.path(), None).unwrap();
+    }
+
+    #[test]
+    fn default_destination_refuses_a_bad_name_or_a_bad_file_and_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "language = \"fr\"\n").unwrap();
+        let err = set_default_destination(dir.path(), Some("a/b")).unwrap_err();
+        assert!(matches!(err, CoreError::ConfigValue { .. }), "{err:?}");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "language = \"fr\"\n"
+        );
+        std::fs::write(&path, "unknown = 1\n").unwrap();
+        let err = set_default_destination(dir.path(), Some("zip")).unwrap_err();
+        assert!(matches!(err, CoreError::ConfigParse { .. }), "{err:?}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "unknown = 1\n");
+        let names: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
+        assert_eq!(names.len(), 1, "no temporary file is left behind");
+    }
+
+    #[test]
+    fn write_atomic_replaces_the_file_and_leaves_no_temporary() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sub").join("f.toml");
+        write_atomic(&path, "a = 1\n").unwrap();
+        write_atomic(&path, "a = 2\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "a = 2\n");
+        assert_eq!(
+            std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
+            1
+        );
     }
 }

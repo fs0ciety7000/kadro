@@ -147,7 +147,7 @@ fn declared(
 
 /// Origins and places a new entry gets: the address of the profile and the places where its
 /// templates use the secret (`docs/security/secrets.md` section 4.3).
-fn fresh_authorization(
+pub(crate) fn fresh_authorization(
     compiled: &Compiled,
     name: &str,
     loc: &Localizer,
@@ -205,6 +205,60 @@ fn read_error(error: InputError, loc: &Localizer) -> CliError {
             &[],
         ),
     }
+}
+
+/// Reads the value of `<profile>/<name>` from the source the user chose (`--secret-stdin`,
+/// `--secret-fd`, or the hidden prompt on a terminal), and checks it. Called only once everything
+/// else has been confirmed, so that a refused command has not consumed stdin.
+///
+/// # Errors
+/// [`CliError`] without a terminal and without a source (12), for a value that cannot be read (2,
+/// 15) or is shorter than 4 bytes (11).
+pub(crate) fn read_value(
+    profile: &str,
+    name: &str,
+    source: &SecretSource,
+    ctx: &Context<'_>,
+    session: &mut Session<'_, '_>,
+) -> Result<SecretValue, CliError> {
+    let loc = ctx.loc;
+    let from = if source.secret_stdin {
+        InputFrom::Stdin
+    } else if let Some(fd) = source.secret_fd {
+        InputFrom::Fd(fd)
+    } else if session.interactive {
+        InputFrom::Terminal
+    } else {
+        return Err(CliError::new(
+            ExitCode::InteractionRequired,
+            loc,
+            "error-secret-input-required",
+            &[],
+        ));
+    };
+    let prompt = loc.message_args(
+        "prompt-secret-value",
+        &[("profile", profile), ("name", name)],
+    );
+    let text = ctx
+        .input
+        .read(from, &prompt)
+        .map_err(|e| read_error(e, loc))?;
+    let value = SecretValue::new(text.as_str()).map_err(|_| {
+        cli_error(
+            &UploadError::Security {
+                reason: "secret_too_short",
+                detail: String::new(),
+            },
+            loc,
+        )
+        .at_step("secrets")
+    })?;
+    drop(text);
+    if value.len() < SHORT_SECRET_LEN {
+        session.note(&loc.message_args("warn-secret-short", &[("detail", name)]));
+    }
+    Ok(value)
 }
 
 /// `kropa secrets set <PROFILE> <NAME>`.
@@ -268,42 +322,7 @@ pub fn set(
             placements,
         };
     }
-    let from = if source.secret_stdin {
-        InputFrom::Stdin
-    } else if let Some(fd) = source.secret_fd {
-        InputFrom::Fd(fd)
-    } else if session.interactive {
-        InputFrom::Terminal
-    } else {
-        return Err(CliError::new(
-            ExitCode::InteractionRequired,
-            loc,
-            "error-secret-input-required",
-            &[],
-        ));
-    };
-    let prompt = loc.message_args(
-        "prompt-secret-value",
-        &[("profile", profile), ("name", name)],
-    );
-    let text = ctx
-        .input
-        .read(from, &prompt)
-        .map_err(|e| read_error(e, loc))?;
-    let value = SecretValue::new(text.as_str()).map_err(|_| {
-        cli_error(
-            &UploadError::Security {
-                reason: "secret_too_short",
-                detail: String::new(),
-            },
-            loc,
-        )
-        .at_step("secrets")
-    })?;
-    drop(text);
-    if value.len() < SHORT_SECRET_LEN {
-        session.note(&loc.message_args("warn-secret-short", &[("detail", name)]));
-    }
+    let value = read_value(profile, name, source, ctx, session)?;
     ctx.secrets
         .set(profile, name, value, authorization)
         .map_err(|e| store_write_error(e, loc))?;

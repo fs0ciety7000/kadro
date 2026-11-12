@@ -47,6 +47,7 @@ thiserror = "2.0.21"
 tokio = { version = "1.54.1", default-features = false }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12", "aws_lc_rs"] }
 toml = "1.2.1"
+toml_edit = { version = "0.25.19", default-features = false, features = ["parse", "display"] }
 trycmd = "1.2.1"
 unic-langid = "0.9.6"
 url = "2.5.8"
