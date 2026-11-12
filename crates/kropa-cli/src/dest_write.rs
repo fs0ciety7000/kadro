@@ -99,6 +99,7 @@ fn report(
 /// address that is not valid (6) or not https (11), an `id` already taken by a profile or an entry of
 /// the store (6), a token that cannot be asked for (12), read (2, 15) or is too short (11), or a store
 /// or file that cannot be written (7, 15).
+#[allow(clippy::too_many_lines)]
 pub fn add(
     args: &DestAddArgs,
     config: &Config,
@@ -458,20 +459,18 @@ pub fn edit(
     let loc = ctx.loc;
     let old = load_one(config_dir, id, loc).map_err(|e| e.at_step("dest"))?;
     let secrets = if url.is_none() && sets.is_empty() {
-        match edit_in_editor(&old, config_dir, ctx, session)? {
-            Some(secrets) => secrets,
-            None => {
-                session.note(&loc.message_args("note-dest-edit-unchanged", &[("id", id)]));
-                report(
-                    session,
-                    "edit",
-                    Some(id),
-                    default_of(config_dir).as_deref(),
-                    &[],
-                );
-                return Ok(ExitCode::Ok);
-            }
-        }
+        let Some(secrets) = edit_in_editor(&old, config_dir, ctx, session)? else {
+            session.note(&loc.message_args("note-dest-edit-unchanged", &[("id", id)]));
+            report(
+                session,
+                "edit",
+                Some(id),
+                default_of(config_dir).as_deref(),
+                &[],
+            );
+            return Ok(ExitCode::Ok);
+        };
+        secrets
     } else {
         let mut new = old.clone();
         if let Some(url) = url {

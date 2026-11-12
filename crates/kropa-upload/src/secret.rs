@@ -692,7 +692,7 @@ mod tests {
         );
         assert!(store.authorize("zipline", "nope", None, None).is_err());
         assert_eq!(store.names("zipline").unwrap(), vec!["token".to_owned()]);
-        assert!(store.names("other").unwrap().is_empty());
+        assert_eq!(store.names("other").unwrap(), Vec::<String>::new());
         assert!(store.remove("zipline", "token").unwrap());
         assert!(!store.remove("zipline", "token").unwrap());
         assert!(store.inspect("zipline", "token").unwrap().is_none());

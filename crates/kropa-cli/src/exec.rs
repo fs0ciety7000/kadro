@@ -241,6 +241,7 @@ pub fn execute(cli: &Cli, ctx: &Context<'_>, session: &mut Session<'_, '_>) -> E
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn run_command(
     cli: &Cli,
     ctx: &Context<'_>,

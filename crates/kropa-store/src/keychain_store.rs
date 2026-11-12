@@ -404,7 +404,7 @@ mod tests {
         .unwrap();
         assert_eq!(s.names("s3").unwrap(), ["access", "empty", "secret"]);
         assert_eq!(s.names("z").unwrap(), ["token"]);
-        assert!(s.names("nobody").unwrap().is_empty());
+        assert_eq!(s.names("nobody").unwrap(), Vec::<String>::new());
     }
 
     #[test]
