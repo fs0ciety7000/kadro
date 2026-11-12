@@ -511,12 +511,14 @@ fn apply_change(
         )
         .at_step("dest")
     };
-    let mut plans = match plan_secrets(ctx, id, &after, moved_origin, &moved_places, touches) {
-        // Without a terminal the question could not be asked anyway: that is what is reported, and
-        // the store, which may be locked or missing, is not the news.
-        Err(_) if !session.interactive => return Err(interactive_required()),
-        planned => planned?,
-    };
+    // A profile with secrets whose address or place moves is a question only a terminal can answer,
+    // whatever the store holds or can say: without one, nothing is read and nothing is written.
+    if touches && (!old.secrets.is_empty() || !after.places.is_empty()) && !session.interactive {
+        return Err(interactive_required());
+    }
+    // On a terminal an unreadable store is an error (7) and nothing is written; only a change that
+    // moves nothing may go on without it.
+    let mut plans = plan_secrets(ctx, id, &after, moved_origin, &moved_places, touches)?;
     if !touches {
         // The request leaves the address and the places alone: whatever the store lacks is a
         // difference between the file and the store, not something this command may allow.
@@ -535,9 +537,6 @@ fn apply_change(
     }
     let follows = plans.iter().any(|p| p.adds() || p.drops());
     if follows {
-        if !session.interactive {
-            return Err(interactive_required());
-        }
         show_plans(&plans, loc, session);
         if !(ctx.confirm)(&loc.message_args("prompt-dest-edit", &[("id", id)])) {
             return Err(cancelled(loc));

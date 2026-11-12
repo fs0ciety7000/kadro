@@ -78,7 +78,7 @@ impl Out {
 }
 
 struct Setup<'a> {
-    store: &'a MemorySecretSource,
+    store: &'a dyn SecretStore,
     input: &'a ScriptedInput,
     tty: bool,
     answer: bool,
@@ -1420,8 +1420,8 @@ fn b1_a_place_the_file_gained_behind_the_stores_back_is_shown_and_does_not_ride_
 
 #[test]
 fn b1_what_the_store_allows_already_is_not_asked_again() {
-    // The address goes back to what the store knows: nothing to add, and nothing to ask on a
-    // terminal-less run either.
+    // The address goes back to what the store knows: nothing to add, so no question on a terminal;
+    // without one the command still answers 12, as for any move of a profile with secrets.
     let dir = config(
         &api(
             "https://api2.example.org/up",
@@ -1437,11 +1437,21 @@ fn b1_what_the_store_allows_already_is_not_asked_again() {
     let out = run(
         &["dest", "edit", "api", "--url", "https://api.example.org/up"],
         dir.path(),
-        &plain(&store, &input),
+        &Setup {
+            tty: true,
+            answer: false,
+            ..plain(&store, &input)
+        },
     );
     assert_eq!(out.code, 0, "{}", out.err);
     assert!(out.prompts.is_empty());
     assert_entry_untouched(&store);
+    let out = run(
+        &["dest", "edit", "api", "--url", "https://api.example.org/up"],
+        dir.path(),
+        &plain(&store, &input),
+    );
+    assert_eq!(out.code, 12, "{}", out.err);
 }
 
 #[test]
@@ -1761,4 +1771,41 @@ fn m2_an_edit_keeps_the_mode_of_the_file() {
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o640
     );
+}
+
+#[test]
+fn an_unreadable_store_never_lets_an_address_move_unasked() {
+    use kropa_upload::secret::UnavailableSecretSource;
+    let dir = config(COMMENTED, "");
+    let store = UnavailableSecretSource;
+    let input = ScriptedInput::default();
+    let move_url = [
+        "dest",
+        "edit",
+        "zipline",
+        "--url",
+        "https://other.example.org",
+    ];
+    let setup = |tty, answer| Setup {
+        store: &store,
+        input: &input,
+        tty,
+        answer,
+        editor: None,
+        runtime: None,
+    };
+    // No terminal: 12, with --yes too. A terminal: the error of the store. Nothing is written.
+    let out = run(&move_url, dir.path(), &setup(false, true));
+    assert_eq!(out.code, 12, "{}", out.err);
+    let out = run(&move_url, dir.path(), &setup(true, true));
+    assert_eq!(out.code, 5, "{}", out.err);
+    assert!(out.prompts.is_empty());
+    assert_eq!(read(&dir, "destinations.toml"), COMMENTED);
+    // A change that moves nothing goes on without the store.
+    let out = run(
+        &["dest", "edit", "zipline", "--set", "label=Mine"],
+        dir.path(),
+        &setup(false, false),
+    );
+    assert_eq!(out.code, 0, "{}", out.err);
 }
